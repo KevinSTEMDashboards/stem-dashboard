@@ -162,7 +162,7 @@ tbody tr:nth-child(even):hover td{background:var(--bg2)}
 .cd{color:var(--red)}
 .c0{color:var(--text3)}
 .entry-panel{background:var(--bg);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px;box-shadow:var(--shadow);margin-bottom:14px}
-.entry-row-item{display:grid;grid-template-columns:200px 65px 65px 65px 65px 65px 90px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
+.entry-row-item{display:grid;grid-template-columns:190px 90px 60px 60px 60px 60px 60px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
 .entry-row-item input{height:28px;font-size:12px;text-align:center;padding:0 5px}
 .smsg{font-size:12px;color:var(--green);display:none;margin-left:8px}
 
@@ -402,7 +402,7 @@ td.editing{padding:2px 4px!important}
   </div>
 </div>
 
-<div class="tabs">
+<div class="tabs" style="justify-content:center">
   <div class="tab active" data-tab="overview">Overview</div>
   <div class="tab" data-tab="managers">Manager Rollup</div>
   <div class="tab" data-tab="weekly">Week-over-Week</div>
@@ -437,6 +437,9 @@ td.editing{padding:2px 4px!important}
     <div class="card-hdr">
       <span class="card-title">Recruiter summary</span>
       <div class="leg-row">
+        <span class="leg"><span class="leg-dot" style="background:var(--c-subs)"></span>4-wk trends</span>
+        <span class="leg"><span class="leg-dot" style="background:var(--text3)"></span>Totals</span>
+        <span class="leg"><span class="leg-dot" style="background:var(--amber)"></span>Ratios</span>
         <span class="leg"><span class="leg-dot" style="background:#639922"></span>On track</span>
         <span class="leg"><span class="leg-dot" style="background:#EF9F27"></span>Needs attention</span>
         <span class="leg"><span class="leg-dot" style="background:#E24B4A"></span>Below target</span>
@@ -445,11 +448,19 @@ td.editing{padding:2px 4px!important}
     <div class="tbl-wrap"><table>
       <thead><tr>
         <th data-col="name">Recruiter</th><th data-col="manager">Manager</th>
-        <th data-col="totalSubs">Total subs</th><th data-col="totalIvs">Total IVs</th>
-        <th data-col="totalPlacements">Placements</th><th data-col="totalStarts">Starts</th><th data-col="sub2iv">Sub→IV</th>
-        <th data-col="iv2start">IV→Start</th><th data-col="sub2start">Sub→Start</th>
-        <th data-col="pl2start" title="Placement to Start ratio">Pl→Start</th><th data-col="falloffPct" title="% of placements that did not start">Fall-off%</th>
-        <th data-col="avgSub4w">4-wk sub avg</th><th data-col="starts4w">4-wk starts</th><th data-col="status">Status</th>
+        <th data-col="avgSub4w" style="color:var(--c-subs)" title="4-week sub average">4wk Subs</th>
+        <th data-col="ivs4w" style="color:var(--c-ivs)" title="4-week interview average">4wk IVs</th>
+        <th data-col="placements4w" style="color:var(--purple)" title="4-week placements">4wk Pl.</th>
+        <th data-col="starts4w" style="color:var(--c-starts)" title="4-week starts">4wk Starts</th>
+        <th data-col="totalSubs" style="color:var(--text3)" title="Total submittals">Total Subs</th>
+        <th data-col="totalIvs" style="color:var(--text3)" title="Total interviews">Total IVs</th>
+        <th data-col="totalPlacements" style="color:var(--text3)" title="Total placements">Total Pl.</th>
+        <th data-col="totalStarts" style="color:var(--text3)" title="Total starts">Total Starts</th>
+        <th data-col="sub2iv" style="color:var(--amber)" title="Submittal to Interview ratio">Sub→IV</th>
+        <th data-col="sub2start" style="color:var(--amber)" title="Submittal to Start ratio">Sub→Start</th>
+        <th data-col="pl2start" style="color:var(--amber)" title="Placement to Start ratio">Pl→Start</th>
+        <th data-col="falloffPct" style="color:var(--amber)" title="% of placements that did not start">Fall-off%</th>
+        <th data-col="status">Status</th>
       </tr></thead>
       <tbody id="ov-body"></tbody>
     </table></div>
@@ -563,13 +574,14 @@ td.editing{padding:2px 4px!important}
         <select id="entry-mgr" style="height:32px;font-size:13px"><option value="">All managers</option></select>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:210px 75px 75px 75px 75px 100px;gap:7px;padding:5px 0;border-bottom:0.5px solid var(--border2);margin-bottom:3px">
+    <div style="display:grid;grid-template-columns:190px 90px 60px 60px 60px 60px 60px;gap:6px;padding:5px 0;border-bottom:0.5px solid var(--border2);margin-bottom:3px">
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">Recruiter</div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">Manager</div>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">Subs</div>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">IVs</div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">Pl.</div>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">Starts</div>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">Leads</div>
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">Manager</div>
     </div>
     <div id="entry-rows" style="max-height:400px;overflow-y:auto"></div>
     <div style="margin-top:12px;display:flex;align-items:center;gap:9px;flex-wrap:wrap">
@@ -635,6 +647,8 @@ td.editing{padding:2px 4px!important}
       <div id="tr-scope-sub" style="font-size:11px;color:var(--text3);margin-top:1px"></div>
     </div>
   </div>
+
+  <div id="tr-snippet"></div>
 
   <div class="section-hdr" id="tr-hdr-holistic">🌐 Holistic signals</div>
   <div class="insight-grid" id="tr-holistic"></div>
@@ -902,7 +916,7 @@ async function loadFromSheets() {
       recSelEl.appendChild(o);
     });
     // Restore previous selection or default to first
-    if(prevVal && Array.from(recSelEl.options).some(o=>o.value===prevVal)) recSelEl.value=prevVal;
+    if(prevVal && Array.from(recSelEl.options).some(o=>o.value.trim()===prevVal.trim())) recSelEl.value=prevVal;
     else if(recSelEl.options.length>0) recSelEl.selectedIndex=0;
 
     // Re-render whichever tab is currently active
@@ -1176,9 +1190,13 @@ function compute(r){
   const ts=totalArr(r.subs),ti=totalArr(r.ivs),tpl=totalArr(r.placements||[]),tst=totalArr(r.starts);
   const s2i=ti>0?ts/ti:null,i2s=tst>0?ti/tst:null,s2s=tst>0?ts/tst:null;
   const a4=avg4w(r.subs);
-  // 4-week starts total
+  // 4-week totals
   const sv=r.starts.filter(x=>x!=null);
   const starts4w=sv.length>=4?sv.slice(-4).reduce((s,x)=>s+x,0):sv.reduce((s,x)=>s+x,0);
+  const ivv=r.ivs.filter(x=>x!=null);
+  const ivs4w=ivv.length>=4?ivv.slice(-4).reduce((s,x)=>s+x,0):ivv.reduce((s,x)=>s+x,0);
+  const plv=(r.placements||[]).filter(x=>x!=null);
+  const placements4w=plv.length>=4?plv.slice(-4).reduce((s,x)=>s+x,0):plv.reduce((s,x)=>s+x,0);
   // Weeks since last start — scan FULL (unsliced) starts array from end
   // r._fullStarts holds the original unsliced data when range filtering is active
   const fullStarts=r._fullStarts||r.starts;
@@ -1186,10 +1204,16 @@ function compute(r){
   for(let i=fullStarts.length-1;i>=0;i--){
     if((fullStarts[i]||0)>0){wksSinceLast=fullStarts.length-1-i;break;}
   }
-  if(wksSinceLast===null&&tst===0)wksSinceLast=fullStarts.filter(x=>x!=null).length; // never had a start
-  const status=a4>=6&&tst>8?'green':a4>=4||tst>0?'amber':'red';
+  if(wksSinceLast===null&&tst===0)wksSinceLast=fullStarts.filter(x=>x!=null).length;
+  // Status: on track if avg >= 6 subs/wk AND (4wk starts >= 2 OR 4wk placements >= 2)
+  // Needs attention if avg >= 6 but low starts/placements, or avg < 6
+  const sv2=r.starts.filter(x=>x!=null);
+  const st4=sv2.length>=4?sv2.slice(-4).reduce((s,x)=>s+x,0):sv2.reduce((s,x)=>s+x,0);
+  const plv2=(r.placements||[]).filter(x=>x!=null);
+  const pl4=plv2.length>=4?plv2.slice(-4).reduce((s,x)=>s+x,0):plv2.reduce((s,x)=>s+x,0);
+  const status=a4>=6&&(st4>=2||pl4>=2)?'green':a4<6?'red':'amber';
   const pl2st=tst>0?tpl/tst:null,falloff=tpl>0?Math.round(((tpl-tst)/tpl)*100):null;
-  return{...r,totalSubs:ts,totalIvs:ti,totalPlacements:tpl,totalStarts:tst,totalLeads:totalArr(r.leads),sub2iv:s2i,iv2start:i2s,sub2start:s2s,pl2start:pl2st,falloffPct:falloff,avgSub4w:a4,starts4w,wksSinceLast,status};
+  return{...r,totalSubs:ts,totalIvs:ti,totalPlacements:tpl,totalStarts:tst,totalLeads:totalArr(r.leads),sub2iv:s2i,iv2start:i2s,sub2start:s2s,pl2start:pl2st,falloffPct:falloff,avgSub4w:a4,starts4w,ivs4w,placements4w,wksSinceLast,status};
 }
 // computedAll now slices to week range before computing
 function computedAll(){return RECRUITERS.map(r=>compute(sliceRange(r)))}
@@ -1362,7 +1386,23 @@ function renderOvTable(d){
     const pl=r.status==='green'?'On track':r.status==='amber'?'Needs attention':'Below target';
     const mc=MGR_COLORS[r.manager]||'#888';
     const fallCol=r.falloffPct===null?'var(--text3)':r.falloffPct>=50?'var(--red)':r.falloffPct>=25?'var(--amber)':'var(--green)';
-    return `<tr><td style="font-weight:500;white-space:nowrap">${r.name}</td><td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td><td>${r.totalSubs}</td><td>${r.totalIvs}</td><td><strong style="color:var(--purple)">${r.totalPlacements}</strong></td><td><strong>${r.totalStarts}</strong></td><td>${fmt(r.sub2iv)}</td><td>${r.iv2start!=null?fmt(r.iv2start):'—'}</td><td>${r.sub2start!=null?fmt(r.sub2start):'—'}</td><td>${r.pl2start!=null?fmt(r.pl2start):'—'}</td><td style="color:${fallCol}">${r.falloffPct!==null?r.falloffPct+'%':'—'}</td><td>${fmt(r.avgSub4w)}</td><td><strong style="color:${r.starts4w>0?'var(--c-starts)':'var(--text3)'}">${r.starts4w}</strong></td><td><span class="pill ${pc}">${pl}</span></td></tr>`;
+    return `<tr>
+      <td style="font-weight:500;white-space:nowrap">${r.name}</td>
+      <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
+      <td style="color:var(--c-subs);font-weight:600">${r.avgSub4w.toFixed(1)}</td>
+      <td style="color:var(--c-ivs);font-weight:600">${r.ivs4w}</td>
+      <td style="color:var(--purple);font-weight:600">${r.placements4w}</td>
+      <td style="color:var(--c-starts);font-weight:600">${r.starts4w}</td>
+      <td style="color:var(--text3)">${r.totalSubs}</td>
+      <td style="color:var(--text3)">${r.totalIvs}</td>
+      <td style="color:var(--text3)">${r.totalPlacements}</td>
+      <td style="color:var(--text3)">${r.totalStarts}</td>
+      <td style="color:var(--amber)">${fmt(r.sub2iv)}</td>
+      <td style="color:var(--amber)">${r.sub2start!=null?fmt(r.sub2start):'—'}</td>
+      <td style="color:var(--amber)">${r.pl2start!=null?fmt(r.pl2start):'—'}</td>
+      <td style="color:${fallCol}">${r.falloffPct!==null?r.falloffPct+'%':'—'}</td>
+      <td><span class="pill ${pc}">${pl}</span></td>
+    </tr>`;
   }).join('');
   document.querySelectorAll('#tab-overview thead th').forEach(th=>{th.classList.remove('sa','sd');if(th.dataset.col===ovSort)th.classList.add(ovDir==='asc'?'sa':'sd')});
 }
@@ -1508,12 +1548,12 @@ function renderEntry(){
   document.getElementById('entry-rows').innerHTML=recs.map(r=>`
     <div class="entry-row-item">
       <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.name}">${r.name}</div>
+      <span style="font-size:11px;color:${MGR_COLORS[r.manager]||'#888'};font-weight:600">${r.manager}</span>
       <input type="number" min="0" value="0" data-rec="${r.name}" data-m="subs">
       <input type="number" min="0" value="0" data-rec="${r.name}" data-m="ivs">
       <input type="number" min="0" value="0" data-rec="${r.name}" data-m="placements">
       <input type="number" min="0" value="0" data-rec="${r.name}" data-m="starts">
       <input type="number" min="0" value="0" data-rec="${r.name}" data-m="leads">
-      <span style="font-size:11px;color:${MGR_COLORS[r.manager]||'#888'};font-weight:500">${r.manager}</span>
     </div>`).join('');
   renderSavedList();
 }
@@ -1806,6 +1846,43 @@ function renderTrends(){
       <div class="trend-item"><div class="trend-badge badge-info">i</div><div class="trend-text"><div class="trend-detail">${note}</div></div></div>
     </div>`;
   });
+  // Build performance snippet
+  const totalSubsSnip=scopeRecs.reduce((s,r)=>s+r.totalSubs,0);
+  const totalStartsSnip=scopeRecs.reduce((s,r)=>s+r.totalStarts,0);
+  const totalPlSnip=scopeRecs.reduce((s,r)=>s+r.totalPlacements,0);
+  const onTrackSnip=scopeRecs.filter(r=>r.status==='green').length;
+  const needsSnip=scopeRecs.filter(r=>r.status==='amber').length;
+  const belowSnip=scopeRecs.filter(r=>r.status==='red').length;
+  const avgSubSnip=scopeRecs.length?totalSubsSnip/scopeRecs.length:0;
+  const pl2stSnip=totalPlSnip>0?Math.round((totalStartsSnip/totalPlSnip)*100):0;
+  // Generate natural language summary
+  const subTrend=totalSubsSnip>0?(avgSubSnip>=6?'strong submittal volume':'submittal volume that needs attention'):'limited activity';
+  const conversionNote=pl2stSnip>=70?'excellent placement-to-start conversion ('+pl2stSnip+'%)':pl2stSnip>=40?'moderate placement-to-start conversion ('+pl2stSnip+'%)':'low placement-to-start conversion ('+pl2stSnip+'%) — follow-up on pending onboardings recommended';
+  const statusNote=onTrackSnip>0?onTrackSnip+' recruiter'+(onTrackSnip>1?'s are':' is')+' on track':needsSnip+' recruiter'+(needsSnip>1?'s need':' needs')+' attention';
+  const topPerf=[...scopeRecs].sort((a,b)=>b.totalStarts-a.totalStarts)[0];
+  const topNote=topPerf&&topPerf.totalStarts>0?' '+topPerf.name.split(' ')[0]+' leads with '+topPerf.totalStarts+' starts.':'';
+  // Recommended action
+  let recAction='';
+  if(belowSnip>0) recAction='⚡ Drill into the <strong>Action Needed</strong> section below — '+belowSnip+' recruiter'+(belowSnip>1?'s require':'requires')+' immediate attention.';
+  else if(pl2stSnip<50&&totalPlSnip>0) recAction='📞 Review placement fall-offs — '+totalPlSnip+' placements converted to only '+totalStartsSnip+' starts. Check in on pending onboardings.';
+  else if(needsSnip>0) recAction='👀 Review the <strong>Watch</strong> recruiters below — '+needsSnip+' are trending in the right direction but need support.';
+  else recAction='✅ Team is performing well. Monitor weekly trends to maintain momentum.';
+
+  const snippetHTML=`<div class="card" style="margin-bottom:14px;border-left:3px solid var(--accent)">
+    <div class="card-hdr"><span class="card-title" style="font-size:13px;font-weight:700;color:var(--text)">📋 Performance snapshot</span><span style="font-size:10px;color:var(--text3)">${w==='all'?'Full range':'Last '+w+' wks'}</span></div>
+    <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:10px">
+      The team shows <strong style="color:var(--text)">${subTrend}</strong> with <strong style="color:var(--c-subs)">${totalSubsSnip.toLocaleString()} total submittals</strong> across ${scopeRecs.length} recruiters.
+      There is <strong style="color:var(--text)">${conversionNote}</strong>.
+      ${statusNote}.${topNote}
+    </div>
+    <div style="padding:10px 14px;background:var(--bg2);border-radius:var(--radius);font-size:12px;color:var(--text2);border-left:2px solid var(--accent)">
+      <strong style="color:var(--text)">Recommended action:</strong> ${recAction}
+    </div>
+  </div>`;
+
+  const snippetEl=document.getElementById('tr-snippet');
+  if(snippetEl) snippetEl.innerHTML=snippetHTML;
+
   document.getElementById('tr-holistic').innerHTML=holisticHTML;
 
   // ── MANAGER SECTION (whole-team scope only) ──
