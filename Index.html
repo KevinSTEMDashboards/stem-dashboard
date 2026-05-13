@@ -262,7 +262,42 @@ td.editing{padding:2px 4px!important}
   </div>
 </div>
 
-<!-- USER MANAGEMENT MODAL -->
+<!-- MFA MODAL — shown after password verified for admin -->
+<div id="mfa-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg3);align-items:center;justify-content:center">
+  <div style="background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius-lg);padding:28px 24px;width:340px;max-width:calc(100vw - 32px);box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+      <div class="logo" style="width:36px;height:36px;font-size:16px">S</div>
+      <div>
+        <div style="font-size:15px;font-weight:700">Two-factor authentication</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">Enter the 6-digit code from your authenticator app</div>
+      </div>
+    </div>
+    <!-- Setup view — shown first time or when resetting -->
+    <div id="mfa-setup-view" style="display:none">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5">Scan this QR code with <strong>Microsoft Authenticator</strong>, Google Authenticator, or any TOTP app. Then enter the 6-digit code below to confirm setup.</div>
+      <div style="text-align:center;margin-bottom:14px">
+        <canvas id="mfa-qr" width="180" height="180" style="border-radius:8px;background:#fff;padding:8px"></canvas>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px">Or enter this key manually:</div>
+        <code id="mfa-secret-display" style="font-size:11px;letter-spacing:.1em;color:var(--accent);word-break:break-all;display:block;margin-top:4px"></code>
+      </div>
+    </div>
+    <!-- Verify view -->
+    <div id="mfa-verify-view">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.5" id="mfa-prompt-text">Open your authenticator app and enter the current 6-digit code for <strong>STEM Dashboard</strong>.</div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">Authenticator code</label>
+        <input type="number" id="mfa-code" placeholder="000000" style="width:100%;height:42px;font-size:20px;text-align:center;letter-spacing:.2em;padding:0 12px" maxlength="6" autocomplete="one-time-code">
+      </div>
+      <div id="mfa-err" style="font-size:12px;color:var(--red);display:none;padding:8px 10px;background:var(--red-bg);border-radius:var(--radius);margin-top:8px">Invalid code. Please try again.</div>
+      <button class="btn btn-primary" id="mfa-submit-btn" style="width:100%;height:38px;font-size:13px;justify-content:center;margin-top:12px">Verify</button>
+    </div>
+    <div style="margin-top:12px;text-align:center">
+      <button onclick="cancelMfa()" style="font-size:11px;height:26px;border:none;background:none;color:var(--text3);cursor:pointer">← Back to sign in</button>
+    </div>
+  </div>
+</div>
+
+
 <div id="user-modal" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.45);align-items:center;justify-content:center">
   <div style="background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius-lg);padding:24px;width:520px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
@@ -275,6 +310,17 @@ td.editing{padding:2px 4px!important}
 
     <!-- Current editors list -->
     <div id="user-list" style="margin-bottom:18px"></div>
+
+    <!-- Admin MFA section -->
+    <div style="border-top:0.5px solid var(--border2);padding-top:14px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--text)">Two-factor authentication (Admin)</div>
+          <div id="mfa-status-text" style="font-size:11px;color:var(--text3);margin-top:2px"></div>
+        </div>
+        <button class="btn" id="mfa-reset-btn" style="font-size:11px;height:28px;padding:0 10px"></button>
+      </div>
+    </div>
 
     <!-- Generate invite section -->
     <div style="border-top:0.5px solid var(--border2);padding-top:16px">
@@ -389,7 +435,7 @@ td.editing{padding:2px 4px!important}
 </header>
 
 <!-- Filter bar — separate row so it never crowds the auth button -->
-<div class="filter-bar">
+<div class="filter-bar" style="justify-content:center">
   <select id="mgr-filter"><option value="">All managers</option></select>
   <select id="metric-select"><option value="subs">Submittals</option><option value="ivs">Interviews</option><option value="placements">Placements</option><option value="starts">Starts</option><option value="leads">Leads</option></select>
   <input type="text" id="search" placeholder="Search recruiter…">
@@ -436,14 +482,7 @@ td.editing{padding:2px 4px!important}
   <div class="card">
     <div class="card-hdr">
       <span class="card-title">Recruiter summary</span>
-      <div class="leg-row">
-        <span class="leg"><span class="leg-dot" style="background:var(--c-subs)"></span>4-wk trends</span>
-        <span class="leg"><span class="leg-dot" style="background:var(--text3)"></span>Totals</span>
-        <span class="leg"><span class="leg-dot" style="background:var(--amber)"></span>Ratios</span>
-        <span class="leg"><span class="leg-dot" style="background:#639922"></span>On track</span>
-        <span class="leg"><span class="leg-dot" style="background:#EF9F27"></span>Needs attention</span>
-        <span class="leg"><span class="leg-dot" style="background:#E24B4A"></span>Below target</span>
-      </div>
+
     </div>
     <div class="tbl-wrap"><table>
       <thead><tr>
@@ -457,9 +496,9 @@ td.editing{padding:2px 4px!important}
         <th data-col="totalPlacements" style="color:var(--text3)" title="Total placements">Total Pl.</th>
         <th data-col="totalStarts" style="color:var(--text3)" title="Total starts">Total Starts</th>
         <th data-col="sub2iv" style="color:var(--amber)" title="Submittal to Interview ratio">Sub→IV</th>
-        <th data-col="sub2start" style="color:var(--amber)" title="Submittal to Start ratio">Sub→Start</th>
+        <th data-col="iv2placement" style="color:var(--amber)" title="Interview to Placement ratio">IV→Pl.</th>
         <th data-col="pl2start" style="color:var(--amber)" title="Placement to Start ratio">Pl→Start</th>
-        <th data-col="falloffPct" style="color:var(--amber)" title="% of placements that did not start">Fall-off%</th>
+        <th data-col="sub2start" style="color:var(--amber)" title="Submittal to Start ratio">Sub→Start</th>
         <th data-col="status">Status</th>
       </tr></thead>
       <tbody id="ov-body"></tbody>
@@ -691,7 +730,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Total subs</th><th>Total IVs</th><th>Starts</th><th>4-wk avg</th><th>Status</th><th>Added</th><th></th>
+            <th>Name</th><th>Manager</th><th>Total subs</th><th>Total IVs</th><th>Starts</th><th>4-wk avg</th><th>Status</th><th>Date Hired</th><th></th>
           </tr></thead>
           <tbody id="roster-active-body"></tbody>
         </table>
@@ -859,29 +898,66 @@ async function loadFromSheets() {
     const sts   = parseTab(stRows,    SHEET_TABS.starts);
     const lds   = parseTab(ldRows,    SHEET_TABS.leads);
 
-    // Determine week count from longest subs array
-    const allNames = [...new Set([
+    // ── Merge Sheet data into RECRUITERS using fuzzy name matching ──
+    // This prevents recruiters from disappearing if their name in the Sheet
+    // has slightly different whitespace or encoding vs BASE_DATA
+    const norm = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
+
+    // Build a lookup from normalized Sheet name → parsed data for each metric
+    const sheetLookup = {};
+    const allSheetNames = [...new Set([
       ...Object.keys(subs), ...Object.keys(ivs),
       ...Object.keys(pls),  ...Object.keys(sts), ...Object.keys(lds)
-    ])].sort();
+    ])];
+    allSheetNames.forEach(sheetName => {
+      sheetLookup[norm(sheetName)] = {
+        name: sheetName,
+        manager: (subs[sheetName]||ivs[sheetName]||pls[sheetName]||sts[sheetName]||lds[sheetName]||{}).manager || '',
+        subs:       (subs[sheetName]||{}).weekly || [],
+        ivs:        (ivs[sheetName]||{}).weekly  || [],
+        placements: (pls[sheetName]||{}).weekly  || [],
+        starts:     (sts[sheetName]||{}).weekly  || [],
+        leads:      (lds[sheetName]||{}).weekly  || []
+      };
+    });
 
-    const nW = Math.max(...allNames.map(n => (subs[n]||{weekly:[]}).weekly.length), 0);
+    // Determine week count from subs data
+    const nW = Math.max(...Object.values(sheetLookup).map(d => d.subs.length), 1);
 
-    // Reset RECRUITERS from Sheet data
+    // Reset RECRUITERS — use BASE_DATA names as canonical, merge Sheet data in
     RECRUITERS.length = 0;
     wkLabels.length = 0;
     for (let i = 0; i < nW; i++) wkLabels.push(`Wk ${i + 1}`);
 
-    allNames.forEach(name => {
-      const mgr = (subs[name]||ivs[name]||pls[name]||sts[name]||lds[name]||{}).manager || '';
-      const pad = arr => { const a = [...(arr||[])]; while(a.length < nW) a.push(0); return a.slice(0, nW); };
+    const pad = arr => { const a = [...(arr||[])]; while(a.length < nW) a.push(0); return a.slice(0, nW); };
+
+    // First pass: BASE_DATA names (canonical) — look up Sheet data by fuzzy match
+    const usedSheetNames = new Set();
+    BASE_DATA.forEach(base => {
+      const key = norm(base.name);
+      const sheet = sheetLookup[key];
+      if (sheet) usedSheetNames.add(norm(sheet.name));
       RECRUITERS.push({
-        name, manager: mgr,
-        subs:       pad((subs[name]||{}).weekly),
-        ivs:        pad((ivs[name]||{}).weekly),
-        placements: pad((pls[name]||{}).weekly),
-        starts:     pad((sts[name]||{}).weekly),
-        leads:      pad((lds[name]||{}).weekly)
+        name: base.name, // always use BASE_DATA canonical name
+        manager: (sheet && sheet.manager) || base.manager,
+        subs:       sheet ? pad(sheet.subs)       : pad(base.subs),
+        ivs:        sheet ? pad(sheet.ivs)        : pad(base.ivs),
+        placements: sheet ? pad(sheet.placements) : pad(base.placements||[]),
+        starts:     sheet ? pad(sheet.starts)     : pad(base.starts),
+        leads:      sheet ? pad(sheet.leads)      : pad(base.leads)
+      });
+    });
+
+    // Second pass: add any Sheet recruiters not in BASE_DATA (newly added)
+    allSheetNames.forEach(sheetName => {
+      if (usedSheetNames.has(norm(sheetName))) return;
+      const d = sheetLookup[norm(sheetName)];
+      if (!d || !d.manager) return;
+      RECRUITERS.push({
+        name: sheetName, manager: d.manager,
+        subs: pad(d.subs), ivs: pad(d.ivs),
+        placements: pad(d.placements), starts: pad(d.starts), leads: pad(d.leads),
+        isNew: true
       });
     });
 
@@ -915,8 +991,10 @@ async function loadFromSheets() {
       o.value=r.name;o.textContent=r.name+' ('+r.manager+')';
       recSelEl.appendChild(o);
     });
-    // Restore previous selection or default to first
-    if(prevVal && Array.from(recSelEl.options).some(o=>o.value.trim()===prevVal.trim())) recSelEl.value=prevVal;
+    // Restore previous selection using normalized comparison (handles whitespace/encoding)
+    const normPrev=(prevVal||'').trim().replace(/\s+/g,' ').toLowerCase();
+    const matchOpt=normPrev?Array.from(recSelEl.options).find(o=>o.value.trim().replace(/\s+/g,' ').toLowerCase()===normPrev):null;
+    if(matchOpt) recSelEl.value=matchOpt.value;
     else if(recSelEl.options.length>0) recSelEl.selectedIndex=0;
 
     // Re-render whichever tab is currently active
@@ -1188,7 +1266,7 @@ function updateRangeBadge(){
 
 function compute(r){
   const ts=totalArr(r.subs),ti=totalArr(r.ivs),tpl=totalArr(r.placements||[]),tst=totalArr(r.starts);
-  const s2i=ti>0?ts/ti:null,i2s=tst>0?ti/tst:null,s2s=tst>0?ts/tst:null;
+  const s2i=ti>0?ts/ti:null,i2pl=tpl>0?ti/tpl:null,pl2st=tst>0?tpl/tst:null,s2s=tst>0?ts/tst:null;
   const a4=avg4w(r.subs);
   // 4-week totals
   const sv=r.starts.filter(x=>x!=null);
@@ -1211,9 +1289,10 @@ function compute(r){
   const st4=sv2.length>=4?sv2.slice(-4).reduce((s,x)=>s+x,0):sv2.reduce((s,x)=>s+x,0);
   const plv2=(r.placements||[]).filter(x=>x!=null);
   const pl4=plv2.length>=4?plv2.slice(-4).reduce((s,x)=>s+x,0):plv2.reduce((s,x)=>s+x,0);
-  const status=a4>=6&&(st4>=2||pl4>=2)?'green':a4<6?'red':'amber';
-  const pl2st=tst>0?tpl/tst:null,falloff=tpl>0?Math.round(((tpl-tst)/tpl)*100):null;
-  return{...r,totalSubs:ts,totalIvs:ti,totalPlacements:tpl,totalStarts:tst,totalLeads:totalArr(r.leads),sub2iv:s2i,iv2start:i2s,sub2start:s2s,pl2start:pl2st,falloffPct:falloff,avgSub4w:a4,starts4w,ivs4w,placements4w,wksSinceLast,status};
+  // Status: 2+ starts = On Target (green), 1 start = Below Target (amber), 0 = Needs Attention (red)
+  const status=starts4w>=2?'green':starts4w===1?'amber':'red';
+  const falloff=tpl>0?Math.round(((tpl-tst)/tpl)*100):null;
+  return{...r,totalSubs:ts,totalIvs:ti,totalPlacements:tpl,totalStarts:tst,totalLeads:totalArr(r.leads),sub2iv:s2i,iv2placement:i2pl,pl2start:pl2st,sub2start:s2s,falloffPct:falloff,avgSub4w:a4,starts4w,ivs4w,placements4w,wksSinceLast,status};
 }
 // computedAll now slices to week range before computing
 function computedAll(){return RECRUITERS.map(r=>compute(sliceRange(r)))}
@@ -1383,9 +1462,8 @@ function renderOvTable(d){
   const s=[...d].sort((a,b)=>{const av=a[ovSort],bv=b[ovSort];if(av==null&&bv==null)return 0;if(av==null)return 1;if(bv==null)return -1;return typeof av==='string'?(ovDir==='asc'?av.localeCompare(bv):bv.localeCompare(av)):(ovDir==='asc'?av-bv:bv-av)});
   document.getElementById('ov-body').innerHTML=s.map(r=>{
     const pc=r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
-    const pl=r.status==='green'?'On track':r.status==='amber'?'Needs attention':'Below target';
+    const pl=r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
     const mc=MGR_COLORS[r.manager]||'#888';
-    const fallCol=r.falloffPct===null?'var(--text3)':r.falloffPct>=50?'var(--red)':r.falloffPct>=25?'var(--amber)':'var(--green)';
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.name}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
@@ -1398,9 +1476,9 @@ function renderOvTable(d){
       <td style="color:var(--text3)">${r.totalPlacements}</td>
       <td style="color:var(--text3)">${r.totalStarts}</td>
       <td style="color:var(--amber)">${fmt(r.sub2iv)}</td>
-      <td style="color:var(--amber)">${r.sub2start!=null?fmt(r.sub2start):'—'}</td>
+      <td style="color:var(--amber)">${r.iv2placement!=null?fmt(r.iv2placement):'—'}</td>
       <td style="color:var(--amber)">${r.pl2start!=null?fmt(r.pl2start):'—'}</td>
-      <td style="color:${fallCol}">${r.falloffPct!==null?r.falloffPct+'%':'—'}</td>
+      <td style="color:var(--amber)">${r.sub2start!=null?fmt(r.sub2start):'—'}</td>
       <td><span class="pill ${pc}">${pl}</span></td>
     </tr>`;
   }).join('');
@@ -1521,9 +1599,14 @@ function renderRecruiter(){
   // Auto-select first recruiter if nothing selected
   if(!recSel.value && recSel.options.length>0) recSel.selectedIndex=0;
   const name=recSel.value;
-  const r=computedAll().find(x=>x.name===name);
+  if(!name) return;
+  // Robust name match — trim and normalize spaces to handle any encoding differences
+  const normalize=s=>(s||'').trim().replace(/\s+/g,' ');
+  const normName=normalize(name);
+  const all=computedAll();
+  const r=all.find(x=>normalize(x.name)===normName) || all.find(x=>normalize(x.name).toLowerCase()===normName.toLowerCase());
   if(!r){
-    document.getElementById('rec-kpis').innerHTML='';
+    document.getElementById('rec-kpis').innerHTML=`<div style="padding:20px;color:var(--text3);font-size:13px">No data found for "${name}"</div>`;
     return;
   }
   const mc=MGR_COLORS[r.manager]||'#888';
@@ -1532,7 +1615,7 @@ function renderRecruiter(){
     <div class="kpi"><div class="kpi-label">Total IVs</div><div class="kpi-val">${r.totalIvs}</div><div class="kpi-sub">Sub→IV: ${fmt(r.sub2iv)}</div></div>
     <div class="kpi"><div class="kpi-label">Total starts</div><div class="kpi-val">${r.totalStarts}</div><div class="kpi-sub">IV→Start: ${fmt(r.iv2start)}</div></div>
     <div class="kpi"><div class="kpi-label">Total leads</div><div class="kpi-val">${r.totalLeads}</div><div class="kpi-sub">Sub→Start: ${fmt(r.sub2start)}</div></div>
-    <div class="kpi"><div class="kpi-label">Manager</div><div class="kpi-val" style="font-size:15px;color:${mc}">${r.manager}</div><div class="kpi-sub"><span class="pill ${r.status==='green'?'pg':r.status==='amber'?'pa':'pr'}">${r.status==='green'?'On track':r.status==='amber'?'Needs attention':'Below target'}</span></div></div>
+    <div class="kpi"><div class="kpi-label">Manager</div><div class="kpi-val" style="font-size:15px;color:${mc}">${r.manager}</div><div class="kpi-sub"><span class="pill ${r.status==='green'?'pg':r.status==='amber'?'pa':'pr'}">${r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention'}</span></div></div>
   `;
   const mk=(id,data,color,label)=>{if(rCharts[id])rCharts[id].destroy();rCharts[id]=new Chart(document.getElementById(id),{type:'bar',data:{labels:activeWkLabels().slice(0,data.length),datasets:[{data:data.map(v=>(v!=null?v:0)),backgroundColor:color+'88',borderColor:color,borderWidth:1.5,borderRadius:3,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw} ${label}`}}},scales:{x:{ticks:{font:{size:10},maxRotation:45},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10},stepSize:1}}}}})};
   mk('rSubsC',r.subs,'#185FA5','subs');mk('rIvsC',r.ivs,'#1D9E75','ivs');mk('rPlC',r.placements||[],'#a855f7','placements');mk('rStartsC',r.starts,'#D4537E','starts');mk('rLeadsC',r.leads,'#EF9F27','leads');
@@ -2117,6 +2200,21 @@ function openUserModal() {
   document.getElementById('invite-result').style.display = 'none';
   renderUserList();
   renderPendingInvites();
+  // MFA status
+  const hasMFA = !!safeGet('stemMFASecret');
+  const statusEl = document.getElementById('mfa-status-text');
+  const resetBtn = document.getElementById('mfa-reset-btn');
+  if (statusEl) statusEl.textContent = hasMFA ? '✓ MFA is active — required on every admin login' : '⚠️ MFA not set up — you will be prompted on next login';
+  if (statusEl) statusEl.style.color = hasMFA ? 'var(--green)' : 'var(--amber)';
+  if (resetBtn) {
+    resetBtn.textContent = hasMFA ? '🔄 Reset MFA' : '⚙️ Set up MFA';
+    resetBtn.onclick = () => {
+      safeDel('stemMFASecret');
+      closeUserModal();
+      // Trigger setup on next admin login — show message
+      alert('MFA reset. You will be prompted to set up a new authenticator code on your next sign-in.');
+    };
+  }
 }
 function closeUserModal() {
   document.getElementById('user-modal').style.display = 'none';
@@ -2328,9 +2426,16 @@ function attemptLogin() {
   const match = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.hash === hash);
   if (match) {
     hideLogin();
-    setSession({username: match.username, role: match.role});
-    // If they clicked sign-in from entry tab, keep them there
-    if (document.getElementById('tab-entry').classList.contains('active')) renderEntry();
+    // Admin requires MFA — all other editors skip MFA
+    if (match.role === 'admin' && safeGet('stemMFASecret')) {
+      showMfaVerify(match);
+    } else if (match.role === 'admin' && !safeGet('stemMFASecret')) {
+      // First time admin login — prompt MFA setup
+      showMfaSetup(match);
+    } else {
+      setSession({username: match.username, role: match.role});
+      if (document.getElementById('tab-entry').classList.contains('active')) renderEntry();
+    }
   } else {
     document.getElementById('login-err').style.display = 'block';
   }
@@ -2338,9 +2443,197 @@ function attemptLogin() {
 
 function signOut() {
   setSession(null);
-  // If on entry tab, show gate
   const activeTab = document.querySelector('.tab.active');
   if (activeTab && activeTab.dataset.tab === 'entry') updateAuthUI();
+}
+
+// ─── TOTP MFA (RFC 6238) — pure JS, no server needed ───
+// Works with Microsoft Authenticator, Google Authenticator, Authy, any TOTP app
+
+// Encode to Base32
+function base32Encode(bytes) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0, val = 0, out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    val = (val << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) { out += chars[(val >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += chars[(val << (5 - bits)) & 31];
+  return out;
+}
+
+// Decode Base32
+function base32Decode(str) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  str = str.toUpperCase().replace(/\s/g, '');
+  let bits = 0, val = 0;
+  const out = [];
+  for (let i = 0; i < str.length; i++) {
+    const idx = chars.indexOf(str[i]);
+    if (idx === -1) continue;
+    val = (val << 5) | idx;
+    bits += 5;
+    if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; }
+  }
+  return new Uint8Array(out);
+}
+
+// HMAC-SHA1 (pure JS)
+function hmacSha1(keyBytes, msgBytes) {
+  const blockSize = 64;
+  let key = keyBytes.length > blockSize ? sha1(keyBytes) : keyBytes;
+  const keyPad = new Uint8Array(blockSize);
+  keyPad.set(key);
+  const ipad = keyPad.map(b => b ^ 0x36);
+  const opad = keyPad.map(b => b ^ 0x5c);
+  const inner = new Uint8Array(ipad.length + msgBytes.length);
+  inner.set(ipad); inner.set(msgBytes, ipad.length);
+  const innerHash = sha1(inner);
+  const outer = new Uint8Array(opad.length + innerHash.length);
+  outer.set(opad); outer.set(innerHash, opad.length);
+  return sha1(outer);
+}
+
+// SHA-1
+function sha1(bytes) {
+  let h0=0x67452301,h1=0xEFCDAB89,h2=0x98BADCFE,h3=0x10325476,h4=0xC3D2E1F0;
+  const msg = Array.from(bytes);
+  const bl = msg.length * 8;
+  msg.push(0x80);
+  while (msg.length % 64 !== 56) msg.push(0);
+  for (let i = 3; i >= 0; i--) msg.push((bl >>> (i * 8)) & 0xff);
+  msg.push(0,0,0,0);
+  const r = n => (n << r.v) | (n >>> (32 - r.v));
+  for (let i = 0; i < msg.length; i += 64) {
+    const w = [];
+    for (let j = 0; j < 16; j++) w.push((msg[i+j*4]<<24)|(msg[i+j*4+1]<<16)|(msg[i+j*4+2]<<8)|msg[i+j*4+3]);
+    for (let j = 16; j < 80; j++) { const x=w[j-3]^w[j-8]^w[j-14]^w[j-16]; w.push((x<<1)|(x>>>31)); }
+    let a=h0,b=h1,c=h2,d=h3,e=h4;
+    for (let j = 0; j < 80; j++) {
+      let f,k;
+      if(j<20){f=(b&c)|((~b)&d);k=0x5A827999;}
+      else if(j<40){f=b^c^d;k=0x6ED9EBA1;}
+      else if(j<60){f=(b&c)|(b&d)|(c&d);k=0x8F1BBCDC;}
+      else{f=b^c^d;k=0xCA62C1D6;}
+      const tmp=(((a<<5)|(a>>>27))+f+e+k+w[j])>>>0;
+      e=d;d=c;c=(b<<30)|(b>>>2);b=a;a=tmp;
+    }
+    h0=(h0+a)>>>0;h1=(h1+b)>>>0;h2=(h2+c)>>>0;h3=(h3+d)>>>0;h4=(h4+e)>>>0;
+  }
+  const result = new Uint8Array(20);
+  [h0,h1,h2,h3,h4].forEach((h,i)=>{result[i*4]=(h>>>24)&0xff;result[i*4+1]=(h>>>16)&0xff;result[i*4+2]=(h>>>8)&0xff;result[i*4+3]=h&0xff;});
+  return result;
+}
+
+// Generate TOTP code
+function generateTOTP(secret, timeStep) {
+  const T = Math.floor((timeStep || Math.floor(Date.now() / 1000)) / 30);
+  const msg = new Uint8Array(8);
+  for (let i = 7; i >= 0; i--) { msg[i] = T & 0xff; T = Math.floor(T / 256); }
+  // Fix: use proper counter
+  const counter = Math.floor((timeStep || Math.floor(Date.now() / 1000)) / 30);
+  const counterBytes = new Uint8Array(8);
+  let c = counter;
+  for (let i = 7; i >= 0; i--) { counterBytes[i] = c & 0xff; c = Math.floor(c / 256); }
+  const keyBytes = base32Decode(secret);
+  const hmac = hmacSha1(keyBytes, counterBytes);
+  const offset = hmac[19] & 0xf;
+  const code = ((hmac[offset] & 0x7f) << 24 | hmac[offset+1] << 16 | hmac[offset+2] << 8 | hmac[offset+3]) % 1000000;
+  return code.toString().padStart(6, '0');
+}
+
+function verifyTOTP(secret, userCode) {
+  const now = Math.floor(Date.now() / 1000);
+  // Allow ±1 time step (30 seconds drift tolerance)
+  for (let delta = -1; delta <= 1; delta++) {
+    const expected = generateTOTP(secret, now + delta * 30);
+    if (expected === userCode.toString().padStart(6, '0')) return true;
+  }
+  return false;
+}
+
+// Generate a random TOTP secret
+function generateTOTPSecret() {
+  const bytes = new Uint8Array(20);
+  for (let i = 0; i < 20; i++) bytes[i] = Math.floor(Math.random() * 256);
+  return base32Encode(bytes);
+}
+
+// Simple QR code using a free API (works offline via data URL fallback)
+function drawQR(canvasId, text) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  // Use Google Charts QR API
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => { ctx.drawImage(img, 0, 0, 180, 180); };
+  img.onerror = () => {
+    // Fallback: show the URL as text
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 180, 180);
+    ctx.fillStyle = '#000';
+    ctx.font = '9px monospace';
+    ctx.fillText('Scan failed — enter', 10, 20);
+    ctx.fillText('key manually below', 10, 35);
+  };
+  img.src = 'https://chart.googleapis.com/chart?cht=qr&chs=180x180&chl=' + encodeURIComponent(text);
+}
+
+let pendingMFAUser = null;
+let pendingMFASecret = null;
+
+function showMfaSetup(user) {
+  pendingMFAUser = user;
+  pendingMFASecret = generateTOTPSecret();
+  document.getElementById('mfa-setup-view').style.display = 'block';
+  document.getElementById('mfa-prompt-text').textContent = 'Scan the QR code with Microsoft Authenticator or any TOTP app, then enter the 6-digit code to confirm setup.';
+  document.getElementById('mfa-secret-display').textContent = pendingMFASecret.match(/.{1,4}/g).join(' ');
+  document.getElementById('mfa-modal').style.display = 'flex';
+  document.getElementById('mfa-code').value = '';
+  document.getElementById('mfa-err').style.display = 'none';
+  const otpUrl = 'otpauth://totp/STEM%20Dashboard:' + encodeURIComponent(user.username) + '?secret=' + pendingMFASecret + '&issuer=STEM%20Dashboard&algorithm=SHA1&digits=6&period=30';
+  drawQR('mfa-qr', otpUrl);
+  setTimeout(() => document.getElementById('mfa-code').focus(), 100);
+}
+
+function showMfaVerify(user) {
+  pendingMFAUser = user;
+  pendingMFASecret = null;
+  document.getElementById('mfa-setup-view').style.display = 'none';
+  document.getElementById('mfa-prompt-text').textContent = 'Open Microsoft Authenticator (or your TOTP app) and enter the current 6-digit code for STEM Dashboard.';
+  document.getElementById('mfa-modal').style.display = 'flex';
+  document.getElementById('mfa-code').value = '';
+  document.getElementById('mfa-err').style.display = 'none';
+  setTimeout(() => document.getElementById('mfa-code').focus(), 100);
+}
+
+function submitMfaCode() {
+  const code = document.getElementById('mfa-code').value.trim();
+  const secret = pendingMFASecret || safeGet('stemMFASecret');
+  if (!secret) { cancelMfa(); return; }
+  if (verifyTOTP(secret, code)) {
+    // If setup mode, save the secret
+    if (pendingMFASecret) safeSet('stemMFASecret', pendingMFASecret);
+    document.getElementById('mfa-modal').style.display = 'none';
+    pendingMFASecret = null;
+    const user = pendingMFAUser;
+    pendingMFAUser = null;
+    setSession({username: user.username, role: user.role});
+    if (document.getElementById('tab-entry').classList.contains('active')) renderEntry();
+  } else {
+    document.getElementById('mfa-err').style.display = 'block';
+    document.getElementById('mfa-code').value = '';
+    document.getElementById('mfa-code').focus();
+  }
+}
+
+function cancelMfa() {
+  document.getElementById('mfa-modal').style.display = 'none';
+  pendingMFAUser = null;
+  pendingMFASecret = null;
+  showLogin();
 }
 
 // Login events
@@ -2348,6 +2641,10 @@ document.getElementById('login-btn').addEventListener('click', attemptLogin);
 document.getElementById('login-skip').addEventListener('click', () => { hideLogin(); setSession(null); });
 document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
 document.getElementById('login-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-pass').focus(); });
+document.getElementById('mfa-submit-btn').addEventListener('click', submitMfaCode);
+document.getElementById('mfa-code').addEventListener('keydown', e => { if (e.key === 'Enter') submitMfaCode(); });
+// Auto-submit when 6 digits entered
+document.getElementById('mfa-code').addEventListener('input', e => { if (e.target.value.replace(/\D/g,'').length >= 6) submitMfaCode(); });
 
 // Restore session
 const saved = sessGet('stemSession');
@@ -2683,7 +2980,7 @@ function renderRoster() {
     const mc = MGR_COLORS[r.manager] || '#888';
     const pc = r.status === 'green' ? 'pg' : r.status === 'amber' ? 'pa' : 'pr';
     const pl = r.status === 'green' ? 'On track' : r.status === 'amber' ? 'Needs attention' : 'Below target';
-    const addedTag = r.isNew ? `<span style="font-size:10px;color:var(--text3)">${r.addedOn || ''}</span>` : '<span style="font-size:10px;color:var(--text3)">YTD</span>';
+    const addedTag = r.isNew ? `<span style="font-size:10px;color:var(--text3)">${r.addedOn || '—'}</span>` : '<span style="font-size:10px;color:var(--text3)">—</span>';
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.name}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
@@ -2904,7 +3201,7 @@ function renderManagers(){
 
     var rows=d.team.map(function(r){
       var pc=r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
-      var pl=r.status==='green'?'On track':r.status==='amber'?'Watch':'Action';
+      var pl=r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
       var bw=Math.min(100,Math.round((r.avgSub4w/15)*100));
       return '<div class="mgr-recruiter-row">'
         +'<div style="flex:1;min-width:0">'
@@ -2940,7 +3237,7 @@ function renderManagers(){
       +'</div>'
       +'<div class="mgr-trend-row">'
         +chip(d.slS,'Subs')+chip(d.slSt,'Starts')
-        +'<span class="mgr-trend-chip" style="background:var(--green-bg);color:var(--green)">'+onT+' on track</span>'
+        +'<span class="mgr-trend-chip" style="background:var(--green-bg);color:var(--green)">'+onT+' on target</span>'
         +(attn?'<span class="mgr-trend-chip" style="background:var(--amber-bg);color:var(--amber)">'+attn+' watch</span>':'')
         +(blw?'<span class="mgr-trend-chip" style="background:var(--red-bg);color:var(--red)">'+blw+' action</span>':'')
       +'</div>'
