@@ -946,20 +946,54 @@ async function readTab(tabName) {
 }
 
 // ── Parse a sheet tab into {name → weekly array} ──
-// Rows: col0=Recruiter, col1=Manager, col2=Total(skip), col3=YTD Avg(skip), col4+=weeks
-// Starts tab has an extra col at index 4 (weeks since last start), so data starts at col5
+// Auto-detects where data starts by finding the first row with a recognizable recruiter name
 function parseTab(rows, tabName) {
   const result = {};
-  const dataStart = tabName === 'Starts' ? 5 : 4;
-  for (let ri = 3; ri < rows.length; ri++) {  // skip 3 header rows
+  if (!rows || !rows.length) return result;
+
+  // Auto-detect the data start row — find first row where col0 looks like a name
+  // (not empty, not "Recruiter", not "Total", not a number)
+  let headerRows = 0;
+  for (let ri = 0; ri < Math.min(10, rows.length); ri++) {
+    const col0 = (rows[ri][0] || '').toString().trim();
+    const col1 = (rows[ri][1] || '').toString().trim();
+    if (col0 && col1 && col0 !== 'Recruiter' && col0 !== 'Total' && col0 !== 'Average'
+        && col0 !== 'Name' && isNaN(col0) && col1 !== 'Manager') {
+      headerRows = ri;
+      break;
+    }
+    headerRows = ri + 1;
+  }
+
+  // Auto-detect data start column — find first column that looks like week data (numeric or blank after col1)
+  // Skip: col0=name, col1=manager, then any summary cols (Total, Avg, etc.) before weekly data
+  // Heuristic: weekly data cols contain mostly numbers or blanks, header row has "Wk" or week numbers
+  let dataStart = 2; // minimum: after name and manager
+  if (rows[0]) {
+    for (let ci = 2; ci < Math.min(rows[0].length, 10); ci++) {
+      const header = (rows[0][ci] || '').toString().trim().toLowerCase();
+      if (header.startsWith('wk') || header.match(/^w\d/) || header.match(/^\d+$/) || header === '') {
+        dataStart = ci;
+        break;
+      }
+      // Skip known summary columns
+      if (header.includes('total') || header.includes('avg') || header.includes('average') ||
+          header.includes('since') || header.includes('ytd') || header.includes('ratio')) continue;
+      dataStart = ci;
+      break;
+    }
+  }
+
+  for (let ri = headerRows; ri < rows.length; ri++) {
     const row = rows[ri];
     const name = (row[0] || '').trim();
     const mgr  = (row[1] || '').trim();
-    if (!name || !mgr || name === 'Recruiter' || name === 'Total' || name === 'Average') continue;
+    if (!name || !mgr || name === 'Recruiter' || name === 'Total' || name === 'Average'
+        || name === 'Averages:' || name === 'Name') continue;
     const weekly = [];
     for (let ci = dataStart; ci < row.length; ci++) {
       const v = (row[ci] || '').toString().trim();
-      if (v === '' || v === 'No Starts' || v === 'Need Data' || v === '#DIV/0!') {
+      if (v === '' || v === 'No Starts' || v === 'Need Data' || v === '#DIV/0!' || v === '#VALUE!') {
         weekly.push(null);
       } else {
         const n = parseInt(v);
@@ -1013,6 +1047,16 @@ async function loadFromSheets() {
         leads:      (lds[sheetName]||{}).weekly  || []
       };
     });
+
+    // Safety check — if Sheet returned very little data, keep BASE_DATA
+    const validSheetRecs = Object.values(sheetLookup).filter(d => d.subs.length > 0).length;
+    if (validSheetRecs < BASE_DATA.length * 0.5) {
+      console.warn('Sheet returned fewer recruiters than expected ('+validSheetRecs+' vs '+BASE_DATA.length+'). Check Sheet tab names match: Subs, Interviews, Placements, Starts, Leads');
+      hideLoadingBanner();
+      showSyncError('Sheet data looks incomplete — verify tab names match exactly: Subs, Interviews, Placements, Starts, Leads');
+      renderOverview();
+      return;
+    }
 
     // Determine week count from subs data
     const nW = Math.max(...Object.values(sheetLookup).map(d => d.subs.length), 1);
@@ -1099,6 +1143,7 @@ async function loadFromSheets() {
       else if(t==='weekly') renderWoW();
       else if(t==='trends') renderTrends();
       else if(t==='leaderboard') renderLeaderboard();
+      else if(t==='roster') renderRoster();
     }
 
     updateSyncBadge();
@@ -3196,10 +3241,14 @@ function renderRoster() {
 
   // Active recruiters table
   const tbody = document.getElementById('roster-active-body');
+  if (!all.length && RECRUITERS.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text3)">Loading recruiters… if this persists, try clicking ⟳ Sync above.</td></tr>`;
+    return;
+  }
   tbody.innerHTML = all.map(r => {
     const mc = MGR_COLORS[r.manager] || '#888';
     const pc = r.status === 'green' ? 'pg' : r.status === 'amber' ? 'pa' : 'pr';
-    const pl = r.status === 'green' ? 'On track' : r.status === 'amber' ? 'Needs attention' : 'Below target';
+    const pl = r.status === 'green' ? 'On Target' : r.status === 'amber' ? 'Below Target' : 'Needs Attention';
     const addedTag = r.isNew ? `<span style="font-size:10px;color:var(--text3)">${r.addedOn || '—'}</span>` : '<span style="font-size:10px;color:var(--text3)">—</span>';
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.name}</td>
