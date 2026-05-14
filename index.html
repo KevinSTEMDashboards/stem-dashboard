@@ -206,6 +206,22 @@ tbody tr:nth-child(even):hover td{background:var(--bg2)}
 .trend-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
 .trends-empty{text-align:center;padding:32px;color:var(--text3);font-size:13px}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Leaderboard */
+.lb-card{background:var(--bg);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow);overflow:hidden}
+.lb-card-hdr{padding:12px 14px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.lb-card-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.lb-row{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);transition:background .1s}
+.lb-row:last-child{border-bottom:none}
+.lb-row:hover{background:var(--bg2)}
+.lb-rank{font-size:13px;font-weight:800;min-width:22px;text-align:center;color:var(--text3)}
+.lb-rank-1{color:#f5c542;font-size:16px}
+.lb-rank-2{color:#c0c0c0;font-size:15px}
+.lb-rank-3{color:#cd7f32;font-size:14px}
+.lb-name{flex:1;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-mgr-tag{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;flex-shrink:0}
+.lb-val{font-size:14px;font-weight:800;min-width:36px;text-align:right;letter-spacing:-.01em}
+.lb-bar-wrap{height:3px;background:var(--bg3);border-radius:2px;margin-top:3px}
+.lb-bar{height:3px;border-radius:2px;opacity:.8}
 
 /* Manager rollup */
 .mgr-scorecard{background:var(--bg);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px;box-shadow:var(--shadow)}
@@ -455,6 +471,7 @@ td.editing{padding:2px 4px!important}
   <div class="tab" data-tab="recruiter">Recruiter Detail</div>
   <div class="tab" data-tab="entry">Add Weekly Data</div>
   <div class="tab" data-tab="trends">Trends &amp; Insights</div>
+  <div class="tab" data-tab="leaderboard">🏆 Leaderboard</div>
   <div class="tab" data-tab="roster">Roster</div>
 </div>
 
@@ -687,8 +704,6 @@ td.editing{padding:2px 4px!important}
     </div>
   </div>
 
-  <div id="tr-snippet"></div>
-
   <div class="section-hdr" id="tr-hdr-holistic">🌐 Holistic signals</div>
   <div class="insight-grid" id="tr-holistic"></div>
 
@@ -708,6 +723,19 @@ td.editing{padding:2px 4px!important}
     <div class="section-hdr">📊 Recruiter deep-dive</div>
     <div id="tr-recruiter-detail"></div>
   </div>
+</div>
+
+<!-- LEADERBOARD -->
+<div class="tab-panel" id="tab-leaderboard">
+  <div class="wctrl">
+    <select id="lb-mgr-filter"><option value="">All managers</option></select>
+    <select id="lb-window">
+      <option value="all">Full YTD / selected range</option>
+      <option value="4">Last 4 weeks</option>
+      <option value="8">Last 8 weeks</option>
+    </select>
+  </div>
+  <div id="lb-boards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px"></div>
 </div>
 
 <!-- ROSTER MANAGEMENT -->
@@ -1005,6 +1033,7 @@ async function loadFromSheets() {
       else if(t==='managers') renderManagers();
       else if(t==='weekly') renderWoW();
       else if(t==='trends') renderTrends();
+      else if(t==='leaderboard') renderLeaderboard();
     }
 
     updateSyncBadge();
@@ -1348,6 +1377,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     if(t.dataset.tab==='managers')renderManagers();
     if(t.dataset.tab==='recruiter')renderRecruiter();
     if(t.dataset.tab==='trends')renderTrends();
+    if(t.dataset.tab==='leaderboard')renderLeaderboard();
     if(t.dataset.tab==='roster')renderRoster();
   });
 });
@@ -1420,6 +1450,160 @@ function filtered(){
   const mgr=document.getElementById('mgr-filter').value;
   const q=document.getElementById('search').value.toLowerCase();
   return computedAll().filter(r=>(!mgr||r.manager===mgr)&&(!q||r.name.toLowerCase().includes(q)));
+}
+
+// ─── PDF REPORT & EMAIL DIGEST ───
+
+function buildReportData() {
+  const all=computedAll();
+  const awl=activeWkLabels();
+  const dateStr=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  const wkRange=isFullRange()?'Full YTD (Wk 1 \u2013 Wk '+wkLabels.length+')':awl[0]+' \u2013 '+awl[awl.length-1];
+  const totalSubs=all.reduce((s,r)=>s+r.totalSubs,0);
+  const totalIvs=all.reduce((s,r)=>s+r.totalIvs,0);
+  const totalPl=all.reduce((s,r)=>s+r.totalPlacements,0);
+  const totalSt=all.reduce((s,r)=>s+r.totalStarts,0);
+  const onTarget=all.filter(r=>r.status==='green').length;
+  const below=all.filter(r=>r.status==='amber').length;
+  const needs=all.filter(r=>r.status==='red').length;
+  const mgrSummaries=MGRS.map(m=>{
+    const team=all.filter(r=>r.manager===m);
+    const ts=team.reduce((s,r)=>s+r.totalSubs,0);
+    const ti=team.reduce((s,r)=>s+r.totalIvs,0);
+    const tpl=team.reduce((s,r)=>s+r.totalPlacements,0);
+    const tst=team.reduce((s,r)=>s+r.totalStarts,0);
+    const top=team.slice().sort((a,b)=>b.totalStarts-a.totalStarts)[0];
+    const ot=team.filter(r=>r.status==='green').length;
+    return{manager:m,team:team.length,subs:ts,ivs:ti,placements:tpl,starts:tst,top:top,onTarget:ot};
+  }).sort((a,b)=>b.starts-a.starts);
+  const topPerformers=all.slice().sort((a,b)=>b.totalStarts-a.totalStarts).slice(0,5);
+  const flagged=all.filter(r=>r.status==='red').slice().sort((a,b)=>a.avgSub4w-b.avgSub4w);
+  return{dateStr,wkRange,totalSubs,totalIvs,totalPl,totalSt,onTarget,below,needs,mgrSummaries,topPerformers,flagged,recruiterCount:all.length};
+}
+
+function generatePDFReport() {
+  const d=buildReportData();
+  const mc=name=>(MGR_COLORS[name]||'#888');
+  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>STEM Recruiting Report \u2014 '+d.dateStr+'</title><style>'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +'body{font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;font-size:11px;color:#1a1c24;background:#fff;padding:28px 32px}'
+    +'.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #4f8ef7}'
+    +'.logo{width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#4f8ef7,#7c3aed);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;margin-right:12px;vertical-align:middle}'
+    +'.h1{font-size:20px;font-weight:800;letter-spacing:-.02em}'
+    +'.h2{font-size:13px;font-weight:700;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #e8eaf0}'
+    +'.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}'
+    +'.kpi{background:#f8f9fc;border-radius:8px;padding:10px 12px;border-top:3px solid #e8eaf0}'
+    +'.kpi-val{font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1}'
+    +'.kpi-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:#9098b0;margin-top:3px;font-weight:600}'
+    +'.kpi-blue{border-top-color:#4f8ef7}.kpi-blue .kpi-val{color:#4f8ef7}'
+    +'.kpi-green{border-top-color:#1D9E75}.kpi-green .kpi-val{color:#1D9E75}'
+    +'.kpi-purple{border-top-color:#a855f7}.kpi-purple .kpi-val{color:#a855f7}'
+    +'.kpi-red{border-top-color:#D4537E}.kpi-red .kpi-val{color:#D4537E}'
+    +'table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:14px}'
+    +'th{background:#f4f5f8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9098b0;padding:6px 8px;text-align:left;border-bottom:1px solid #e8eaf0}'
+    +'td{padding:5px 8px;border-bottom:1px solid #f0f1f5;vertical-align:middle}'
+    +'tr:last-child td{border-bottom:none}'
+    +'.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}'
+    +'.pill{display:inline-block;padding:1px 6px;border-radius:100px;font-size:9px;font-weight:700}'
+    +'.pg{background:#dcfce7;color:#16a34a}.pa{background:#fef3c7;color:#b45309}.pr{background:#fee2e2;color:#dc2626}'
+    +'.stat-row{display:flex;gap:10px;margin-bottom:14px}'
+    +'.stat{background:#f4f5f8;border-radius:6px;padding:7px 12px;text-align:center;flex:1}'
+    +'.stat-val{font-size:16px;font-weight:800}.stat-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#9098b0;margin-top:2px;font-weight:600}'
+    +'.footer{margin-top:20px;padding-top:10px;border-top:1px solid #e8eaf0;font-size:9px;color:#9098b0;display:flex;justify-content:space-between}'
+    +'@media print{body{padding:16px 20px}}'
+    +'</style></head><body>'
+    +'<div class="header"><div><span class="logo">S</span><span class="h1">STEM Recruiting Report</span>'
+    +'<div style="font-size:11px;color:#5a6078;margin-top:4px">'+d.dateStr+' &nbsp;&middot;&nbsp; '+d.wkRange+' &nbsp;&middot;&nbsp; '+d.recruiterCount+' recruiters</div></div>'
+    +'<div style="text-align:right"><div style="font-size:10px;color:#9098b0">Prepared by</div><div style="font-size:12px;font-weight:700">'+(currentUser?currentUser.username:'Admin')+'</div></div></div>'
+    +'<div class="h2">\uD83D\uDCCA Team Summary</div>'
+    +'<div class="kpi-row">'
+    +'<div class="kpi kpi-blue"><div class="kpi-val">'+d.totalSubs.toLocaleString()+'</div><div class="kpi-lbl">Submittals</div></div>'
+    +'<div class="kpi kpi-green"><div class="kpi-val">'+d.totalIvs.toLocaleString()+'</div><div class="kpi-lbl">Interviews</div></div>'
+    +'<div class="kpi kpi-purple"><div class="kpi-val">'+d.totalPl+'</div><div class="kpi-lbl">Placements</div></div>'
+    +'<div class="kpi kpi-red"><div class="kpi-val">'+d.totalSt+'</div><div class="kpi-lbl">Starts</div></div>'
+    +'</div>'
+    +'<div class="stat-row">'
+    +'<div class="stat"><div class="stat-val" style="color:#16a34a">'+d.onTarget+'</div><div class="stat-lbl">On Target</div></div>'
+    +'<div class="stat"><div class="stat-val" style="color:#b45309">'+d.below+'</div><div class="stat-lbl">Below Target</div></div>'
+    +'<div class="stat"><div class="stat-val" style="color:#dc2626">'+d.needs+'</div><div class="stat-lbl">Needs Attention</div></div>'
+    +'<div class="stat"><div class="stat-val">'+(d.totalSt>0?(d.totalSubs/d.totalSt).toFixed(1)+':1':'&mdash;')+'</div><div class="stat-lbl">Sub&rarr;Start</div></div>'
+    +'<div class="stat"><div class="stat-val">'+(d.totalPl>0?Math.round((d.totalSt/d.totalPl)*100)+'%':'&mdash;')+'</div><div class="stat-lbl">Pl&rarr;Start Rate</div></div>'
+    +'</div>'
+    +'<div class="h2">\uD83D\uDC64 Manager Scorecards</div>'
+    +'<table><thead><tr><th>Manager</th><th>Team</th><th>Subs</th><th>IVs</th><th>Placements</th><th>Starts</th><th>Sub&rarr;Start</th><th>On Target</th><th>Top Performer</th></tr></thead><tbody>'
+    +d.mgrSummaries.map(m=>'<tr><td><span class="dot" style="background:'+mc(m.manager)+'"></span><strong>'+m.manager+'</strong></td>'
+      +'<td>'+m.team+'</td><td>'+m.subs+'</td><td>'+m.ivs+'</td><td>'+m.placements+'</td><td><strong>'+m.starts+'</strong></td>'
+      +'<td>'+(m.starts>0?(m.subs/m.starts).toFixed(1)+':1':'&mdash;')+'</td>'
+      +'<td>'+m.onTarget+' / '+m.team+'</td>'
+      +'<td>'+(m.top?m.top.name.split(' ').slice(0,2).join(' ')+' ('+m.top.totalStarts+' st)':'&mdash;')+'</td></tr>').join('')
+    +'</tbody></table>'
+    +'<div class="h2">\u2B50 Top 5 Performers</div>'
+    +'<table><thead><tr><th>Recruiter</th><th>Manager</th><th>Subs</th><th>IVs</th><th>Placements</th><th>Starts</th><th>4-wk Avg</th><th>Status</th></tr></thead><tbody>'
+    +d.topPerformers.map(r=>{
+      const pc=r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
+      const pl=r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
+      return '<tr><td><strong>'+r.name+'</strong></td><td><span class="dot" style="background:'+mc(r.manager)+'"></span>'+r.manager+'</td>'
+        +'<td>'+r.totalSubs+'</td><td>'+r.totalIvs+'</td><td>'+r.totalPlacements+'</td><td><strong>'+r.totalStarts+'</strong></td>'
+        +'<td>'+r.avgSub4w.toFixed(1)+'</td><td><span class="pill '+pc+'">'+pl+'</span></td></tr>';
+    }).join('')
+    +'</tbody></table>'
+    +(d.flagged.length?'<div class="h2">\u26A0\uFE0F Needs Attention (0 starts \u2014 last 4 weeks)</div>'
+      +'<table><thead><tr><th>Recruiter</th><th>Manager</th><th>Total Subs</th><th>4-wk Avg</th><th>Last Start</th></tr></thead><tbody>'
+      +d.flagged.map(r=>'<tr><td><strong>'+r.name+'</strong></td><td><span class="dot" style="background:'+mc(r.manager)+'"></span>'+r.manager+'</td>'
+        +'<td>'+r.totalSubs+'</td><td>'+r.avgSub4w.toFixed(1)+'</td>'
+        +'<td>'+(r.wksSinceLast===null?'Never':r.wksSinceLast===0?'This week':r.wksSinceLast+' wk'+(r.wksSinceLast>1?'s':'')+' ago')+'</td></tr>').join('')
+      +'</tbody></table>':'')
+    +'<div class="footer"><span>STEM Recruiter Performance Dashboard &mdash; Confidential</span><span>Generated '+d.dateStr+'</span></div>'
+    +'</body></html>';
+
+  const win=window.open('','_blank');
+  if(!win){alert('Please allow pop-ups to generate the PDF report.');return;}
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>{win.print();},600);
+}
+
+function promptEmailDigest() {
+  const email=window.prompt('Send weekly digest to (email address):','');
+  if(!email||!email.trim())return;
+  if(!email.includes('@')){alert('Please enter a valid email address.');return;}
+  const d=buildReportData();
+  const pad=(s,n)=>String(s).padEnd(n);
+  const subject=encodeURIComponent('STEM Recruiting Weekly Digest \u2014 '+d.dateStr);
+  const lines=[
+    'STEM RECRUITING WEEKLY DIGEST',
+    d.dateStr+' | '+d.wkRange,
+    '='.repeat(52),
+    '',
+    'TEAM SUMMARY',
+    '  Submittals:    '+d.totalSubs.toLocaleString(),
+    '  Interviews:    '+d.totalIvs.toLocaleString(),
+    '  Placements:    '+d.totalPl,
+    '  Starts:        '+d.totalSt,
+    '  Sub -> Start:  '+(d.totalSt>0?(d.totalSubs/d.totalSt).toFixed(1)+':1':'--'),
+    '  Pl -> Start:   '+(d.totalPl>0?Math.round((d.totalSt/d.totalPl)*100)+'%':'--'),
+    '',
+    'RECRUITER STATUS',
+    '  On Target:       '+d.onTarget+' recruiters',
+    '  Below Target:    '+d.below+' recruiters',
+    '  Needs Attention: '+d.needs+' recruiters',
+    '',
+    '-'.repeat(52),
+    'MANAGER SCORECARDS',
+    ...d.mgrSummaries.map(m=>'  '+pad(m.manager,12)+' | '+pad(m.subs+' subs',10)+' | '+pad(m.starts+' starts',10)+' | '+m.onTarget+'/'+m.team+' on target'+(m.top?' | Top: '+m.top.name.split(' ').slice(0,2).join(' ')+' ('+m.top.totalStarts+' st)':'')),
+    '',
+    '-'.repeat(52),
+    'TOP 5 PERFORMERS',
+    ...d.topPerformers.map((r,i)=>'  '+(i+1)+'. '+r.name+' ('+r.manager+') -- '+r.totalStarts+' starts, '+r.totalSubs+' subs, '+r.avgSub4w.toFixed(1)+' avg/wk'),
+  ];
+  if(d.flagged.length){
+    lines.push('','-'.repeat(52),'NEEDS ATTENTION (0 starts last 4 weeks)');
+    d.flagged.forEach(r=>lines.push('  * '+r.name+' ('+r.manager+') -- '+r.totalSubs+' subs YTD, '+r.avgSub4w.toFixed(1)+' avg/wk, last start: '+(r.wksSinceLast===null?'never':r.wksSinceLast===0?'this week':r.wksSinceLast+' wks ago')));
+  }
+  lines.push('','='.repeat(52),'STEM Recruiter Performance Dashboard -- Confidential','Generated by '+(currentUser?currentUser.username:'Admin')+' on '+d.dateStr);
+  const body=encodeURIComponent(lines.join('\n'));
+  window.location.href='mailto:'+encodeURIComponent(email.trim())+'?subject='+subject+'&body='+body;
 }
 
 function renderKPIs(d){
@@ -1929,43 +2113,6 @@ function renderTrends(){
       <div class="trend-item"><div class="trend-badge badge-info">i</div><div class="trend-text"><div class="trend-detail">${note}</div></div></div>
     </div>`;
   });
-  // Build performance snippet
-  const totalSubsSnip=scopeRecs.reduce((s,r)=>s+r.totalSubs,0);
-  const totalStartsSnip=scopeRecs.reduce((s,r)=>s+r.totalStarts,0);
-  const totalPlSnip=scopeRecs.reduce((s,r)=>s+r.totalPlacements,0);
-  const onTrackSnip=scopeRecs.filter(r=>r.status==='green').length;
-  const needsSnip=scopeRecs.filter(r=>r.status==='amber').length;
-  const belowSnip=scopeRecs.filter(r=>r.status==='red').length;
-  const avgSubSnip=scopeRecs.length?totalSubsSnip/scopeRecs.length:0;
-  const pl2stSnip=totalPlSnip>0?Math.round((totalStartsSnip/totalPlSnip)*100):0;
-  // Generate natural language summary
-  const subTrend=totalSubsSnip>0?(avgSubSnip>=6?'strong submittal volume':'submittal volume that needs attention'):'limited activity';
-  const conversionNote=pl2stSnip>=70?'excellent placement-to-start conversion ('+pl2stSnip+'%)':pl2stSnip>=40?'moderate placement-to-start conversion ('+pl2stSnip+'%)':'low placement-to-start conversion ('+pl2stSnip+'%) — follow-up on pending onboardings recommended';
-  const statusNote=onTrackSnip>0?onTrackSnip+' recruiter'+(onTrackSnip>1?'s are':' is')+' on track':needsSnip+' recruiter'+(needsSnip>1?'s need':' needs')+' attention';
-  const topPerf=[...scopeRecs].sort((a,b)=>b.totalStarts-a.totalStarts)[0];
-  const topNote=topPerf&&topPerf.totalStarts>0?' '+topPerf.name.split(' ')[0]+' leads with '+topPerf.totalStarts+' starts.':'';
-  // Recommended action
-  let recAction='';
-  if(belowSnip>0) recAction='⚡ Drill into the <strong>Action Needed</strong> section below — '+belowSnip+' recruiter'+(belowSnip>1?'s require':'requires')+' immediate attention.';
-  else if(pl2stSnip<50&&totalPlSnip>0) recAction='📞 Review placement fall-offs — '+totalPlSnip+' placements converted to only '+totalStartsSnip+' starts. Check in on pending onboardings.';
-  else if(needsSnip>0) recAction='👀 Review the <strong>Watch</strong> recruiters below — '+needsSnip+' are trending in the right direction but need support.';
-  else recAction='✅ Team is performing well. Monitor weekly trends to maintain momentum.';
-
-  const snippetHTML=`<div class="card" style="margin-bottom:14px;border-left:3px solid var(--accent)">
-    <div class="card-hdr"><span class="card-title" style="font-size:13px;font-weight:700;color:var(--text)">📋 Performance snapshot</span><span style="font-size:10px;color:var(--text3)">${w==='all'?'Full range':'Last '+w+' wks'}</span></div>
-    <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:10px">
-      The team shows <strong style="color:var(--text)">${subTrend}</strong> with <strong style="color:var(--c-subs)">${totalSubsSnip.toLocaleString()} total submittals</strong> across ${scopeRecs.length} recruiters.
-      There is <strong style="color:var(--text)">${conversionNote}</strong>.
-      ${statusNote}.${topNote}
-    </div>
-    <div style="padding:10px 14px;background:var(--bg2);border-radius:var(--radius);font-size:12px;color:var(--text2);border-left:2px solid var(--accent)">
-      <strong style="color:var(--text)">Recommended action:</strong> ${recAction}
-    </div>
-  </div>`;
-
-  const snippetEl=document.getElementById('tr-snippet');
-  if(snippetEl) snippetEl.innerHTML=snippetHTML;
-
   document.getElementById('tr-holistic').innerHTML=holisticHTML;
 
   // ── MANAGER SECTION (whole-team scope only) ──
@@ -2375,8 +2522,10 @@ function updateAuthUI() {
 
   if (isEditor) {
     ac.innerHTML = `
-      <div style="display:flex;align-items:center;gap:6px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span style="font-size:11px;font-weight:600;color:var(--green);background:var(--green-bg);padding:2px 8px;border-radius:100px;white-space:nowrap">${isAdmin ? '👑 ' : '✏️ '}${currentUser.username}</span>
+        <button class="btn" onclick="generatePDFReport()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Download weekly PDF report">📄 PDF Report</button>
+        <button class="btn" onclick="promptEmailDigest()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Send weekly email digest">✉️ Email Digest</button>
         ${isAdmin ? `<button class="btn" onclick="openUserModal()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap">Manage editors</button>` : ''}
         <button class="btn" onclick="signOut()" style="font-size:11px;height:26px;padding:0 8px">Sign out</button>
       </div>`;
@@ -3249,7 +3398,118 @@ function renderManagers(){
 document.getElementById('mgr-window').addEventListener('change',renderManagers);
 document.getElementById('mgr-sort').addEventListener('change',renderManagers);
 
-// ─── STARTUP ───
+// ─── LEADERBOARD ───
+function lbGetWindow(arr, w) {
+  var v = arr.filter(function(x){return x!=null;});
+  if(w==='all') return v;
+  return v.slice(-parseInt(w));
+}
+
+function renderLeaderboard() {
+  var mgrF = document.getElementById('lb-mgr-filter').value;
+  var win  = document.getElementById('lb-window').value;
+  var all  = computedAll();
+
+  // Apply manager filter
+  var recs = mgrF ? all.filter(function(r){return r.manager===mgrF;}) : all;
+
+  // Apply window filter to weekly arrays
+  var windowed = recs.map(function(r) {
+    var ws = lbGetWindow(r.subs, win);
+    var wi = lbGetWindow(r.ivs, win);
+    var wp = lbGetWindow(r.placements||[], win);
+    var wst = lbGetWindow(r.starts, win);
+    var wl = lbGetWindow(r.leads, win);
+    function sum(a){return a.reduce(function(s,v){return s+v;},0);}
+    return {
+      name: r.name, manager: r.manager,
+      subs:       sum(ws),
+      ivs:        sum(wi),
+      placements: sum(wp),
+      starts:     sum(wst),
+      leads:      sum(wl),
+      avgSub4w:   r.avgSub4w,
+      sub2iv:     r.sub2iv,
+      iv2placement: r.iv2placement,
+      pl2start:   r.pl2start,
+      sub2start:  r.sub2start,
+      status:     r.status
+    };
+  });
+
+  var KPIs = [
+    {key:'subs',       label:'Submittals',       color:'var(--c-subs)',   icon:'📋', desc:'Total submittals in window',      higher:true,  fmt:function(v){return v;}},
+    {key:'ivs',        label:'Interviews',        color:'var(--c-ivs)',    icon:'🎯', desc:'Total interviews in window',      higher:true,  fmt:function(v){return v;}},
+    {key:'placements', label:'Placements',        color:'var(--purple)',   icon:'🤝', desc:'Total placements in window',      higher:true,  fmt:function(v){return v;}},
+    {key:'starts',     label:'Starts',            color:'var(--c-starts)', icon:'🚀', desc:'Total starts in window',          higher:true,  fmt:function(v){return v;}},
+    {key:'leads',      label:'Leads',             color:'var(--c-leads)',  icon:'💡', desc:'Total leads in window',           higher:true,  fmt:function(v){return v;}},
+    {key:'avgSub4w',   label:'4-wk Sub Avg',      color:'var(--c-subs)',   icon:'📈', desc:'4-week submittal average',        higher:true,  fmt:function(v){return v.toFixed(1);}},
+    {key:'sub2iv',     label:'Sub→IV Ratio',      color:'var(--amber)',    icon:'⚡', desc:'Lower = more efficient',          higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}},
+    {key:'iv2placement',label:'IV→Pl. Ratio',     color:'var(--amber)',    icon:'⚡', desc:'Lower = more efficient',          higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}},
+    {key:'pl2start',   label:'Pl→Start Ratio',    color:'var(--amber)',    icon:'⚡', desc:'Lower = more efficient',          higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}},
+    {key:'sub2start',  label:'Sub→Start Ratio',   color:'var(--amber)',    icon:'⚡', desc:'Overall efficiency — lower = better', higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}}
+  ];
+
+  var html = KPIs.map(function(kpi) {
+    // Sort: higher is better for volume metrics, lower is better for ratios
+    var valid = windowed.filter(function(r){return r[kpi.key]!=null && r[kpi.key]>0;});
+    if(!valid.length) return '<div class="lb-card"><div class="lb-card-hdr"><span class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span></div><div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No data for this window</div></div>';
+
+    var sorted = valid.slice().sort(function(a,b){
+      return kpi.higher ? b[kpi.key]-a[kpi.key] : a[kpi.key]-b[kpi.key];
+    });
+
+    var top10 = sorted.slice(0, 10);
+    var maxVal = kpi.higher ? top10[0][kpi.key] : Math.max.apply(null, top10.map(function(r){return r[kpi.key];}));
+
+    var rows = top10.map(function(r, i) {
+      var rank = i+1;
+      var rankDisp = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
+      var rankCls  = rank===1?'lb-rank lb-rank-1':rank===2?'lb-rank lb-rank-2':rank===3?'lb-rank lb-rank-3':'lb-rank';
+      var mc = MGR_COLORS[r.manager]||'#888';
+      var barW = kpi.higher
+        ? Math.round((r[kpi.key]/maxVal)*100)
+        : Math.round(((maxVal - r[kpi.key] + Math.min.apply(null,top10.map(function(x){return x[kpi.key];})))/maxVal)*100);
+      barW = Math.max(6, Math.min(100, barW));
+      var pc = r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
+      return '<div class="lb-row">'
+        +'<div class="'+rankCls+'">'+rankDisp+'</div>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="display:flex;align-items:center;gap:6px">'
+            +'<div class="lb-name">'+r.name+'</div>'
+            +'<span class="lb-mgr-tag" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span>'
+            +'<span class="pill '+pc+'" style="font-size:9px;padding:0 5px">'+(r.status==='green'?'✓':r.status==='amber'?'△':'!')+'</span>'
+          +'</div>'
+          +'<div class="lb-bar-wrap"><div class="lb-bar" style="width:'+barW+'%;background:'+kpi.color+'"></div></div>'
+        +'</div>'
+        +'<div class="lb-val" style="color:'+kpi.color+'">'+kpi.fmt(r[kpi.key])+'</div>'
+      +'</div>';
+    }).join('');
+
+    var subtitle = (win==='all'?'Full range':'Last '+win+' wks')+(mgrF?' · '+mgrF:"· All managers");
+
+    return '<div class="lb-card">'
+      +'<div class="lb-card-hdr">'
+        +'<div><div class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</div>'
+        +'<div style="font-size:10px;color:var(--text3);margin-top:1px">'+kpi.desc+' · '+subtitle+'</div></div>'
+        +'<div style="font-size:11px;font-weight:700;color:var(--text3)">'+valid.length+' ranked</div>'
+      +'</div>'
+      +rows
+    +'</div>';
+  }).join('');
+
+  document.getElementById('lb-boards').innerHTML = html;
+}
+
+// Populate lb-mgr-filter
+MGRS.forEach(function(m){
+  var o=document.createElement('option');o.value=m;o.textContent=m;
+  document.getElementById('lb-mgr-filter').appendChild(o);
+});
+document.getElementById('lb-mgr-filter').addEventListener('change', renderLeaderboard);
+document.getElementById('lb-window').addEventListener('change', renderLeaderboard);
+
+
 // Render immediately with BASE_DATA so the page is never blank,
 // then refresh silently from Google Sheets in the background.
 renderOverview();
