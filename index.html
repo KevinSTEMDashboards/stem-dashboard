@@ -1798,7 +1798,7 @@ function renderKPIs(d){
     <div class="kpi kpi-green"><div class="kpi-label">Total interviews</div><div class="kpi-val" style="color:var(--c-ivs)">${ti.toLocaleString()}</div><div class="kpi-sub">Avg ${(ti/d.length).toFixed(1)}/recruiter</div></div>
     <div class="kpi kpi-purple"><div class="kpi-label">Total placements</div><div class="kpi-val" style="color:var(--purple)">${d.reduce((s,r)=>s+r.totalPlacements,0)}</div><div class="kpi-sub">Pl→Start: ${((d.reduce((s,r)=>s+r.totalStarts,0)/Math.max(1,d.reduce((s,r)=>s+r.totalPlacements,0)))*100).toFixed(0)}%</div></div>
     <div class="kpi kpi-red"><div class="kpi-label">Total starts</div><div class="kpi-val" style="color:var(--c-starts)">${tst}</div><div class="kpi-sub">Avg ${(tst/d.length).toFixed(1)}/recruiter</div></div>
-    <div class="kpi kpi-amber"><div class="kpi-label">Avg sub→start</div><div class="kpi-val" style="color:var(--c-leads)">${as.toFixed(1)}:1</div><div class="kpi-sub">Lower = more efficient</div></div>
+    <div class="kpi kpi-amber"><div class="kpi-label">Total leads</div><div class="kpi-val" style="color:var(--c-leads)">${d.reduce((s,r)=>s+r.totalLeads,0).toLocaleString()}</div><div class="kpi-sub">Avg ${(d.reduce((s,r)=>s+r.totalLeads,0)/d.length).toFixed(1)}/recruiter</div></div>
     <div class="kpi kpi-purple"><div class="kpi-label">On track</div><div class="kpi-val" style="color:var(--purple)">${ot}</div><div class="kpi-sub">of ${d.length} recruiters</div></div>
     ${tp?`<div class="kpi kpi-teal"><div class="kpi-label">Top starts</div><div class="kpi-val" style="font-size:17px;line-height:1.3;color:var(--teal)">${tp.name.split(' ')[0]}</div><div class="kpi-sub">${tp.totalStarts} starts · ${tp.manager}</div></div>`:''}
   `;
@@ -1923,7 +1923,7 @@ function renderWoW(){
     document.getElementById('wow-ln-card').style.display='none';
     document.getElementById('wow-tbl-title').textContent=`Recruiter weekly ${m}`;
     const thead=document.getElementById('wow-thead'),tbody=document.getElementById('wow-tbody');
-    thead.innerHTML=`<tr><th style="min-width:130px">Recruiter</th><th>Mgr</th>${m==='starts'?'<th style="text-align:center;white-space:nowrap" title="Weeks since this recruiter last had a start">Wks since last start</th>':''}${awl.map(w=>`<th style="text-align:right">${w}</th>`).join('')}<th style="text-align:right">Total</th><th style="text-align:right">4w avg</th>${currentUser?'<th style="width:32px"></th>':''}</tr>`;
+    thead.innerHTML=`<tr><th style="min-width:130px">Recruiter</th><th>Mgr</th><th style="text-align:right">Total</th><th style="text-align:right">4w avg</th>${m==='starts'?'<th style="text-align:center;white-space:nowrap" title="Weeks since this recruiter last had a start">Wks since last start</th>':''}${awl.map(w=>`<th style="text-align:right">${w}</th>`).join('')}${currentUser?'<th style="width:32px"></th>':''}</tr>`;
     tbody.innerHTML=recs.map(r=>{
       const [f,t]=getWeekRange();
       const w=r[m];const tot=totalArr(w);const a4=avg4w(w);
@@ -1947,7 +1947,7 @@ function renderWoW(){
         wslCell=`<td style="text-align:center;white-space:nowrap"><span style="font-size:11px;font-weight:600;color:${wslColor}">${wslText}</span></td>`;
       }
       const editHint=currentUser?`<td style="text-align:center;padding:2px 4px"><span style="font-size:9px;color:var(--text3)" title="Click any number to edit">✏️</span></td>`:'';
-      return`<tr><td style="font-weight:500;white-space:nowrap">${r.name}</td><td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>${wslCell}${cells}<td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right">${a4.toFixed(1)}</td>${editHint}</tr>`;
+      return`<tr><td style="font-weight:500;white-space:nowrap">${r.name}</td><td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td><td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right">${a4.toFixed(1)}</td>${wslCell}${cells}${editHint}</tr>`;
     }).join('');
   } else {
     document.getElementById('wow-tbl-card').style.display='none';
@@ -1977,13 +1977,73 @@ function renderRecruiter(){
     return;
   }
   const mc=MGR_COLORS[r.manager]||'#888';
-  document.getElementById('rec-kpis').innerHTML=`
-    <div class="kpi kpi-accent"><div class="kpi-label">Total subs</div><div class="kpi-val">${r.totalSubs}</div><div class="kpi-sub">4-wk avg: ${r.avgSub4w.toFixed(1)}</div></div>
-    <div class="kpi"><div class="kpi-label">Total IVs</div><div class="kpi-val">${r.totalIvs}</div><div class="kpi-sub">Sub→IV: ${fmt(r.sub2iv)}</div></div>
-    <div class="kpi"><div class="kpi-label">Total starts</div><div class="kpi-val">${r.totalStarts}</div><div class="kpi-sub">IV→Start: ${fmt(r.iv2start)}</div></div>
-    <div class="kpi"><div class="kpi-label">Total leads</div><div class="kpi-val">${r.totalLeads}</div><div class="kpi-sub">Sub→Start: ${fmt(r.sub2start)}</div></div>
-    <div class="kpi"><div class="kpi-label">Manager</div><div class="kpi-val" style="font-size:15px;color:${mc}">${r.manager}</div><div class="kpi-sub"><span class="pill ${r.status==='green'?'pg':r.status==='amber'?'pa':'pr'}">${r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention'}</span></div></div>
-  `;
+  // Helper: average over last N weeks of recruiter data (0 = all = YTD)
+  function recAvg(arr, n) {
+    var v = (arr||[]).filter(function(x){return x!=null;});
+    if(!v.length) return 0;
+    var slice = n ? v.slice(-n) : v;
+    return slice.reduce(function(s,x){return s+x;},0)/slice.length;
+  }
+  var recMetrics=[
+    {key:'subs',       label:'Submittals', color:'var(--c-subs)',   kpiCls:'kpi-accent', useTotals:false},
+    {key:'ivs',        label:'Interviews', color:'var(--c-ivs)',    kpiCls:'kpi-green',  useTotals:false},
+    {key:'placements', label:'Placements', color:'var(--purple)',   kpiCls:'kpi-purple', useTotals:true},
+    {key:'starts',     label:'Starts',     color:'var(--c-starts)', kpiCls:'kpi-red',    useTotals:true},
+    {key:'leads',      label:'Leads',      color:'var(--c-leads)',  kpiCls:'kpi-amber',  useTotals:false}
+  ];
+  var recTotals={subs:r.totalSubs,ivs:r.totalIvs,placements:r.totalPlacements,starts:r.totalStarts,leads:r.totalLeads};
+
+  function recSum(arr, n) {
+    var v=(arr||[]).filter(function(x){return x!=null;});
+    var slice=n?v.slice(-n):v;
+    return slice.reduce(function(s,x){return s+x;},0);
+  }
+
+  document.getElementById('rec-kpis').innerHTML=
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'
+    +recMetrics.map(function(m){
+      var subGrid;
+      if(m.useTotals){
+        // 2-col: 4wk total, 8wk total
+        subGrid=
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
+            +'<div style="text-align:center">'
+              +'<div style="font-size:14px;font-weight:700;color:'+m.color+'">'+recSum(r[m.key],4)+'</div>'
+              +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">4wk total</div>'
+            +'</div>'
+            +'<div style="text-align:center">'
+              +'<div style="font-size:14px;font-weight:700;color:'+m.color+'">'+recSum(r[m.key],8)+'</div>'
+              +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">8wk total</div>'
+            +'</div>'
+          +'</div>';
+      } else {
+        // 3-col: 4wk avg, 8wk avg, YTD avg
+        subGrid=
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">'
+            +'<div style="text-align:center">'
+              +'<div style="font-size:13px;font-weight:700;color:'+m.color+'">'+recAvg(r[m.key],4).toFixed(1)+'</div>'
+              +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">4wk avg</div>'
+            +'</div>'
+            +'<div style="text-align:center">'
+              +'<div style="font-size:13px;font-weight:700;color:'+m.color+'">'+recAvg(r[m.key],8).toFixed(1)+'</div>'
+              +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">8wk avg</div>'
+            +'</div>'
+            +'<div style="text-align:center">'
+              +'<div style="font-size:13px;font-weight:700;color:'+m.color+'">'+recAvg(r[m.key],0).toFixed(1)+'</div>'
+              +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">YTD avg</div>'
+            +'</div>'
+          +'</div>';
+      }
+      return '<div class="kpi '+m.kpiCls+'">'
+        +'<div class="kpi-label" style="text-align:center">Total '+m.label+'</div>'
+        +'<div class="kpi-val" style="color:'+m.color+';text-align:center">'+recTotals[m.key]+'</div>'
+        +'<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">'+subGrid+'</div>'
+      +'</div>';
+    }).join('')
+    +'<div class="kpi"><div class="kpi-label" style="text-align:center">Manager</div>'
+    +'<div class="kpi-val" style="font-size:15px;color:'+mc+';text-align:center">'+r.manager+'</div>'
+    +'<div class="kpi-sub" style="text-align:center"><span class="pill '+(r.status==='green'?'pg':r.status==='amber'?'pa':'pr')+'">'+(r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention')+'</span></div></div>'
+    +'</div>';
   const mk=(id,data,color,label)=>{if(rCharts[id])rCharts[id].destroy();rCharts[id]=new Chart(document.getElementById(id),{type:'bar',data:{labels:activeWkLabels().slice(0,data.length),datasets:[{data:data.map(v=>(v!=null?v:0)),backgroundColor:color+'88',borderColor:color,borderWidth:1.5,borderRadius:3,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw} ${label}`}}},scales:{x:{ticks:{font:{size:10},maxRotation:45},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10},stepSize:1}}}}})};
   mk('rSubsC',r.subs,'#185FA5','subs');mk('rIvsC',r.ivs,'#1D9E75','ivs');mk('rPlC',r.placements||[],'#a855f7','placements');mk('rStartsC',r.starts,'#D4537E','starts');mk('rLeadsC',r.leads,'#EF9F27','leads');
 }
