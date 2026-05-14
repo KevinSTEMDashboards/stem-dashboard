@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>STEM Recruiter Performance Dashboard — 2026</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 /* ── STRIIVE-INSPIRED DARK THEME (default) ── */
@@ -292,7 +293,7 @@ td.editing{padding:2px 4px!important}
     <div id="mfa-setup-view" style="display:none">
       <div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5">Scan this QR code with <strong>Microsoft Authenticator</strong>, Google Authenticator, or any TOTP app. Then enter the 6-digit code below to confirm setup.</div>
       <div style="text-align:center;margin-bottom:14px">
-        <canvas id="mfa-qr" width="180" height="180" style="border-radius:8px;background:#fff;padding:8px"></canvas>
+        <div id="mfa-qr" style="display:inline-block;background:#fff;padding:8px;border-radius:8px"></div>
         <div style="font-size:10px;color:var(--text3);margin-top:6px">Or enter this key manually:</div>
         <code id="mfa-secret-display" style="font-size:11px;letter-spacing:.1em;color:var(--accent);word-break:break-all;display:block;margin-top:4px"></code>
       </div>
@@ -2646,13 +2647,17 @@ function attemptLogin() {
   const match = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.hash === hash);
   if (match) {
     hideLogin();
-    // Admin requires MFA — all other editors skip MFA
-    if (match.role === 'admin' && safeGet('stemMFASecret')) {
+    // MFA only works over HTTPS (Web Crypto requirement)
+    // Skip MFA on file:// to allow local testing
+    const isHttps = window.location.protocol === 'https:';
+    if (match.role === 'admin' && isHttps && safeGet('stemMFASecret')) {
       showMfaVerify(match);
-    } else if (match.role === 'admin' && !safeGet('stemMFASecret')) {
-      // First time admin login — prompt MFA setup
+    } else if (match.role === 'admin' && isHttps && !safeGet('stemMFASecret')) {
       showMfaSetup(match);
     } else {
+      if (match.role === 'admin' && !isHttps) {
+        console.warn('MFA skipped — file:// protocol detected. MFA requires HTTPS.');
+      }
       setSession({username: match.username, role: match.role});
       if (document.getElementById('tab-entry').classList.contains('active')) renderEntry();
     }
@@ -2736,154 +2741,23 @@ function hmacSha1(k,m){return m;}
 // Simple QR code using a free API (works offline via data URL fallback)
 // Pure JS QR Code generator — no external dependency
 // Based on QR Code Model 2, supports alphanumeric + byte mode
-function drawQR(canvasId, text) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
+// QR code using qrcodejs library (loaded from CDN)
+function drawQR(elemId, text) {
+  var el = document.getElementById(elemId);
+  if (!el) return;
+  el.innerHTML = ''; // clear previous
   try {
-    const matrix = generateQRMatrix(text);
-    const size = matrix.length;
-    const cellSize = Math.floor(180 / (size + 2));
-    const offset = Math.floor((180 - cellSize * size) / 2);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, 180, 180);
-    ctx.fillStyle = '#000000';
-    for (let r = 0; r < size; r++) {
-      for (let c = 0; c < size; c++) {
-        if (matrix[r][c]) {
-          ctx.fillRect(offset + c * cellSize, offset + r * cellSize, cellSize, cellSize);
-        }
-      }
-    }
+    new QRCode(el, {
+      text: text,
+      width: 180,
+      height: 180,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
   } catch(e) {
-    // Fallback — plain white box with message
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, 180, 180);
-    ctx.fillStyle = '#333';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.fillText('Use manual key below', 10, 95);
+    el.innerHTML = '<div style="width:180px;height:180px;display:flex;align-items:center;justify-content:center;background:#fff;color:#333;font-size:11px;text-align:center;padding:10px">Use the manual key below</div>';
   }
-}
-
-// Minimal QR matrix generator (version 3, ECC M, byte mode)
-function generateQRMatrix(data) {
-  // Encode data as UTF-8 bytes
-  const bytes = [];
-  for (let i = 0; i < data.length; i++) {
-    const code = data.charCodeAt(i);
-    if (code < 128) { bytes.push(code); }
-    else if (code < 2048) { bytes.push(0xC0|(code>>6), 0x80|(code&63)); }
-    else { bytes.push(0xE0|(code>>12), 0x80|((code>>6)&63), 0x80|(code&63)); }
-  }
-  // Pick version based on data length
-  // Version 3 = 29x29, holds ~53 bytes ECC-M; Version 5 = 37x37, ~64 bytes; Version 7 = 45x45, ~96 bytes
-  let version = 3;
-  const capacities = [0,0,0,53,0,64,0,96,0,120,0,154];
-  for (let v = 3; v <= 10; v += 2) {
-    if (bytes.length <= (capacities[v]||0)) { version = v; break; }
-  }
-  if (bytes.length > 154) version = 10;
-
-  const size = version * 4 + 17;
-  const matrix = Array.from({length:size}, () => new Array(size).fill(null));
-
-  // Place finder patterns
-  function placeFinderPattern(row, col) {
-    for (let r = -1; r <= 7; r++) for (let c = -1; c <= 7; c++) {
-      if (row+r < 0 || row+r >= size || col+c < 0 || col+c >= size) continue;
-      const dark = (r>=0&&r<=6&&(c===0||c===6)) || (c>=0&&c<=6&&(r===0||r===6)) || (r>=2&&r<=4&&c>=2&&c<=4);
-      matrix[row+r][col+c] = (r>=0&&r<=6&&c>=0&&c<=6) ? dark : false;
-    }
-  }
-  placeFinderPattern(0,0); placeFinderPattern(0,size-7); placeFinderPattern(size-7,0);
-
-  // Timing patterns
-  for (let i = 8; i < size-8; i++) {
-    matrix[6][i] = matrix[i][6] = (i%2===0);
-  }
-
-  // Dark module
-  matrix[size-8][8] = true;
-
-  // Alignment patterns (version >= 2)
-  const alignPos = {2:[6,18],3:[6,22],4:[6,26],5:[6,30],6:[6,34],7:[6,22,38]};
-  if (alignPos[version]) {
-    const pos = alignPos[version];
-    for (let i = 0; i < pos.length; i++) for (let j = 0; j < pos.length; j++) {
-      const r = pos[i], c = pos[j];
-      if (matrix[r][c] !== null) continue;
-      for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
-        matrix[r+dr][c+dc] = (Math.abs(dr)===2||Math.abs(dc)===2||(dr===0&&dc===0));
-      }
-    }
-  }
-
-  // Build data bits
-  const dataBits = [];
-  // Mode indicator: byte mode = 0100
-  dataBits.push(0,1,0,0);
-  // Character count (8 bits for versions 1-9 byte mode)
-  for (let i = 7; i >= 0; i--) dataBits.push((bytes.length>>i)&1);
-  // Data bytes
-  bytes.forEach(b => { for (let i = 7; i >= 0; i--) dataBits.push((b>>i)&1); });
-  // Terminator
-  for (let i = 0; i < 4 && dataBits.length < size*size; i++) dataBits.push(0);
-  // Pad to byte boundary
-  while (dataBits.length % 8) dataBits.push(0);
-  // Pad codewords
-  const padBytes = [0xEC, 0x11];
-  const totalDataBytes = {3:26,5:44,7:66,10:108}[version]||44;
-  let padIdx = 0;
-  while (dataBits.length < totalDataBytes*8) {
-    const pb = padBytes[padIdx%2]; padIdx++;
-    for (let i = 7; i >= 0; i--) dataBits.push((pb>>i)&1);
-  }
-
-  // Place data bits in zigzag order
-  let bitIdx = 0;
-  let upward = true;
-  for (let col = size-1; col >= 1; col -= 2) {
-    if (col === 6) col = 5;
-    for (let rowStep = 0; rowStep < size; rowStep++) {
-      const row = upward ? size-1-rowStep : rowStep;
-      for (let dc = 0; dc <= 1; dc++) {
-        const c = col - dc;
-        if (matrix[row][c] !== null) continue;
-        const bit = bitIdx < dataBits.length ? dataBits[bitIdx++] : 0;
-        matrix[row][c] = !!bit;
-      }
-    }
-    upward = !upward;
-  }
-
-  // Apply mask pattern 0: (row+col) % 2 === 0
-  for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
-    if (matrix[r][c] !== null && !isFormatModule(r,c,size)) {
-      if ((r+c)%2===0) matrix[r][c] = !matrix[r][c];
-    }
-  }
-
-  // Format information (mask 0, ECC level M = 00)
-  const formatBits = [1,1,0,1,0,1,0,0,1,0,0,1,0,1,0]; // pre-computed for M+mask0
-  const fpos = [[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[8,7],[8,8],[7,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8]];
-  fpos.forEach(([r,c],i) => { matrix[r][c] = !!formatBits[i]; });
-  const fpos2 = [[size-1,8],[size-2,8],[size-3,8],[size-4,8],[size-5,8],[size-6,8],[size-7,8],[8,size-8],[8,size-7],[8,size-6],[8,size-5],[8,size-4],[8,size-3],[8,size-2],[8,size-1]];
-  fpos2.forEach(([r,c],i) => { matrix[r][c] = !!formatBits[i]; });
-
-  // Fill any remaining nulls with false
-  for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
-    if (matrix[r][c] === null) matrix[r][c] = false;
-  }
-  return matrix;
-}
-
-function isFormatModule(r, c, size) {
-  if (r === 6 || c === 6) return true;
-  if (r < 9 && c < 9) return true;
-  if (r < 9 && c >= size-8) return true;
-  if (r >= size-8 && c < 9) return true;
-  return false;
 }
 
 let pendingMFAUser = null;
