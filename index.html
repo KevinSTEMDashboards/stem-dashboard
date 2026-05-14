@@ -499,7 +499,12 @@ td.editing{padding:2px 4px!important}
   <div class="card">
     <div class="card-hdr">
       <span class="card-title">Recruiter summary</span>
-
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:11px;color:var(--text3);white-space:nowrap">Filter by manager:</label>
+        <select id="ov-mgr-filter" style="height:28px;font-size:11px" onchange="renderOvTable(filtered())">
+          <option value="">All managers</option>
+        </select>
+      </div>
     </div>
     <div class="tbl-wrap"><table>
       <thead><tr>
@@ -1334,8 +1339,9 @@ function activeWkLabels(){
 
 // Populate selects
 const MGRS=[...new Set(RECRUITERS.map(r=>r.manager))].sort();
-['mgr-filter','wow-mgr','entry-mgr'].forEach(id=>{
+['mgr-filter','wow-mgr','entry-mgr','ov-mgr-filter'].forEach(id=>{
   const el=document.getElementById(id);
+  if(!el)return;
   MGRS.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;el.appendChild(o)});
 });
 const recSel=document.getElementById('rec-select');
@@ -1606,6 +1612,26 @@ function promptEmailDigest() {
   window.location.href='mailto:'+encodeURIComponent(email.trim())+'?subject='+subject+'&body='+body;
 }
 
+
+// ── Ratio color scale (from legend image) ──
+// Sub→IV, IV→Pl, IV→Start: <3 green, 3-5 amber, >5 red
+// Sub→Start:               <8 green, 8-12 amber, >12 red
+function ratioColor(val, key) {
+  if(val==null) return 'var(--text3)';
+  var hi = key==='sub2start' ? 8 : 3;
+  var lo = key==='sub2start' ? 12 : 5;
+  if(val < hi)  return 'var(--green)';
+  if(val <= lo) return 'var(--amber)';
+  return 'var(--red)';
+}
+function ratioBg(val, key) {
+  if(val==null) return 'transparent';
+  var hi = key==='sub2start' ? 8 : 3;
+  var lo = key==='sub2start' ? 12 : 5;
+  if(val < hi)  return 'var(--green-bg)';
+  if(val <= lo) return 'var(--amber-bg)';
+  return 'var(--red-bg)';
+}
 function renderKPIs(d){
   const ts=d.reduce((s,r)=>s+r.totalSubs,0),ti=d.reduce((s,r)=>s+r.totalIvs,0),tst=d.reduce((s,r)=>s+r.totalStarts,0);
   const vr=d.filter(r=>r.sub2start!==null);
@@ -1629,7 +1655,7 @@ function renderTopChart(d){
   const key=kmap[m]||'totalSubs';
   const top10=[...d].sort((a,b)=>b[key]-a[key]).slice(0,10);
   const lbs=top10.map(r=>r.name.split(' ')[0]+(r.name.includes('(')?(' '+(r.name.match(/\(([^)]+)\)/)||['',''])[1]):''));
-  document.getElementById('top-leg').innerHTML=[...new Set(top10.map(r=>r.manager))].map(m=>`<span class="leg"><span class="leg-dot" style="background:${MGR_COLORS[m]}"></span>${m}</span>`).join('');
+  document.getElementById('top-leg').innerHTML=MGRS.map(m=>`<span class="leg"><span class="leg-dot" style="background:${MGR_COLORS[m]||'#888'}"></span>${m}</span>`).join('');
   if(cTop)cTop.destroy();
   cTop=new Chart(document.getElementById('topChart'),{type:'bar',data:{labels:lbs,datasets:[{data:top10.map(r=>r[key]),backgroundColor:top10.map(r=>MGR_COLORS[r.manager]||'#888'),borderRadius:4,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:35},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10}}}}}});
 }
@@ -1643,7 +1669,9 @@ function renderRatioChart(d){
 }
 
 function renderOvTable(d){
-  const s=[...d].sort((a,b)=>{const av=a[ovSort],bv=b[ovSort];if(av==null&&bv==null)return 0;if(av==null)return 1;if(bv==null)return -1;return typeof av==='string'?(ovDir==='asc'?av.localeCompare(bv):bv.localeCompare(av)):(ovDir==='asc'?av-bv:bv-av)});
+  const ovMgrF=document.getElementById('ov-mgr-filter').value;
+  const filtered_d=ovMgrF?d.filter(function(r){return r.manager===ovMgrF;}):d;
+  const s=[...filtered_d].sort((a,b)=>{const av=a[ovSort],bv=b[ovSort];if(av==null&&bv==null)return 0;if(av==null)return 1;if(bv==null)return -1;return typeof av==='string'?(ovDir==='asc'?av.localeCompare(bv):bv.localeCompare(av)):(ovDir==='asc'?av-bv:bv-av)});
   document.getElementById('ov-body').innerHTML=s.map(r=>{
     const pc=r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
     const pl=r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
@@ -1659,10 +1687,10 @@ function renderOvTable(d){
       <td style="color:var(--text3)">${r.totalIvs}</td>
       <td style="color:var(--text3)">${r.totalPlacements}</td>
       <td style="color:var(--text3)">${r.totalStarts}</td>
-      <td style="color:var(--amber)">${fmt(r.sub2iv)}</td>
-      <td style="color:var(--amber)">${r.iv2placement!=null?fmt(r.iv2placement):'—'}</td>
-      <td style="color:var(--amber)">${r.pl2start!=null?fmt(r.pl2start):'—'}</td>
-      <td style="color:var(--amber)">${r.sub2start!=null?fmt(r.sub2start):'—'}</td>
+      <td style="color:${ratioColor(r.sub2iv,'sub2iv')};background:${ratioBg(r.sub2iv,'sub2iv')};border-radius:4px;text-align:center;font-weight:600">${fmt(r.sub2iv)}</td>
+      <td style="color:${ratioColor(r.iv2placement,'iv2placement')};background:${ratioBg(r.iv2placement,'iv2placement')};border-radius:4px;text-align:center;font-weight:600">${r.iv2placement!=null?fmt(r.iv2placement):'—'}</td>
+      <td style="color:${ratioColor(r.pl2start,'pl2start')};background:${ratioBg(r.pl2start,'pl2start')};border-radius:4px;text-align:center;font-weight:600">${r.pl2start!=null?fmt(r.pl2start):'—'}</td>
+      <td style="color:${ratioColor(r.sub2start,'sub2start')};background:${ratioBg(r.sub2start,'sub2start')};border-radius:4px;text-align:center;font-weight:600">${r.sub2start!=null?fmt(r.sub2start):'—'}</td>
       <td><span class="pill ${pc}">${pl}</span></td>
     </tr>`;
   }).join('');
@@ -3445,9 +3473,9 @@ function renderLeaderboard() {
     {key:'leads',      label:'Leads',             color:'var(--c-leads)',  icon:'💡', desc:'Total leads in window',           higher:true,  fmt:function(v){return v;}},
     {key:'avgSub4w',   label:'4-wk Sub Avg',      color:'var(--c-subs)',   icon:'📈', desc:'4-week submittal average',        higher:true,  fmt:function(v){return v.toFixed(1);}},
     {key:'sub2iv',     label:'Sub→IV Ratio',      color:'var(--amber)',    icon:'⚡', desc:'Lower = more efficient',          higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}},
-    {key:'iv2placement',label:'IV→Pl. Ratio',     color:'var(--amber)',    icon:'⚡', desc:'Lower = more efficient',          higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}},
-    {key:'pl2start',   label:'Pl→Start Ratio',    color:'var(--amber)',    icon:'⚡', desc:'Lower = more efficient',          higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}},
-    {key:'sub2start',  label:'Sub→Start Ratio',   color:'var(--amber)',    icon:'⚡', desc:'Overall efficiency — lower = better', higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}}
+    {key:'iv2placement',label:'IV→Pl. Ratio',     color:'var(--amber)',    icon:'⚡', desc:'Green <3:1 | Amber 3–5:1 | Red >5:1',  higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}, ratioKey:'iv2placement'},
+    {key:'pl2start',   label:'Pl→Start Ratio',    color:'var(--amber)',    icon:'⚡', desc:'Green <3:1 | Amber 3–5:1 | Red >5:1',  higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}, ratioKey:'pl2start'},
+    {key:'sub2start',  label:'Sub→Start Ratio',   color:'var(--amber)',    icon:'⚡', desc:'Green <8:1 | Amber 8–12:1 | Red >12:1', higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}, ratioKey:'sub2start'}
   ];
 
   var html = KPIs.map(function(kpi) {
@@ -3482,7 +3510,7 @@ function renderLeaderboard() {
           +'</div>'
           +'<div class="lb-bar-wrap"><div class="lb-bar" style="width:'+barW+'%;background:'+kpi.color+'"></div></div>'
         +'</div>'
-        +'<div class="lb-val" style="color:'+kpi.color+'">'+kpi.fmt(r[kpi.key])+'</div>'
+        +'<div class="lb-val" style="color:'+(kpi.ratioKey?ratioColor(r[kpi.key],kpi.ratioKey):kpi.color)+'">'+kpi.fmt(r[kpi.key])+'</div>'
       +'</div>';
     }).join('');
 
