@@ -442,7 +442,7 @@ td.editing{padding:2px 4px!important}
     <div class="logo">S</div>
     <div>
       <div class="header-title">STEM Recruiter Dashboard</div>
-      <div class="header-sub">2026 YTD &nbsp;·&nbsp; <span id="wk-ct"></span><span id="wk-range-badge" style="display:none;margin-left:6px;padding:1px 7px;background:var(--accent-dim);color:var(--accent);border-radius:100px;font-size:10px;font-weight:700"></span> &nbsp;<span id="sync-badge" style="font-size:10px;color:var(--text3)"></span> <button id="sync-btn" onclick="manualSync()" title="Re-sync from Google Sheets" style="font-size:10px;height:20px;padding:0 7px;margin-left:4px;border-radius:100px;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;display:inline-flex;align-items:center;gap:3px">⟳ Sync</button></div>
+      <div class="header-sub">2026 YTD &nbsp;·&nbsp; <span id="wk-ct"></span><span id="wk-range-badge" style="display:none;margin-left:6px;padding:1px 7px;background:var(--accent-dim);color:var(--accent);border-radius:100px;font-size:10px;font-weight:700"></span> &nbsp;<span id="sync-badge" style="font-size:10px;color:var(--text3)"></span> <button id="sync-btn" onclick="manualSync()" style="font-size:10px;height:20px;padding:0 7px;margin-left:4px;border-radius:100px;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;display:inline-flex;align-items:center;gap:3px">⟳ Sync</button></div>
     </div>
   </div>
   <div class="header-right">
@@ -1765,7 +1765,7 @@ function renderOvTable(d){
       <td style="color:${ratioColor(r.iv2placement,'iv2placement')};background:${ratioBg(r.iv2placement,'iv2placement')};border-radius:4px;text-align:center;font-weight:600">${r.iv2placement!=null?fmt(r.iv2placement):'—'}</td>
       <td style="color:${ratioColor(r.pl2start,'pl2start')};background:${ratioBg(r.pl2start,'pl2start')};border-radius:4px;text-align:center;font-weight:600">${r.pl2start!=null?fmt(r.pl2start):'—'}</td>
       <td style="color:${ratioColor(r.sub2start,'sub2start')};background:${ratioBg(r.sub2start,'sub2start')};border-radius:4px;text-align:center;font-weight:600">${r.sub2start!=null?fmt(r.sub2start):'—'}</td>
-      <td><span class="pill ${pc}">${pl}</span></td>
+      <td><span class="pill ${pc}" title="${r.status==='green'?'4-week start target hit (2+)':r.status==='amber'?'Has starts, but under the 2-start target over 4 weeks':'No starts in the last 4 weeks'}">${pl}</span></td>
     </tr>`;
   }).join('');
   document.querySelectorAll('#tab-overview thead th').forEach(th=>{th.classList.remove('sa','sd');if(th.dataset.col===ovSort)th.classList.add(ovDir==='asc'?'sa':'sd')});
