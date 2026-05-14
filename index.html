@@ -442,7 +442,7 @@ td.editing{padding:2px 4px!important}
     <div class="logo">S</div>
     <div>
       <div class="header-title">STEM Recruiter Dashboard</div>
-      <div class="header-sub">2026 YTD &nbsp;·&nbsp; <span id="wk-ct"></span><span id="wk-range-badge" style="display:none;margin-left:6px;padding:1px 7px;background:var(--accent-dim);color:var(--accent);border-radius:100px;font-size:10px;font-weight:700"></span> &nbsp;<span id="sync-badge" style="font-size:10px;color:var(--text3)"></span></div>
+      <div class="header-sub">2026 YTD &nbsp;·&nbsp; <span id="wk-ct"></span><span id="wk-range-badge" style="display:none;margin-left:6px;padding:1px 7px;background:var(--accent-dim);color:var(--accent);border-radius:100px;font-size:10px;font-weight:700"></span> &nbsp;<span id="sync-badge" style="font-size:10px;color:var(--text3)"></span> <button id="sync-btn" onclick="manualSync()" title="Re-sync from Google Sheets" style="font-size:10px;height:20px;padding:0 7px;margin-left:4px;border-radius:100px;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;display:inline-flex;align-items:center;gap:3px">⟳ Sync</button></div>
     </div>
   </div>
   <div class="header-right">
@@ -782,9 +782,25 @@ td.editing{padding:2px 4px!important}
       <option value="all">Full YTD / selected range</option>
       <option value="4">Last 4 weeks</option>
       <option value="8">Last 8 weeks</option>
+      <option value="custom">Custom range…</option>
     </select>
+    <div id="lb-custom-range" style="display:none;align-items:center;gap:6px">
+      <select id="lb-from" style="height:32px;font-size:12px"></select>
+      <span style="font-size:11px;color:var(--text3)">→</span>
+      <select id="lb-to" style="height:32px;font-size:12px"></select>
+    </div>
   </div>
   <div id="lb-boards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px"></div>
+  <!-- Full ranking modal -->
+  <div id="lb-modal" style="display:none;position:fixed;inset:0;z-index:9990;background:rgba(0,0,0,0.6);align-items:center;justify-content:center">
+    <div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:20px;width:480px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div id="lb-modal-title" style="font-size:14px;font-weight:700"></div>
+        <button class="btn" onclick="document.getElementById('lb-modal').style.display='none'" style="width:28px;height:28px;padding:0;justify-content:center;font-size:16px">×</button>
+      </div>
+      <div id="lb-modal-body"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ROSTER MANAGEMENT -->
@@ -1180,6 +1196,18 @@ function updateSyncBadge() {
   }
 }
 
+function manualSync() {
+  const btn = document.getElementById('sync-btn');
+  const badge = document.getElementById('sync-badge');
+  if (btn) { btn.textContent = '⟳ Syncing…'; btn.style.color = 'var(--accent)'; btn.disabled = true; }
+  if (badge) { badge.textContent = 'Syncing…'; badge.style.color = 'var(--text3)'; }
+  loadFromSheets().then(function() {
+    if (btn) { btn.textContent = '⟳ Sync'; btn.style.color = 'var(--text3)'; btn.disabled = false; }
+  }).catch(function() {
+    if (btn) { btn.textContent = '⟳ Sync'; btn.style.color = 'var(--red)'; btn.disabled = false; }
+  });
+}
+
 
 
 const MGR_COLORS={Kevin:'#378ADD',Rachel:'#1D9E75',Tyler:'#EF9F27',Brett:'#D4537E',Noah:'#7F77DD',Joe:'#888780',Zach:'#5DCAA5'};
@@ -1423,6 +1451,8 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById('tab-'+t.dataset.tab).classList.add('active');
+    // Hide filter bar on leaderboard, show on all other tabs
+    document.querySelector('.filter-bar').style.display=t.dataset.tab==='leaderboard'?'none':'';
     if(t.dataset.tab==='weekly')renderWoW();
     if(t.dataset.tab==='managers')renderManagers();
     if(t.dataset.tab==='recruiter')renderRecruiter();
@@ -2092,7 +2122,8 @@ function delWeek(i){
 function getWindow(arr,w){const v=arr.filter(x=>x!==null);if(w==='all')return v;const n=parseInt(w);return v.slice(-n)}
 function slope(arr){const n=arr.length;if(n<2)return 0;const mx=arr.reduce((s,v)=>s+v,0)/n;const my=(n-1)/2;const num=arr.reduce((s,v,i)=>s+(i-my)*(v-mx),0);const den=arr.reduce((s,_,i)=>s+(i-my)**2,0);return den===0?0:num/den}
 function pctChange(arr){if(arr.length<2)return 0;const h=Math.ceil(arr.length/2);const old=arr.slice(0,h).reduce((a,v)=>a+v,0)/h;const nw=arr.slice(Math.floor(arr.length/2)).reduce((a,v)=>a+v,0)/Math.ceil(arr.length/2);return old===0?(nw>0?100:0):((nw-old)/old)*100}
-function sparkHtml(arr,color){const v=arr.filter(x=>x!==null).slice(-12);if(!v.length)return'';const mx=Math.max(...v,1);return'<div class="spark-bar">'+v.map(x=>{const h=Math.max(3,Math.round((x/mx)*36));return`<div class="spark-bar-col" style="height:${h}px;background:${color};flex:1"></div>`}).join('')+'</div>'}
+function priorLabel(arr){const h=Math.ceil(arr.length/2);return h===1?'vs prior 1 wk':'vs prior '+h+' wks';}
+function sparkHtml(arr,color){return '';} // Sparklines removed
 function trendArrow(sl){if(sl>0.15)return{icon:'↑',cls:'badge-up'};if(sl<-0.15)return{icon:'↓',cls:'badge-dn'};return{icon:'→',cls:'badge-info'}}
 
 function renderTrends(){
@@ -2103,8 +2134,8 @@ function renderTrends(){
   const selRec=document.getElementById('tr-recruiter-sel').value;
   const allRecs=computedAll();
   const awl=activeWkLabels();
-  const METRICS=focus==='all'?['subs','ivs','starts','leads']:[focus];
-  const MLABELS={subs:'Submittals',ivs:'Interviews',starts:'Starts',leads:'Leads'};
+  const METRICS=focus==='all'?['subs','ivs','placements','starts','leads']:[focus];
+  const MLABELS={subs:'Submittals',ivs:'Interviews',placements:'Placements',starts:'Starts',leads:'Leads'};
   const MCOLORS={subs:'#185FA5',ivs:'#1D9E75',placements:'#a855f7',starts:'#D4537E',leads:'#EF9F27'};
   const MICONS={subs:'📋',ivs:'🎯',placements:'🤝',starts:'🚀',leads:'💡'};
 
@@ -2181,7 +2212,7 @@ function renderTrends(){
     holisticHTML+=`<div class="insight-card">
       <div class="insight-card-hdr"><div class="insight-icon" style="background:${MCOLORS[m]}22;color:${MCOLORS[m]}">${MICONS[m]}</div><div><div class="insight-card-title">${MLABELS[m]}</div><div class="insight-card-sub">${subLabel}</div></div></div>
       ${sparkHtml(tw,MCOLORS[m])}
-      <div class="trend-item"><div class="trend-badge ${arr.cls}">${arr.icon}</div><div class="trend-text"><div class="trend-main">Avg ${avg.toFixed(1)}/wk &nbsp;·&nbsp; Last: ${last}</div><div class="trend-detail">vs prior half: <span style="color:${pcCol};font-weight:600">${pcStr}</span></div></div></div>
+      <div class="trend-item"><div class="trend-badge ${arr.cls}">${arr.icon}</div><div class="trend-text"><div class="trend-main">Avg ${avg.toFixed(1)}/wk &nbsp;·&nbsp; Last: ${last}</div><div class="trend-detail">${priorLabel(win)}: <span style="color:${pcCol};font-weight:600">${pcStr}</span></div></div></div>
       <div class="trend-item"><div class="trend-badge badge-info">i</div><div class="trend-text"><div class="trend-detail">${note}</div></div></div>
     </div>`;
   });
@@ -2202,7 +2233,7 @@ function renderTrends(){
         const arr=trendArrow(sl);const pcStr=(pc>=0?'+':'')+pc.toFixed(1)+'%';
         const pcCol=pc>=5?'var(--green)':pc<=-5?'var(--red)':'var(--amber)';
         const hot=sl>0.2?' · 🔥 Hot':sl<-0.2?' · ⚡ Cooling':'';
-        items+=`<div class="trend-item"><div class="trend-badge ${arr.cls}">${arr.icon}</div><div class="trend-text"><div class="trend-main" style="color:${MCOLORS[m]}">${MLABELS[m]}: avg ${avg.toFixed(1)}/wk</div><div class="trend-detail">vs prior half: <span style="color:${pcCol};font-weight:600">${pcStr}</span>${hot}</div></div></div>`;
+        items+=`<div class="trend-item"><div class="trend-badge ${arr.cls}">${arr.icon}</div><div class="trend-text"><div class="trend-main" style="color:${MCOLORS[m]}">${MLABELS[m]}: avg ${avg.toFixed(1)}/wk</div><div class="trend-detail">${priorLabel(win)}: <span style="color:${pcCol};font-weight:600">${pcStr}</span>${hot}</div></div></div>`;
       });
       const topR=[...team].sort((a,b)=>b.totalStarts-a.totalStarts)[0];
       const botR=[...team].filter(r=>r.avgSub4w>0).sort((a,b)=>a.avgSub4w-b.avgSub4w)[0];
@@ -3243,15 +3274,16 @@ function renderManagers(){
   var mgrData={};
   MGRS.forEach(function(m){
     var team=all.filter(function(r){return r.manager===m;});
-    var subsW=[],ivsW=[],stW=[];
+    var subsW=[],ivsW=[],plW=[],stW=[];
     for(var wi=0;wi<nW;wi++){
-      var s=0,iv=0,st=0;
+      var s=0,iv=0,pl=0,st=0;
       for(var ti=0;ti<team.length;ti++){
         s+=(team[ti].subs[wi]||0);
         iv+=(team[ti].ivs[wi]||0);
+        pl+=((team[ti].placements||[])[wi]||0);
         st+=(team[ti].starts[wi]||0);
       }
-      subsW.push(s);ivsW.push(iv);stW.push(st);
+      subsW.push(s);ivsW.push(iv);plW.push(pl);stW.push(st);
     }
     // Window slice helper
     var getW=function(arr){
@@ -3275,11 +3307,11 @@ function renderManagers(){
       var nv=arr.slice(Math.floor(arr.length/2)).reduce(function(a,b){return a+b;},0)/Math.ceil(arr.length/2);
       return o===0?(nv>0?100:0):((nv-o)/o)*100;
     };
-    var ts=0,tiv=0,tst=0;
-    for(var ti=0;ti<team.length;ti++){ts+=team[ti].totalSubs;tiv+=team[ti].totalIvs;tst+=team[ti].totalStarts;}
+    var ts=0,tiv=0,tpl=0,tst=0;
+    for(var ti=0;ti<team.length;ti++){ts+=team[ti].totalSubs;tiv+=team[ti].totalIvs;tpl+=team[ti].totalPlacements;tst+=team[ti].totalStarts;}
     var a4=team.length?team.reduce(function(s,r){return s+r.avgSub4w;},0)/team.length:0;
     var ws=getW(subsW),wst=getW(stW);
-    mgrData[m]={team:team,subsW:subsW,ivsW:ivsW,stW:stW,ts:ts,tiv:tiv,tst:tst,
+    mgrData[m]={team:team,subsW:subsW,ivsW:ivsW,plW:plW,stW:stW,ts:ts,tiv:tiv,tpl:tpl,tst:tst,
       s2s:tst>0?ts/tst:null,a4:a4,slS:slp(ws),slSt:slp(wst),pcS:pct(ws)};
   });
 
@@ -3314,9 +3346,9 @@ function renderManagers(){
         +'<div style="text-align:center"><div style="font-size:22px;font-weight:700;color:'+pcc+';letter-spacing:-.02em">'+pcs+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:2px">Sub trend</div></div>'
       +'</div>'
       +'<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);display:flex;gap:12px">'
+        +'<span>Placements: <b style="color:var(--purple)">'+d.tpl+'</b></span>'
         +'<span>Sub&#8594;Start: <b style="color:var(--text)">'+(d.s2s?d.s2s.toFixed(1)+':1':'—')+'</b></span>'
         +'<span>4-wk avg: <b style="color:var(--text)">'+d.a4.toFixed(1)+'</b></span>'
-        +'<span>IVs: <b style="color:var(--text)">'+d.tiv+'</b></span>'
       +'</div>'
     +'</div>';
   }).join('');
@@ -3439,106 +3471,117 @@ document.getElementById('mgr-window').addEventListener('change',renderManagers);
 document.getElementById('mgr-sort').addEventListener('change',renderManagers);
 
 // ─── LEADERBOARD ───
-function lbGetWindow(arr, w) {
-  var v = arr.filter(function(x){return x!=null;});
-  if(w==='all') return v;
-  return v.slice(-parseInt(w));
+function populateLbRangeSelects(){
+  var fromSel=document.getElementById('lb-from');
+  var toSel=document.getElementById('lb-to');
+  if(!fromSel||!toSel)return;
+  fromSel.innerHTML='';toSel.innerHTML='';
+  wkLabels.forEach(function(lbl,i){
+    var oF=document.createElement('option');oF.value=i;oF.textContent='From: '+lbl;fromSel.appendChild(oF);
+    var oT=document.createElement('option');oT.value=i;oT.textContent='To: '+lbl;toSel.appendChild(oT);
+  });
+  toSel.selectedIndex=toSel.options.length-1;
 }
 
-function renderLeaderboard() {
-  var mgrF = document.getElementById('lb-mgr-filter').value;
-  var win  = document.getElementById('lb-window').value;
-  var all  = computedAll();
-
-  // Apply manager filter
-  var recs = mgrF ? all.filter(function(r){return r.manager===mgrF;}) : all;
-
-  // Apply window filter to weekly arrays
-  var windowed = recs.map(function(r) {
-    var ws = lbGetWindow(r.subs, win);
-    var wi = lbGetWindow(r.ivs, win);
-    var wp = lbGetWindow(r.placements||[], win);
-    var wst = lbGetWindow(r.starts, win);
-    var wl = lbGetWindow(r.leads, win);
-    function sum(a){return a.reduce(function(s,v){return s+v;},0);}
-    return {
-      name: r.name, manager: r.manager,
-      subs:       sum(ws),
-      ivs:        sum(wi),
-      placements: sum(wp),
-      starts:     sum(wst),
-      leads:      sum(wl),
-      avgSub4w:   r.avgSub4w,
-      sub2iv:     r.sub2iv,
-      iv2placement: r.iv2placement,
-      pl2start:   r.pl2start,
-      sub2start:  r.sub2start,
-      status:     r.status
-    };
-  });
-
-  var KPIs = [
-    {key:'subs',       label:'Submittals',       color:'var(--c-subs)',   icon:'📋', desc:'Total submittals in window',      higher:true,  fmt:function(v){return v;}},
-    {key:'ivs',        label:'Interviews',        color:'var(--c-ivs)',    icon:'🎯', desc:'Total interviews in window',      higher:true,  fmt:function(v){return v;}},
-    {key:'placements', label:'Placements',        color:'var(--purple)',   icon:'🤝', desc:'Total placements in window',      higher:true,  fmt:function(v){return v;}},
-    {key:'starts',     label:'Starts',            color:'var(--c-starts)', icon:'🚀', desc:'Total starts in window',          higher:true,  fmt:function(v){return v;}},
-    {key:'leads',      label:'Leads',             color:'var(--c-leads)',  icon:'💡', desc:'Total leads in window',           higher:true,  fmt:function(v){return v;}},
-    {key:'avgSub4w',   label:'4-wk Sub Avg',      color:'var(--c-subs)',   icon:'📈', desc:'4-week submittal average',        higher:true,  fmt:function(v){return v.toFixed(1);}},
-    {key:'sub2iv',     label:'Sub→IV Ratio',      color:'var(--amber)',    icon:'⚡', desc:'Lower = more efficient',          higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}},
-    {key:'iv2placement',label:'IV→Pl. Ratio',     color:'var(--amber)',    icon:'⚡', desc:'Green <3:1 | Amber 3–5:1 | Red >5:1',  higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}, ratioKey:'iv2placement'},
-    {key:'pl2start',   label:'Pl→Start Ratio',    color:'var(--amber)',    icon:'⚡', desc:'Green <3:1 | Amber 3–5:1 | Red >5:1',  higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}, ratioKey:'pl2start'},
-    {key:'sub2start',  label:'Sub→Start Ratio',   color:'var(--amber)',    icon:'⚡', desc:'Green <8:1 | Amber 8–12:1 | Red >12:1', higher:false, fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';}, ratioKey:'sub2start'}
-  ];
-
-  var html = KPIs.map(function(kpi) {
-    // Sort: higher is better for volume metrics, lower is better for ratios
-    var valid = windowed.filter(function(r){return r[kpi.key]!=null && r[kpi.key]>0;});
-    if(!valid.length) return '<div class="lb-card"><div class="lb-card-hdr"><span class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span></div><div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No data for this window</div></div>';
-
-    var sorted = valid.slice().sort(function(a,b){
-      return kpi.higher ? b[kpi.key]-a[kpi.key] : a[kpi.key]-b[kpi.key];
+function lbGetRangedRecs(mgrFilter){
+  var win=document.getElementById('lb-window').value;
+  var all=computedAll();
+  var recs=mgrFilter?all.filter(function(r){return r.manager===mgrFilter;}):all;
+  if(win==='custom'){
+    var f=parseInt(document.getElementById('lb-from').value)||0;
+    var t=parseInt(document.getElementById('lb-to').value)||wkLabels.length-1;
+    if(t<f)t=f;
+    return recs.map(function(r){
+      function sum(arr){var s=0;for(var i=f;i<=t&&i<arr.length;i++)s+=(arr[i]||0);return s;}
+      return Object.assign({},r,{_subs:sum(r.subs),_ivs:sum(r.ivs),_placements:sum(r.placements||[]),_starts:sum(r.starts),_leads:sum(r.leads)});
     });
+  }
+  return recs.map(function(r){
+    function wsum(arr){var v=arr.filter(function(x){return x!=null;});if(win==='all')return v.reduce(function(s,x){return s+x;},0);return v.slice(-parseInt(win)).reduce(function(s,x){return s+x;},0);}
+    return Object.assign({},r,{_subs:wsum(r.subs),_ivs:wsum(r.ivs),_placements:wsum(r.placements||[]),_starts:wsum(r.starts),_leads:wsum(r.leads)});
+  });
+}
 
-    var top10 = sorted.slice(0, 10);
-    var maxVal = kpi.higher ? top10[0][kpi.key] : Math.max.apply(null, top10.map(function(r){return r[kpi.key];}));
+var LB_KPIS=[
+  {wkey:'_subs',       label:'Submittals',        color:'var(--c-subs)',   icon:'📋',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'_ivs',        label:'Interviews',         color:'var(--c-ivs)',    icon:'🎯',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'_placements', label:'Placements',         color:'var(--purple)',   icon:'🤝',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'_starts',     label:'Starts',             color:'var(--c-starts)', icon:'🚀',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'_leads',      label:'Leads',              color:'var(--c-leads)',  icon:'💡',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'avgSub4w',    label:'4-wk Sub Avg',       color:'var(--c-subs)',   icon:'📈',higher:true, fmt:function(v){return v!=null?v.toFixed(1):'0';}},
+  {wkey:'sub2iv',      label:'Sub→IV',        color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2iv'},
+  {wkey:'iv2placement',label:'IV→Pl.',        color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'iv2placement'},
+  {wkey:'pl2start',    label:'Pl→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'pl2start'},
+  {wkey:'sub2start',   label:'Sub→Start',     color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2start'}
+];
 
-    var rows = top10.map(function(r, i) {
-      var rank = i+1;
-      var rankDisp = rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
-      var rankCls  = rank===1?'lb-rank lb-rank-1':rank===2?'lb-rank lb-rank-2':rank===3?'lb-rank lb-rank-3':'lb-rank';
-      var mc = MGR_COLORS[r.manager]||'#888';
-      var barW = kpi.higher
-        ? Math.round((r[kpi.key]/maxVal)*100)
-        : Math.round(((maxVal - r[kpi.key] + Math.min.apply(null,top10.map(function(x){return x[kpi.key];})))/maxVal)*100);
-      barW = Math.max(6, Math.min(100, barW));
-      var pc = r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
+function showLbModal(kpiIdx, mgrFilter){
+  var kpi=LB_KPIS[kpiIdx];
+  try{mgrFilter=decodeURIComponent(mgrFilter||'');}catch(e){}
+  var sorted=lbGetRangedRecs(mgrFilter||'').filter(function(r){return r[kpi.wkey]!=null&&r[kpi.wkey]>0;});
+  sorted.sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
+  var maxVal=sorted.length?sorted.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
+  document.getElementById('lb-modal-title').innerHTML='<span style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span> — Full ranking ('+sorted.length+' recruiters)';
+  document.getElementById('lb-modal-body').innerHTML=sorted.map(function(r,i){
+    var rank=i+1;
+    var rankDisp=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
+    var mc=MGR_COLORS[r.manager]||'#888';
+    var barW=Math.max(4,Math.round(((r[kpi.wkey]||0)/maxVal)*100));
+    return '<div class="lb-row">'
+      +'<div class="'+(rank<=3?'lb-rank lb-rank-'+rank:'lb-rank')+'">'+rankDisp+'</div>'
+      +'<div style="flex:1;min-width:0">'
+        +'<div style="display:flex;align-items:center;gap:6px"><div class="lb-name">'+r.name+'</div>'
+        +'<span class="lb-mgr-tag" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span></div>'
+        +'<div class="lb-bar-wrap"><div class="lb-bar" style="width:'+barW+'%;background:'+kpi.color+'"></div></div>'
+      +'</div>'
+      +'<div class="lb-val" style="color:'+(kpi.ratioKey?'ratioColor(r[kpi.wkey],kpi.ratioKey)':kpi.color)+'">'+kpi.fmt(r[kpi.wkey])+'</div>'
+    +'</div>';
+  }).join('');
+  document.getElementById('lb-modal').style.display='flex';
+}
+
+function renderLeaderboard(){
+  var mgrF=document.getElementById('lb-mgr-filter').value;
+  var win=document.getElementById('lb-window').value;
+  var customDiv=document.getElementById('lb-custom-range');
+  if(customDiv)customDiv.style.display=win==='custom'?'flex':'none';
+  // Hide the global filter bar on leaderboard tab
+  document.querySelector('.filter-bar').style.display='none';
+
+  var recs=lbGetRangedRecs(mgrF);
+  var winLabel=win==='all'?'Full range':win==='custom'?'Custom range':'Last '+win+' wks';
+
+  var html=LB_KPIS.map(function(kpi,kpiIdx){
+    var valid=recs.filter(function(r){return r[kpi.wkey]!=null&&r[kpi.wkey]>0;});
+    if(!valid.length)return '<div class="lb-card"><div class="lb-card-hdr"><span class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span></div><div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No data</div></div>';
+    var sorted=valid.slice().sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
+    var top10=sorted.slice(0,10);
+    var maxVal=top10.length?top10.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
+    var rows=top10.map(function(r,i){
+      var rank=i+1;
+      var rankDisp=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
+      var mc=MGR_COLORS[r.manager]||'#888';
+      var barW=Math.max(4,Math.round(((r[kpi.wkey]||0)/maxVal)*100));
       return '<div class="lb-row">'
-        +'<div class="'+rankCls+'">'+rankDisp+'</div>'
+        +'<div class="'+(rank<=3?'lb-rank lb-rank-'+rank:'lb-rank')+'">'+rankDisp+'</div>'
         +'<div style="flex:1;min-width:0">'
-          +'<div style="display:flex;align-items:center;gap:6px">'
-            +'<div class="lb-name">'+r.name+'</div>'
-            +'<span class="lb-mgr-tag" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span>'
-            +'<span class="pill '+pc+'" style="font-size:9px;padding:0 5px">'+(r.status==='green'?'✓':r.status==='amber'?'△':'!')+'</span>'
-          +'</div>'
+          +'<div style="display:flex;align-items:center;gap:6px"><div class="lb-name">'+r.name+'</div>'
+          +'<span class="lb-mgr-tag" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span></div>'
           +'<div class="lb-bar-wrap"><div class="lb-bar" style="width:'+barW+'%;background:'+kpi.color+'"></div></div>'
         +'</div>'
-        +'<div class="lb-val" style="color:'+(kpi.ratioKey?ratioColor(r[kpi.key],kpi.ratioKey):kpi.color)+'">'+kpi.fmt(r[kpi.key])+'</div>'
+        +'<div class="lb-val" style="color:'+(kpi.ratioKey?ratioColor(r[kpi.wkey],kpi.ratioKey):kpi.color)+'">'+kpi.fmt(r[kpi.wkey])+'</div>'
       +'</div>';
     }).join('');
-
-    var subtitle = (win==='all'?'Full range':'Last '+win+' wks')+(mgrF?' · '+mgrF:"· All managers");
-
+    var subtitle=winLabel+(mgrF?' · '+mgrF:' · All managers');
+    var expandBtn=sorted.length>10?'<div style="padding:8px 14px;border-top:1px solid var(--border)"><button class="btn" onclick="showLbModal('+kpiIdx+',\''+encodeURIComponent(mgrF)+'\')" style="width:100%;font-size:11px;height:28px;color:var(--accent)">View all '+sorted.length+' recruiters →</button></div>':'';
     return '<div class="lb-card">'
       +'<div class="lb-card-hdr">'
         +'<div><div class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</div>'
-        +'<div style="font-size:10px;color:var(--text3);margin-top:1px">'+kpi.desc+' · '+subtitle+'</div></div>'
-        +'<div style="font-size:11px;font-weight:700;color:var(--text3)">'+valid.length+' ranked</div>'
-      +'</div>'
-      +rows
-    +'</div>';
+        +'<div style="font-size:10px;color:var(--text3);margin-top:1px">'+subtitle+'</div></div>'
+        +'<div style="font-size:11px;font-weight:700;color:var(--text3)">'+sorted.length+' ranked</div>'
+      +'</div>'+rows+expandBtn+'</div>';
   }).join('');
-
-  document.getElementById('lb-boards').innerHTML = html;
+  document.getElementById('lb-boards').innerHTML=html;
 }
 
 // Populate lb-mgr-filter
@@ -3546,8 +3589,15 @@ MGRS.forEach(function(m){
   var o=document.createElement('option');o.value=m;o.textContent=m;
   document.getElementById('lb-mgr-filter').appendChild(o);
 });
-document.getElementById('lb-mgr-filter').addEventListener('change', renderLeaderboard);
-document.getElementById('lb-window').addEventListener('change', renderLeaderboard);
+document.getElementById('lb-mgr-filter').addEventListener('change',renderLeaderboard);
+document.getElementById('lb-window').addEventListener('change',function(){
+  var win=document.getElementById('lb-window').value;
+  if(win==='custom'){populateLbRangeSelects();}
+  renderLeaderboard();
+});
+document.getElementById('lb-from').addEventListener('change',renderLeaderboard);
+document.getElementById('lb-to').addEventListener('change',renderLeaderboard);
+
 
 
 // Render immediately with BASE_DATA so the page is never blank,
