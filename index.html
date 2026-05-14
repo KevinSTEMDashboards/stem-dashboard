@@ -3260,12 +3260,21 @@ function saveHireDate(name, value, td) {
   const dates = getHireDates();
   if (value) { dates[name] = value; } else { delete dates[name]; }
   saveHireDates(dates);
-  // Update cell display
+  // Format as MM/DD/YYYY for display
+  const display = value ? formatHireDate(value) : null;
   if (td) {
-    td.innerHTML = value
-      ? '<span style="color:var(--text)">' + value + '</span>'
+    td.innerHTML = display
+      ? '<span style="color:var(--text)">' + display + '</span>'
       : '<span style="color:var(--text3);font-style:italic">Click to add</span>';
   }
+}
+
+function formatHireDate(val) {
+  if (!val) return '';
+  // val is YYYY-MM-DD from date input
+  const parts = val.split('-');
+  if (parts.length === 3) return parts[1] + '/' + parts[2] + '/' + parts[0];
+  return val;
 }
 
 function renderRoster() {
@@ -3295,7 +3304,7 @@ function renderRoster() {
     const mc = MGR_COLORS[r.manager] || '#888';
     const safeId = r.name.replace(/[^a-zA-Z0-9]/g,'_');
     const hireDate = getHireDate(r.name);
-    const hireDateDisplay = hireDate ? hireDate : '<span style=\'color:var(--text3);font-style:italic\'>Click to add</span>';
+    const hireDateDisplay = hireDate ? formatHireDate(hireDate) : '<span style=\'color:var(--text3);font-style:italic\'>Click to add</span>';
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.name}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
