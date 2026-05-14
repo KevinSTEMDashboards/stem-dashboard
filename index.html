@@ -3236,6 +3236,33 @@ function restoreRecruiter(name) {
 
 // Render roster tab
 // ─── HIRE DATE MANAGEMENT ───
+// Pre-populated seniority dates — only set if not already saved by user
+const PRESET_HIRE_DATES = {
+  "Aidan (AJ) Smith":"2025-07-14","Amanda Panizzut":"2025-07-28","Amy Orndorff":"2022-05-02",
+  "Andraea Hagadorn":"2023-01-20","Andy Dalmau":"2016-11-14","Anthony Ginnis":"2022-02-28",
+  "Barry Andis":"2008-02-11","Benjamin Grover":"2017-09-18","Brett Schuber":"2019-01-07",
+  "Briana Moglia":"2021-11-29","Briana Siler":"2021-12-08","Brittany Youlden":"2024-10-21",
+  "Drew Barker":"2022-01-05","Erin Cadden":"2022-08-08","Felipe Parra":"2021-09-13",
+  "Gary Prestipino":"2008-02-25","Heather McRae":"2014-07-07","Heather Stevens":"2022-08-22",
+  "Helen Phillips":"2003-02-07","Henry Schibli":"2025-02-10","Jared Pliskow":"2026-03-16",
+  "Jason Beir":"2020-10-01","Jenna Katz":"2022-06-27","Jessica Mema":"2021-11-01",
+  "Jessica Paden":"2024-01-29","Jessica Parker":"2026-02-16","Jillian Dunn":"2014-08-18",
+  "John Gorsuch":"2022-09-12","Joseph Paolozzi":"2014-06-16","Justin LaSorsa":"2024-02-19",
+  "Kaitlyn Moreschi":"2022-01-31","Kyle McMahon":"2023-05-10","Lazaro Calderin":"2016-10-31",
+  "Logan Rayburn":"2025-07-14","Madison Garra":"2024-03-11","Marisa Harthun":"2022-12-05",
+  "Megan Curtis":"2025-12-01","Michael Brennan":"2020-01-13","Michael Sheahan":"2020-10-12",
+  "Noah Simon":"2021-01-11","Paige Atkinson":"2019-02-11","Peter Costello":"2026-03-30",
+  "Rachel Hewitt":"2026-01-05","Rebecca Schopfer":"2022-06-27","Sam Royall":"2021-08-04",
+  "Samuel Simon":"2021-08-30","Sitara Ramessar":"2022-07-18","Stephen Pemberton":"2025-12-15",
+  "Taylor Durrill":"2024-03-26","Tiffany Silgas":"2026-01-14","Tyler Rostad":"2020-06-15",
+  "William Payton":"2018-07-30","Zachary Jacobson":"2018-04-02"
+};
+// Merge presets with any user edits — user edits always win
+(function(){
+  const existing = JSON.parse(safeGet('stemHireDates')||'{}');
+  const merged = Object.assign({}, PRESET_HIRE_DATES, existing);
+  safeSet('stemHireDates', JSON.stringify(merged));
+})();
 function getHireDates() { return JSON.parse(safeGet('stemHireDates') || '{}'); }
 function saveHireDates(d) { safeSet('stemHireDates', JSON.stringify(d)); }
 function getHireDate(name) { return getHireDates()[name] || ''; }
