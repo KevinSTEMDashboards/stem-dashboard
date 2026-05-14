@@ -823,7 +823,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Total subs</th><th>Total IVs</th><th>Starts</th><th>4-wk avg</th><th>Date Hired</th><th></th>
+            <th>Name</th><th>Manager</th><th>Total subs</th><th>Total IVs</th><th>Starts</th><th>4-wk avg</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
           </tr></thead>
           <tbody id="roster-active-body"></tbody>
         </table>
@@ -3298,10 +3298,43 @@ function saveHireDate(name, value, td) {
 
 function formatHireDate(val) {
   if (!val) return '';
-  // val is YYYY-MM-DD from date input
   const parts = val.split('-');
   if (parts.length === 3) return parts[1] + '/' + parts[2] + '/' + parts[0];
   return val;
+}
+
+function calcTenure(isoDate) {
+  if (!isoDate) return '';
+  const hired = new Date(isoDate + 'T00:00:00');
+  const now = new Date();
+  let years = now.getFullYear() - hired.getFullYear();
+  let months = now.getMonth() - hired.getMonth();
+  if (months < 0) { years--; months += 12; }
+  if (now.getDate() < hired.getDate()) { months--; if (months < 0) { years--; months += 12; } }
+  if (years === 0 && months === 0) return '< 1 mo';
+  if (years === 0) return months + ' mo';
+  if (months === 0) return years + ' yr';
+  return years + '.' + months.toString().padStart(2,'0') + ' yrs';
+}
+
+function calcNextAnniversary(isoDate) {
+  if (!isoDate) return '';
+  const hired = new Date(isoDate + 'T00:00:00');
+  const now = new Date();
+  // Find next anniversary
+  let nextAnn = new Date(now.getFullYear(), hired.getMonth(), hired.getDate());
+  if (nextAnn <= now) nextAnn = new Date(now.getFullYear() + 1, hired.getMonth(), hired.getDate());
+  const diffMs = nextAnn - now;
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const months = Math.floor(diffDays / 30);
+  const days = diffDays % 30;
+  const annYear = nextAnn.getFullYear() - hired.getFullYear();
+  const suffix = annYear === 1 ? '1st' : annYear === 2 ? '2nd' : annYear === 3 ? '3rd' : annYear + 'th';
+  if (diffDays === 0) return '🎉 Today! (' + suffix + ')';
+  if (diffDays <= 30) return diffDays + 'd (' + suffix + ')';
+  if (months === 0) return days + 'd (' + suffix + ')';
+  if (days === 0) return months + 'mo (' + suffix + ')';
+  return months + 'mo ' + days + 'd (' + suffix + ')';
 }
 
 function renderRoster() {
@@ -3332,6 +3365,10 @@ function renderRoster() {
     const safeId = r.name.replace(/[^a-zA-Z0-9]/g,'_');
     const hireDate = getHireDate(r.name);
     const hireDateDisplay = hireDate ? formatHireDate(hireDate) : '<span style=\'color:var(--text3);font-style:italic\'>Click to add</span>';
+    const tenureDisplay = hireDate ? calcTenure(hireDate) : '<span style=\'color:var(--text3)\'>—</span>';
+    const annivDisplay = hireDate ? calcNextAnniversary(hireDate) : '<span style=\'color:var(--text3)\'>—</span>';
+    // Color anniversary urgency
+    const annivColor = !hireDate ? 'var(--text3)' : calcNextAnniversary(hireDate).startsWith('🎉') ? 'var(--green)' : parseInt(calcNextAnniversary(hireDate)) <= 30 ? 'var(--amber)' : 'var(--text2)';
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.name}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
@@ -3340,11 +3377,13 @@ function renderRoster() {
       <td><strong>${r.totalStarts}</strong></td>
       <td>${r.avgSub4w.toFixed(1)}</td>
       <td id="dh_${safeId}" onclick="editHireDate('${r.name.replace(/'/g,"\\'")}', this)" style="cursor:pointer;min-width:110px;color:${hireDate?'var(--text)':'var(--text3)'}" title="Click to edit date hired">${hireDateDisplay}</td>
+      <td style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">${tenureDisplay}</td>
+      <td style="font-size:12px;font-weight:600;color:${annivColor};white-space:nowrap">${annivDisplay}</td>
       <td style="text-align:right;white-space:nowrap">
         <button class="btn" onclick="promptArchive('${r.name.replace(/'/g,"\\'")}')" style="font-size:10px;height:24px;padding:0 8px;color:var(--amber)">📦 Archive</button>
       </td>
     </tr>`
-  }).join('') || `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text3)">No recruiters match this filter.</td></tr>`;
+  }).join('') || `<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--text3)">No recruiters match this filter.</td></tr>`;
 
   // Archived recruiters table
   const archived = archivedRecruiters.filter(r => (!mgrF || r.manager === mgrF) && (!q || r.name.toLowerCase().includes(q)));
