@@ -962,67 +962,87 @@ async function readTab(tabName) {
 }
 
 // ── Parse a sheet tab into {name → weekly array} ──
-// Auto-detects where data starts by finding the first row with a recognizable recruiter name
 function parseTab(rows, tabName) {
   const result = {};
   if (!rows || !rows.length) return result;
 
-  // Auto-detect the data start row — find first row where col0 looks like a name
-  // (not empty, not "Recruiter", not "Total", not a number)
-  let headerRows = 0;
-  for (let ri = 0; ri < Math.min(10, rows.length); ri++) {
-    const col0 = (rows[ri][0] || '').toString().trim();
-    const col1 = (rows[ri][1] || '').toString().trim();
-    if (col0 && col1 && col0 !== 'Recruiter' && col0 !== 'Total' && col0 !== 'Average'
-        && col0 !== 'Name' && isNaN(col0) && col1 !== 'Manager') {
-      headerRows = ri;
-      break;
-    }
-    headerRows = ri + 1;
+  // Columns to always skip regardless of position
+  const SKIP_WORDS = ['total','avg','average','ytd','ratio','since','pace','%',
+                      'last start','wks since','notes'];
+  function isSkip(h) {
+    const lo = h.toLowerCase().trim();
+    if (!lo) return false; // blank headers inside the week range are kept
+    return SKIP_WORDS.some(s => lo.includes(s));
   }
 
-  // Auto-detect data start column — find first column that looks like week data (numeric or blank after col1)
-  // Skip: col0=name, col1=manager, then any summary cols (Total, Avg, etc.) before weekly data
-  // Heuristic: weekly data cols contain mostly numbers or blanks, header row has "Wk" or week numbers
-  let dataStart = 2; // minimum: after name and manager
-  if (rows[0]) {
-    for (let ci = 2; ci < Math.min(rows[0].length, 10); ci++) {
-      const header = (rows[0][ci] || '').toString().trim().toLowerCase();
-      if (header.startsWith('wk') || header.match(/^w\d/) || header.match(/^\d+$/) || header === '') {
-        dataStart = ci;
-        break;
-      }
-      // Skip known summary columns
-      if (header.includes('total') || header.includes('avg') || header.includes('average') ||
-          header.includes('since') || header.includes('ytd') || header.includes('ratio')) continue;
-      dataStart = ci;
-      break;
+  // Find header row — scan first 5 rows, pick the one with the most non-skip cols after col 1
+  let headerRowIdx = 0;
+  let bestScore = -1;
+  for (let ri = 0; ri < Math.min(5, rows.length); ri++) {
+    let score = 0;
+    for (let ci = 2; ci < (rows[ri]||[]).length; ci++) {
+      const h = (rows[ri][ci]||'').toString().trim();
+      if (h && !isSkip(h)) score++;
+    }
+    if (score > bestScore) { bestScore = score; headerRowIdx = ri; }
+  }
+
+  const headerRow = rows[headerRowIdx] || [];
+
+  // Build week column list: include col if header is non-skip AND non-blank,
+  // OR if it's blank but between two valid week cols (sparse data)
+  // Strategy: find first and last valid week col, include everything between
+  let firstWeekCol = -1, lastWeekCol = -1;
+  for (let ci = 2; ci < headerRow.length; ci++) {
+    const h = (headerRow[ci]||'').toString().trim();
+    if (h && !isSkip(h)) {
+      if (firstWeekCol === -1) firstWeekCol = ci;
+      lastWeekCol = ci;
     }
   }
 
-  for (let ri = headerRows; ri < rows.length; ri++) {
+  // If we found a range, include ALL columns in that range (even blank-header ones between weeks)
+  // but still skip named non-week columns
+  const weekColIndices = [];
+  if (firstWeekCol !== -1) {
+    for (let ci = firstWeekCol; ci <= lastWeekCol; ci++) {
+      const h = (headerRow[ci]||'').toString().trim();
+      if (!isSkip(h)) weekColIndices.push(ci);
+    }
+  }
+
+  // Fallback
+  if (weekColIndices.length === 0) {
+    for (let ci = 2; ci < 30; ci++) weekColIndices.push(ci);
+  }
+
+  // First data row
+  let firstDataRow = headerRowIdx + 1;
+
+  for (let ri = firstDataRow; ri < rows.length; ri++) {
     const row = rows[ri];
-    const name = (row[0] || '').trim();
-    const mgr  = (row[1] || '').trim();
-    if (!name || !mgr || name === 'Recruiter' || name === 'Total' || name === 'Average'
-        || name === 'Averages:' || name === 'Name') continue;
-    const weekly = [];
-    for (let ci = dataStart; ci < row.length; ci++) {
-      const v = (row[ci] || '').toString().trim();
-      if (v === '' || v === 'No Starts' || v === 'Need Data' || v === '#DIV/0!' || v === '#VALUE!') {
-        weekly.push(null);
-      } else {
-        const n = parseInt(v);
-        weekly.push(isNaN(n) ? null : n);
-      }
-    }
-    // Trim trailing nulls
+    const name = (row[0]||'').trim();
+    const mgr  = (row[1]||'').trim();
+    if (!name || !mgr) continue;
+    const lo = name.toLowerCase();
+    if (lo === 'recruiter' || lo === 'total' || lo === 'average' ||
+        lo === 'averages:' || lo === 'name' || !isNaN(name)) continue;
+
+    const weekly = weekColIndices.map(ci => {
+      const v = (row[ci]||'').toString().trim();
+      if (!v || v === 'No Starts' || v === 'Need Data' ||
+          v.startsWith('#') || v === 'N/A') return null;
+      const n = parseInt(v);
+      return isNaN(n) ? null : n;
+    });
+
     let last = -1;
     for (let i = 0; i < weekly.length; i++) if (weekly[i] !== null) last = i;
-    result[name] = { manager: mgr, weekly: weekly.slice(0, last + 1) };
+    result[name] = { manager: mgr, weekly: last >= 0 ? weekly.slice(0, last+1) : [] };
   }
   return result;
 }
+
 
 // ── Load all tabs and merge into RECRUITERS array ──
 async function loadFromSheets() {
