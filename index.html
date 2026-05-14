@@ -473,7 +473,7 @@ td.editing{padding:2px 4px!important}
   <div class="tab" data-tab="entry">Add Weekly Data</div>
   <div class="tab" data-tab="trends">Trends &amp; Insights</div>
   <div class="tab" data-tab="leaderboard">🏆 Leaderboard</div>
-  <div class="tab" data-tab="roster">Roster</div>
+  <div class="tab" data-tab="roster" id="roster-tab" style="display:none">Roster</div>
 </div>
 
 <main>
@@ -823,7 +823,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Total subs</th><th>Total IVs</th><th>Starts</th><th>4-wk avg</th><th>Status</th><th>Date Hired</th><th></th>
+            <th>Name</th><th>Manager</th><th>Total subs</th><th>Total IVs</th><th>Starts</th><th>4-wk avg</th><th>Date Hired</th><th></th>
           </tr></thead>
           <tbody id="roster-active-body"></tbody>
         </table>
@@ -2681,6 +2681,10 @@ function updateAuthUI() {
     ac.innerHTML = `<button class="btn btn-primary" onclick="showLogin()" style="font-size:12px;height:30px;padding:0 12px;white-space:nowrap">🔓 Sign in</button>`;
   }
 
+  // Show roster tab only when logged in
+  const rosterTab = document.getElementById('roster-tab');
+  if (rosterTab) rosterTab.style.display = isEditor ? '' : 'none';
+
   // Show/hide entry gate
   const gate = document.getElementById('entry-auth-gate');
   const content = document.getElementById('entry-content');
@@ -2745,7 +2749,16 @@ function attemptLogin() {
 function signOut() {
   setSession(null);
   const activeTab = document.querySelector('.tab.active');
-  if (activeTab && activeTab.dataset.tab === 'entry') updateAuthUI();
+  // If on a restricted tab, go back to overview
+  if (activeTab && (activeTab.dataset.tab === 'entry' || activeTab.dataset.tab === 'roster')) {
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));
+    document.querySelector('.tab[data-tab="overview"]').classList.add('active');
+    document.getElementById('tab-overview').classList.add('active');
+    document.querySelector('.filter-bar').style.display = '';
+    renderOverview();
+  }
+  updateAuthUI();
 }
 
 // ─── TOTP MFA (RFC 6238) — pure JS, no server needed ───
@@ -3222,6 +3235,39 @@ function restoreRecruiter(name) {
 }
 
 // Render roster tab
+// ─── HIRE DATE MANAGEMENT ───
+function getHireDates() { return JSON.parse(safeGet('stemHireDates') || '{}'); }
+function saveHireDates(d) { safeSet('stemHireDates', JSON.stringify(d)); }
+function getHireDate(name) { return getHireDates()[name] || ''; }
+
+function editHireDate(name, td) {
+  if (!currentUser) return;
+  const current = getHireDate(name);
+  const safeId = name.replace(/[^a-zA-Z0-9]/g,'_');
+  td.innerHTML = '<input type="date" id="hd_inp_'+safeId+'" value="'+(current||'')+'" style="height:26px;font-size:11px;width:130px;padding:0 4px" />';
+  const inp = td.querySelector('input');
+  if (inp) {
+    inp.focus();
+    inp.addEventListener('blur', function() { saveHireDate(name, inp.value, td); });
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') inp.blur();
+      if (e.key === 'Escape') { inp.value = current; inp.blur(); }
+    });
+  }
+}
+
+function saveHireDate(name, value, td) {
+  const dates = getHireDates();
+  if (value) { dates[name] = value; } else { delete dates[name]; }
+  saveHireDates(dates);
+  // Update cell display
+  if (td) {
+    td.innerHTML = value
+      ? '<span style="color:var(--text)">' + value + '</span>'
+      : '<span style="color:var(--text3);font-style:italic">Click to add</span>';
+  }
+}
+
 function renderRoster() {
   const isEditor = !!currentUser;
   document.getElementById('roster-auth-gate').style.display = isEditor ? 'none' : 'block';
@@ -3247,9 +3293,9 @@ function renderRoster() {
   }
   tbody.innerHTML = all.map(r => {
     const mc = MGR_COLORS[r.manager] || '#888';
-    const pc = r.status === 'green' ? 'pg' : r.status === 'amber' ? 'pa' : 'pr';
-    const pl = r.status === 'green' ? 'On Target' : r.status === 'amber' ? 'Below Target' : 'Needs Attention';
-    const addedTag = r.isNew ? `<span style="font-size:10px;color:var(--text3)">${r.addedOn || '—'}</span>` : '<span style="font-size:10px;color:var(--text3)">—</span>';
+    const safeId = r.name.replace(/[^a-zA-Z0-9]/g,'_');
+    const hireDate = getHireDate(r.name);
+    const hireDateDisplay = hireDate ? hireDate : '<span style=\'color:var(--text3);font-style:italic\'>Click to add</span>';
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.name}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
@@ -3257,12 +3303,11 @@ function renderRoster() {
       <td>${r.totalIvs}</td>
       <td><strong>${r.totalStarts}</strong></td>
       <td>${r.avgSub4w.toFixed(1)}</td>
-      <td><span class="pill ${pc}">${pl}</span></td>
-      <td>${addedTag}</td>
+      <td id="dh_${safeId}" onclick="editHireDate('${r.name.replace(/'/g,"\\'")}', this)" style="cursor:pointer;min-width:110px;color:${hireDate?'var(--text)':'var(--text3)'}" title="Click to edit date hired">${hireDateDisplay}</td>
       <td style="text-align:right;white-space:nowrap">
         <button class="btn" onclick="promptArchive('${r.name.replace(/'/g,"\\'")}')" style="font-size:10px;height:24px;padding:0 8px;color:var(--amber)">📦 Archive</button>
       </td>
-    </tr>`;
+    </tr>`
   }).join('') || `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text3)">No recruiters match this filter.</td></tr>`;
 
   // Archived recruiters table
