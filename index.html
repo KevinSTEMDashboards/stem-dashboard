@@ -816,6 +816,22 @@ td.editing{padding:2px 4px!important}
       <button class="btn btn-primary" onclick="openAddRecModal()" style="height:32px;font-size:12px">+ Add recruiter</button>
       <select id="roster-mgr-filter" onchange="renderRoster()" style="height:32px;font-size:12px"><option value="">All managers</option></select>
       <input type="text" id="roster-search" placeholder="Search…" onchange="renderRoster()" oninput="renderRoster()" style="width:150px;height:32px;font-size:12px">
+      <select id="roster-sort" onchange="renderRoster()" style="height:32px;font-size:12px">
+        <option value="name">Sort: Name (A→Z)</option>
+        <option value="name-desc">Sort: Name (Z→A)</option>
+        <option value="tenure-desc">Sort: Tenure (longest first)</option>
+        <option value="tenure-asc">Sort: Tenure (newest first)</option>
+        <option value="anniv-asc">Sort: Anniversary (soonest first)</option>
+        <option value="starts-desc">Sort: Starts (most first)</option>
+        <option value="subs-desc">Sort: Subs (most first)</option>
+      </select>
+      <select id="roster-anniv-filter" onchange="renderRoster()" style="height:32px;font-size:12px">
+        <option value="">All anniversaries</option>
+        <option value="30">Anniversary in 30 days</option>
+        <option value="60">Anniversary in 60 days</option>
+        <option value="90">Anniversary in 90 days</option>
+        <option value="today">Anniversary today 🎉</option>
+      </select>
     </div>
 
     <div class="section-hdr">👥 Active recruiters</div>
@@ -3351,8 +3367,52 @@ function renderRoster() {
 
   const mgrF = document.getElementById('roster-mgr-filter').value;
   const q = document.getElementById('roster-search').value.toLowerCase();
+  const sortBy = document.getElementById('roster-sort') ? document.getElementById('roster-sort').value : 'name';
+  const annivFilter = document.getElementById('roster-anniv-filter') ? document.getElementById('roster-anniv-filter').value : '';
 
-  const all = computedAll().filter(r => (!mgrF || r.manager === mgrF) && (!q || r.name.toLowerCase().includes(q)));
+  // Base filter
+  let all = computedAll().filter(r => (!mgrF || r.manager === mgrF) && (!q || r.name.toLowerCase().includes(q)));
+
+  // Anniversary filter
+  if (annivFilter) {
+    all = all.filter(r => {
+      const hd = getHireDate(r.name);
+      if (!hd) return false;
+      const hired = new Date(hd + 'T00:00:00');
+      const now = new Date();
+      let nextAnn = new Date(now.getFullYear(), hired.getMonth(), hired.getDate());
+      if (nextAnn <= now) nextAnn = new Date(now.getFullYear() + 1, hired.getMonth(), hired.getDate());
+      const diffDays = Math.ceil((nextAnn - now) / (1000*60*60*24));
+      if (annivFilter === 'today') return diffDays === 0;
+      return diffDays <= parseInt(annivFilter);
+    });
+  }
+
+  // Sort
+  all = all.slice().sort((a, b) => {
+    if (sortBy === 'name') return a.name.localeCompare(b.name);
+    if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
+    if (sortBy === 'tenure-desc' || sortBy === 'tenure-asc') {
+      const da = getHireDate(a.name) || '9999';
+      const db = getHireDate(b.name) || '9999';
+      return sortBy === 'tenure-desc' ? da.localeCompare(db) : db.localeCompare(da);
+    }
+    if (sortBy === 'anniv-asc') {
+      const now = new Date();
+      const getDays = r => {
+        const hd = getHireDate(r.name);
+        if (!hd) return 999;
+        const hired = new Date(hd + 'T00:00:00');
+        let nextAnn = new Date(now.getFullYear(), hired.getMonth(), hired.getDate());
+        if (nextAnn <= now) nextAnn = new Date(now.getFullYear()+1, hired.getMonth(), hired.getDate());
+        return Math.ceil((nextAnn - now)/(1000*60*60*24));
+      };
+      return getDays(a) - getDays(b);
+    }
+    if (sortBy === 'starts-desc') return b.totalStarts - a.totalStarts;
+    if (sortBy === 'subs-desc') return b.totalSubs - a.totalSubs;
+    return a.name.localeCompare(b.name);
+  });
 
   // Active recruiters table
   const tbody = document.getElementById('roster-active-body');
