@@ -3611,11 +3611,18 @@ function renderManagers(){
       return o===0?(nv>0?100:0):((nv-o)/o)*100;
     };
     var ts=0,tiv=0,tpl=0,tst=0;
-    for(var ti=0;ti<team.length;ti++){ts+=team[ti].totalSubs;tiv+=team[ti].totalIvs;tpl+=team[ti].totalPlacements;tst+=team[ti].totalStarts;}
+    // Use windowed data so KPI cards reflect the selected range, not always YTD
+    var wSubs=getW(subsW),wIvs=getW(ivsW),wPl=getW(plW),wSt=getW(stW);
+    ts=wSubs.reduce(function(a,b){return a+b;},0);
+    tiv=wIvs.reduce(function(a,b){return a+b;},0);
+    tpl=wPl.reduce(function(a,b){return a+b;},0);
+    tst=wSt.reduce(function(a,b){return a+b;},0);
     var a4=team.length?team.reduce(function(s,r){return s+r.avgSub4w;},0)/team.length:0;
-    var ws=getW(subsW),wst=getW(stW);
+    var ws=getW(subsW),wiv=getW(ivsW),wpl=getW(plW),wst=getW(stW);
+    var wld=getW((function(){var ldW=[];for(var wi=0;wi<nW;wi++){var l=0;for(var ti=0;ti<team.length;ti++)l+=((team[ti].leads||[])[wi]||0);ldW.push(l);}return ldW;})());
     mgrData[m]={team:team,subsW:subsW,ivsW:ivsW,plW:plW,stW:stW,ts:ts,tiv:tiv,tpl:tpl,tst:tst,
-      s2s:tst>0?ts/tst:null,a4:a4,slS:slp(ws),slSt:slp(wst),pcS:pct(ws)};
+      s2s:tst>0?ts/tst:null,a4:a4,
+      slS:slp(ws),slIv:slp(wiv),slPl:slp(wpl),slSt:slp(wst),slLd:slp(wld),pcS:pct(ws)};
   });
 
   // Sort managers by selected metric
@@ -3720,23 +3727,54 @@ function renderManagers(){
       var bg=sl>0.1?'var(--green-bg)':sl<-0.1?'var(--red-bg)':'var(--bg3)';
       var col=sl>0.1?'var(--green)':sl<-0.1?'var(--red)':'var(--text3)';
       var ar=sl>0.1?'&#8593;':sl<-0.1?'&#8595;':'&#8594;';
-      return '<span class="mgr-trend-chip" style="background:'+bg+';color:'+col+'">'+ar+' '+lbl+'</span>';
+      var tip=sl>0.1?lbl+' trending up — weekly totals increasing across the selected window':sl<-0.1?lbl+' trending down — weekly totals decreasing across the selected window':lbl+' trending flat — no significant change across the selected window';
+      return '<span class="mgr-trend-chip" style="background:'+bg+';color:'+col+';cursor:help" title="'+tip+'">'+ar+' '+lbl+'</span>';
     }
 
-    var rows=d.team.map(function(r){
-      var pc=r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
-      var pl=r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
-      var bw=Math.min(100,Math.round((r.avgSub4w/15)*100));
+    // Compute windowed value per recruiter for the selected sort metric
+    var SORT_METRICS = [
+      {key:'subs',       label:'Subs',    color:'var(--c-subs)'},
+      {key:'ivs',        label:'IVs',     color:'var(--c-ivs)'},
+      {key:'placements', label:'Pl.',     color:'var(--purple)'},
+      {key:'starts',     label:'Starts',  color:'var(--c-starts)'},
+      {key:'leads',      label:'Leads',   color:'var(--c-leads)'}
+    ];
+    // Read active sort metric from card-level state (default: starts)
+    var cardSortKey = (window._mgrCardSort && window._mgrCardSort[m]) || 'starts';
+
+    var recWindowed=d.team.map(function(r){
+      var stArr=(r.starts||[]).filter(function(x){return x!=null;});
+      var stSlice=w==='all'?stArr:stArr.slice(-parseInt(w));
+      var stTot=stSlice.reduce(function(a,b){return a+b;},0);
+      // Windowed value for the active sort metric
+      var metArr=(r[cardSortKey]||[]).filter(function(x){return x!=null;});
+      var metSlice=w==='all'?metArr:metArr.slice(-parseInt(w));
+      var metTot=metSlice.reduce(function(a,b){return a+b;},0);
+      return {r:r, stTot:stTot, metTot:metTot};
+    });
+    // Sort by active metric descending
+    recWindowed.sort(function(a,b){return b.metTot-a.metTot;});
+    var top=recWindowed.slice().sort(function(a,b){return b.stTot-a.stTot;})[0];
+
+    // Build sort toggle buttons
+    var sortBtns = SORT_METRICS.map(function(sm){
+      var active = sm.key === cardSortKey;
+      return '<button onclick="window._mgrCardSort=window._mgrCardSort||{};window._mgrCardSort[\''+m+'\']='+"'"+sm.key+"'"+';renderManagers();" style="font-size:10px;height:22px;padding:0 8px;border-radius:100px;border:1px solid '+(active?'transparent':' var(--border2)')+';background:'+(active?'var(--accent)':'var(--bg2)')+';color:'+(active?'#fff':'var(--text3)')+';cursor:pointer;white-space:nowrap">'+sm.label+'</button>';
+    }).join('');
+
+    var rows=recWindowed.map(function(rw){
+      var r=rw.r,metTot=rw.metTot;
+      var activeMeta = SORT_METRICS.find(function(sm){return sm.key===cardSortKey;})||SORT_METRICS[0];
+      var bw=Math.min(100,recWindowed.length>0?Math.round((metTot/Math.max(1,recWindowed[0].metTot))*100):0);
       return '<div class="mgr-recruiter-row">'
         +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
           +'<div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:3px">'
-            +'<div style="height:3px;background:'+mc+';border-radius:2px;width:'+bw+'%;opacity:.65"></div>'
+            +'<div style="height:3px;background:'+activeMeta.color+';border-radius:2px;width:'+bw+'%;opacity:.75"></div>'
           +'</div>'
         +'</div>'
-        +'<div style="display:flex;gap:8px;margin-left:10px;align-items:center;flex-shrink:0">'
-          +'<span style="font-size:11px;color:var(--text3);min-width:22px;text-align:right">'+r.totalStarts+' st</span>'
-          +'<span class="pill '+pc+'" style="font-size:9px">'+pl+'</span>'
+        +'<div style="margin-left:10px;flex-shrink:0;text-align:right">'
+          +'<span style="font-size:11px;font-weight:600;color:'+activeMeta.color+'">'+metTot+' '+activeMeta.label+'</span>'
         +'</div>'
       +'</div>';
     }).join('');
@@ -3749,22 +3787,21 @@ function renderManagers(){
         +'</div>'
         +(top?'<div style="text-align:right">'
           +'<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Top performer</div>'
-          +'<div style="font-size:13px;font-weight:700;color:var(--text)">'+top.name.split(' ')[0]+'</div>'
-          +'<div style="font-size:10px;color:var(--text3)">'+top.totalStarts+' starts</div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--text)">'+top.r.name.split(' ')[0]+'</div>'
+          +'<div style="font-size:10px;color:var(--text3)">'+top.stTot+' starts</div>'
         +'</div>':'')
       +'</div>'
       +'<div class="mgr-stat-grid">'
         +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-subs)">'+d.ts+'</div><div class="mgr-stat-lbl">Subs</div></div>'
         +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-ivs)">'+d.tiv+'</div><div class="mgr-stat-lbl">IVs</div></div>'
+        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--purple)">'+d.tpl+'</div><div class="mgr-stat-lbl">Placements</div></div>'
         +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-starts)">'+d.tst+'</div><div class="mgr-stat-lbl">Starts</div></div>'
-        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-leads)">'+d.a4.toFixed(1)+'</div><div class="mgr-stat-lbl">4-wk avg</div></div>'
+        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-leads)">'+d.a4.toFixed(1)+'</div><div class="mgr-stat-lbl">4-wk Sub Average</div></div>'
       +'</div>'
-      +'<div class="mgr-trend-row">'
-        +chip(d.slS,'Subs')+chip(d.slSt,'Starts')
-        +'<span class="mgr-trend-chip" style="background:var(--green-bg);color:var(--green)">'+onT+' on target</span>'
-        +(attn?'<span class="mgr-trend-chip" style="background:var(--amber-bg);color:var(--amber)">'+attn+' watch</span>':'')
-        +(blw?'<span class="mgr-trend-chip" style="background:var(--red-bg);color:var(--red)">'+blw+' action</span>':'')
+      +'<div class="mgr-trend-row" style="margin-bottom:6px">'
+        +chip(d.slS,'Subs')+chip(d.slIv,'IVs')+chip(d.slPl,'Placements')+chip(d.slSt,'Starts')+chip(d.slLd,'Leads')
       +'</div>'
+      +'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">'+sortBtns+'</div>'
       +'<div class="mgr-recruiter-list">'+rows+'</div>'
     +'</div>';
   }).join('');
