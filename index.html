@@ -989,9 +989,9 @@ function parseTab(rows, tabName) {
 
   const headerRow = rows[headerRowIdx] || [];
 
-  // Build week column list: include col if header is non-skip AND non-blank,
-  // OR if it's blank but between two valid week cols (sparse data)
-  // Strategy: find first and last valid week col, include everything between
+  // Build week column list: find first and last non-skip, non-blank header
+  // then include everything between (even blank-header cols within the range)
+  // but STOP at the last non-blank header to avoid trailing empty columns
   let firstWeekCol = -1, lastWeekCol = -1;
   for (let ci = 2; ci < headerRow.length; ci++) {
     const h = (headerRow[ci]||'').toString().trim();
@@ -1037,7 +1037,7 @@ function parseTab(rows, tabName) {
     });
 
     let last = -1;
-    for (let i = 0; i < weekly.length; i++) if (weekly[i] !== null) last = i;
+    for (let i = 0; i < weekly.length; i++) if (weekly[i] !== null && weekly[i] > 0) last = i;
     result[name] = { manager: mgr, weekly: last >= 0 ? weekly.slice(0, last+1) : [] };
   }
   return result;
