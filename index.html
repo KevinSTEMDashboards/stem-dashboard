@@ -1231,7 +1231,7 @@ function getOAuthToken() {
     // Open OAuth popup
     const w = 500, h = 600;
     const left = (screen.width - w) / 2, top = (screen.height - h) / 2;
-    const redirectUri = window.location.origin + window.location.pathname;
+    const redirectUri = 'https://kevinstemdashboards.github.io/stem-dashboard';
     const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
       + '?client_id=' + OAUTH_CLIENT_ID
       + '&redirect_uri=' + encodeURIComponent(redirectUri)
