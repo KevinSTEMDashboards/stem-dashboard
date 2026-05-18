@@ -206,6 +206,25 @@ tbody tr:nth-child(even):hover td{background:var(--bg2)}
 .tag-watch{background:var(--amber-bg);color:var(--amber)}
 .trend-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
 .trends-empty{text-align:center;padding:32px;color:var(--text3);font-size:13px}
+/* Org Chart */
+.org-wrap{display:flex;flex-direction:column;align-items:center;gap:0;min-width:max-content}
+.org-vp{background:linear-gradient(135deg,var(--accent),#7c3aed);border-radius:12px;padding:14px 22px;text-align:center;color:#fff;min-width:200px;box-shadow:0 4px 16px rgba(79,142,247,.35)}
+.org-vp-name{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.org-vp-title{font-size:10px;opacity:.8;margin-top:3px;text-transform:uppercase;letter-spacing:.06em}
+.org-connector-down{width:2px;height:32px;background:var(--border2);margin:0 auto}
+.org-managers-row{display:flex;gap:16px;align-items:flex-start;justify-content:center}
+.org-manager-col{display:flex;flex-direction:column;align-items:center;gap:0}
+.org-mgr-card{border-radius:10px;padding:10px 16px;text-align:center;min-width:140px;border:2px solid;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.org-mgr-name{font-size:12px;font-weight:800}
+.org-mgr-sub{font-size:10px;margin-top:2px;opacity:.75}
+.org-recruiter-list{display:flex;flex-direction:column;gap:5px;margin-top:0;padding-top:0}
+.org-rec-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;min-width:160px;max-width:200px;cursor:pointer;transition:background .15s}
+.org-rec-card:hover{background:var(--bg2)}
+.org-rec-name{font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.org-rec-sub{font-size:10px;color:var(--text3);margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.org-line-v{width:2px;height:12px;margin:0 auto;background:var(--border2)}
+.org-line-h-wrap{display:flex;align-items:center;justify-content:center;width:100%}
+.org-branch-line{height:2px;background:var(--border2);flex:1}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* Leaderboard */
 .lb-card{background:var(--bg);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow);overflow:hidden}
@@ -474,6 +493,7 @@ td.editing{padding:2px 4px!important}
   <div class="tab" data-tab="trends">Trends &amp; Insights</div>
   <div class="tab" data-tab="leaderboard">🏆 Leaderboard</div>
   <div class="tab" data-tab="roster" id="roster-tab" style="display:none">Roster</div>
+  <div class="tab" data-tab="orgchart" id="orgchart-tab" style="display:none">🗂 Org Chart</div>
 </div>
 
 <main>
@@ -803,6 +823,11 @@ td.editing{padding:2px 4px!important}
   </div>
 </div>
 
+<!-- ORG CHART -->
+<div class="tab-panel" id="tab-orgchart">
+  <div id="orgchart-wrap" style="overflow-x:auto;padding:20px 10px"></div>
+</div>
+
 <!-- ROSTER MANAGEMENT -->
 <div class="tab-panel" id="tab-roster">
   <div id="roster-auth-gate" style="display:none;text-align:center;padding:48px 20px">
@@ -929,13 +954,13 @@ function safeDel(k) {
 }
 var _sess = {};
 function sessGet(k) {
-  try { return sessionStorage.getItem(k); } catch(e) { return _sess[k] || null; }
+  try { return localStorage.getItem(k); } catch(e) { return _sess[k] || null; }
 }
 function sessSet(k, v) {
-  try { sessionStorage.setItem(k, v); } catch(e) { _sess[k] = v; }
+  try { localStorage.setItem(k, v); } catch(e) { _sess[k] = v; }
 }
 function sessRemove(k) {
-  try { sessionStorage.removeItem(k); } catch(e) { delete _sess[k]; }
+  try { localStorage.removeItem(k); } catch(e) { delete _sess[k]; }
 }
 
 // ─── GOOGLE SHEETS CONFIGURATION ───
@@ -1533,6 +1558,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     if(t.dataset.tab==='trends')renderTrends();
     if(t.dataset.tab==='leaderboard')renderLeaderboard();
     if(t.dataset.tab==='roster')renderRoster();
+    if(t.dataset.tab==='orgchart')renderOrgChart();
   });
 });
 
@@ -2771,9 +2797,11 @@ function updateAuthUI() {
     ac.innerHTML = `<button class="btn btn-primary" onclick="showLogin()" style="font-size:12px;height:30px;padding:0 12px;white-space:nowrap">🔓 Sign in</button>`;
   }
 
-  // Show roster tab only when logged in
+  // Show roster and org chart tabs only when logged in
   const rosterTab = document.getElementById('roster-tab');
+  const orgTab = document.getElementById('orgchart-tab');
   if (rosterTab) rosterTab.style.display = isEditor ? '' : 'none';
+  if (orgTab) orgTab.style.display = isEditor ? '' : 'none';
 
   // Show/hide entry gate
   const gate = document.getElementById('entry-auth-gate');
@@ -2840,7 +2868,7 @@ function signOut() {
   setSession(null);
   const activeTab = document.querySelector('.tab.active');
   // If on a restricted tab, go back to overview
-  if (activeTab && (activeTab.dataset.tab === 'entry' || activeTab.dataset.tab === 'roster')) {
+  if (activeTab && (activeTab.dataset.tab === 'entry' || activeTab.dataset.tab === 'roster' || activeTab.dataset.tab === 'orgchart')) {
     document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));
     document.querySelector('.tab[data-tab="overview"]').classList.add('active');
@@ -3939,6 +3967,78 @@ document.getElementById('lb-from').addEventListener('change',renderLeaderboard);
 document.getElementById('lb-to').addEventListener('change',renderLeaderboard);
 
 
+
+// ─── ORG CHART ───
+function renderOrgChart() {
+  var wrap = document.getElementById('orgchart-wrap');
+  if (!wrap) return;
+  var all = computedAll();
+
+  function statusPill(r) {
+    var pc = r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
+    var pl = r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
+    return '<span class="pill '+pc+'" style="font-size:9px;padding:0 5px">'+pl+'</span>';
+  }
+
+  var mgrHTML = MGRS.map(function(mgr) {
+    var mc = MGR_COLORS[mgr] || '#888';
+    var team = all.filter(function(r){return r.manager===mgr;});
+    var onT = team.filter(function(r){return r.status==='green';}).length;
+
+    var recCards = team.map(function(r) {
+      var tenure = getHireDate(r.name) ? calcTenure(getHireDate(r.name)) : '';
+      return '<div class="org-line-v"></div>'
+        +'<div class="org-rec-card" onclick="goToRecruiter(\''+r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
+          +'<div class="org-rec-name">'+r.name+'</div>'
+          +'<div class="org-rec-sub">'
+            +(tenure ? '<span>'+tenure+'</span>' : '')
+            +'<span>'+r.totalStarts+' starts</span>'
+          +'</div>'
+        +'</div>';
+    }).join('');
+
+    return '<div class="org-manager-col">'
+      +'<div class="org-line-v"></div>'
+      +'<div class="org-mgr-card" style="background:'+mc+'18;border-color:'+mc+';color:'+mc+'">'
+        +'<div class="org-mgr-name">'+mgr+'</div>'
+        +'<div class="org-mgr-sub">'+team.length+' recruiters &nbsp;·&nbsp; '+onT+' on target</div>'
+      +'</div>'
+      +'<div class="org-recruiter-list">'+recCards+'</div>'
+    +'</div>';
+  }).join('');
+
+  var lineW = Math.min(MGRS.length * 156, window.innerWidth * 0.85);
+  var connectorLine = '<div style="display:flex;justify-content:center;width:100%">'
+    +'<div style="height:2px;background:var(--border2);width:'+lineW+'px"></div>'
+    +'</div>';
+
+  wrap.innerHTML = '<div class="org-wrap">'
+    +'<div class="org-vp">'
+      +'<div class="org-vp-name">Kevin</div>'
+      +'<div class="org-vp-title">VP of Talent Delivery</div>'
+    +'</div>'
+    +'<div class="org-connector-down"></div>'
+    +connectorLine
+    +'<div class="org-managers-row">'+mgrHTML+'</div>'
+  +'</div>';
+}
+
+function goToRecruiter(name) {
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
+  document.querySelectorAll('.tab-panel').forEach(function(x){x.classList.remove('active');});
+  var t = document.querySelector('.tab[data-tab="recruiter"]');
+  if (t) t.classList.add('active');
+  var p = document.getElementById('tab-recruiter');
+  if (p) p.classList.add('active');
+  document.querySelector('.filter-bar').style.display = '';
+  var sel = document.getElementById('rec-select');
+  if (sel) {
+    var norm = name.trim().toLowerCase();
+    var opt = Array.from(sel.options).find(function(o){return o.value.trim().toLowerCase()===norm;});
+    if (opt) sel.value = opt.value;
+  }
+  renderRecruiter();
+}
 
 // Render immediately with BASE_DATA so the page is never blank,
 // then refresh silently from Google Sheets in the background.
