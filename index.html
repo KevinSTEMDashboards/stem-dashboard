@@ -489,11 +489,11 @@ td.editing{padding:2px 4px!important}
   <div class="tab" data-tab="managers">Manager Rollup</div>
   <div class="tab" data-tab="weekly">Week-over-Week</div>
   <div class="tab" data-tab="recruiter">Recruiter Detail</div>
-  <div class="tab" data-tab="entry">Add Weekly Data</div>
   <div class="tab" data-tab="trends">Trends &amp; Insights</div>
   <div class="tab" data-tab="leaderboard">🏆 Leaderboard</div>
   <div class="tab" data-tab="roster" id="roster-tab" style="display:none">Roster</div>
   <div class="tab" data-tab="orgchart" id="orgchart-tab" style="display:none">🗂 Org Chart</div>
+  <div class="tab" data-tab="entry">Add Weekly Data</div>
 </div>
 
 <main>
@@ -1213,42 +1213,141 @@ async function loadFromSheets() {
 
 // ── Write a new week's data back to the Sheet ──
 // Appends one column to each metric tab
+// ─── GOOGLE OAUTH FOR SHEETS WRITE-BACK ───
+const OAUTH_CLIENT_ID = '449401016766-a464fe1emnm95aaq6h1rlprbsqcskvig.apps.googleusercontent.com';
+const OAUTH_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+let oauthToken = null;
+
+function getOAuthToken() {
+  return new Promise(function(resolve, reject) {
+    // Check if we have a valid cached token
+    const cached = safeGet('stemOAuthToken');
+    const expiry = safeGet('stemOAuthExpiry');
+    if (cached && expiry && Date.now() < parseInt(expiry)) {
+      oauthToken = cached;
+      resolve(cached);
+      return;
+    }
+    // Open OAuth popup
+    const w = 500, h = 600;
+    const left = (screen.width - w) / 2, top = (screen.height - h) / 2;
+    const redirectUri = window.location.origin + window.location.pathname;
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id=' + OAUTH_CLIENT_ID
+      + '&redirect_uri=' + encodeURIComponent(redirectUri)
+      + '&response_type=token'
+      + '&scope=' + encodeURIComponent(OAUTH_SCOPE)
+      + '&prompt=select_account';
+    const popup = window.open(authUrl, 'googleAuth', 'width='+w+',height='+h+',left='+left+',top='+top);
+    if (!popup) { reject(new Error('Pop-up blocked — please allow pop-ups for this site')); return; }
+    // Poll for the token in the redirect URL
+    const poll = setInterval(function() {
+      try {
+        const url = popup.location.href;
+        if (url && url.includes('access_token=')) {
+          clearInterval(poll);
+          popup.close();
+          const params = new URLSearchParams(url.split('#')[1]);
+          const token = params.get('access_token');
+          const expiresIn = parseInt(params.get('expires_in') || '3600');
+          oauthToken = token;
+          safeSet('stemOAuthToken', token);
+          safeSet('stemOAuthExpiry', String(Date.now() + (expiresIn - 60) * 1000));
+          resolve(token);
+        }
+      } catch(e) {
+        // Cross-origin — still waiting for redirect
+      }
+      if (popup.closed) {
+        clearInterval(poll);
+        reject(new Error('Sign-in cancelled'));
+      }
+    }, 300);
+  });
+}
+
 async function writeWeekToSheet(weekData, weekLabel) {
-  // weekData: { recruiterName: { subs, ivs, placements, starts, leads } }
   const results = [];
+  let token;
+  try {
+    token = await getOAuthToken();
+  } catch(e) {
+    showSyncError('Google sign-in required to save to Sheet: ' + e.message);
+    return [{ok: false, err: e.message}];
+  }
+
   for (const [metric, tabName] of Object.entries(SHEET_TABS)) {
     try {
-      // First get current data to know which row each recruiter is on
+      // Read current tab to find row positions and last column
       const rows = await readTab(tabName);
-      const dataStart = tabName === 'Starts' ? 5 : 4;
-      const updates = [];
-      for (let ri = 3; ri < rows.length; ri++) {
-        const name = (rows[ri][0] || '').trim();
-        if (!name || name === 'Recruiter' || name === 'Total' || name === 'Average') continue;
-        const val = (weekData[name] || {})[metric] || 0;
-        // Column index = dataStart + current number of week columns
-        const colIdx = (rows[ri].length > dataStart ? rows[ri].length : dataStart);
-        const colLetter = colToLetter(colIdx);
-        const cellRef = `${tabName}!${colLetter}${ri + 1}`;
-        updates.push({ range: cellRef, values: [[val]] });
+
+      // Find header row
+      let headerRowIdx = 0;
+      for (let ri = 0; ri < Math.min(6, rows.length); ri++) {
+        if ((rows[ri][0]||'').toString().trim().toLowerCase() === 'recruiter') { headerRowIdx = ri; break; }
       }
-      // Batch update
-      if (updates.length) {
-        const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchUpdate?key=${API_KEY}`;
-        const body = { valueInputOption: 'RAW', data: updates };
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        if (!res.ok) {
-          const err = await res.text();
-          console.warn(`Write failed for ${tabName}:`, err);
+
+      // Find data start column (skip Total, Avg etc.)
+      const SKIP = ['total','avg','average','ytd','ratio','since','pace','%'];
+      function isSkipW(h) { const lo=(h||'').toLowerCase().trim(); return !lo||SKIP.some(s=>lo.includes(s)); }
+      const headerRow = rows[headerRowIdx] || [];
+      let dataStart = 2;
+      for (let ci = 2; ci < Math.min(headerRow.length, 12); ci++) {
+        if (!isSkipW(headerRow[ci])) { dataStart = ci; break; }
+      }
+
+      // Find last column with real data to determine where new week goes
+      let lastDataCol = dataStart - 1;
+      for (let ci = dataStart; ci < headerRow.length; ci++) {
+        for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
+          const nm = (rows[ri][0]||'').trim().toLowerCase();
+          if (!nm||nm==='total'||nm==='average') continue;
+          const n = parseInt((rows[ri][ci]||'').toString().trim());
+          if (!isNaN(n) && n > 0) { lastDataCol = ci; break; }
         }
       }
+      const newCol = lastDataCol + 1;
+      const newColLetter = colToLetter(newCol - 1); // colToLetter is 0-indexed
+
+      // Write header for new week in header row
+      const updates = [];
+      updates.push({
+        range: `${tabName}!${newColLetter}${headerRowIdx + 1}`,
+        values: [[weekLabel]]
+      });
+
+      // Write each recruiter's value
+      for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
+        const name = (rows[ri][0]||'').trim();
+        const lo = name.toLowerCase();
+        if (!name||!rows[ri][1]||lo==='recruiter'||lo==='total'||lo==='average'||lo==='averages:') continue;
+        const val = (weekData[name]||{})[metric] || 0;
+        updates.push({
+          range: `${tabName}!${newColLetter}${ri + 1}`,
+          values: [[val]]
+        });
+      }
+
+      // Batch write with OAuth token
+      const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchUpdate`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ valueInputOption: 'RAW', data: updates })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        // Token may have expired mid-session — clear it
+        if (res.status === 401) { safeSet('stemOAuthToken',''); safeSet('stemOAuthExpiry','0'); }
+        throw new Error(`${res.status}: ${err}`);
+      }
       results.push({ tab: tabName, ok: true });
-    } catch (e) {
+    } catch(e) {
       results.push({ tab: tabName, ok: false, err: e.message });
+      console.warn(`Write failed for ${tabName}:`, e.message);
     }
   }
   return results;
@@ -1935,7 +2034,8 @@ function renderWoW(){
   document.getElementById('wow-total-title').textContent=`Weekly ${m} — team total`;
   const accent={subs:'#185FA5',ivs:'#1D9E75',placements:'#a855f7',starts:'#D4537E',leads:'#EF9F27'}[m]||'#888';
   if(cWowTotal)cWowTotal.destroy();
-  cWowTotal=new Chart(document.getElementById('wowTotalChart'),{type:'bar',data:{labels:awl,datasets:[{data:totals,backgroundColor:accent+'99',borderColor:accent,borderWidth:1.5,borderRadius:3,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10}}}}}});
+  const wowLabelPlugin={id:'wowLabels',afterDatasetsDraw(chart){const ctx=chart.ctx;chart.data.datasets.forEach((ds,i)=>{const meta=chart.getDatasetMeta(i);meta.data.forEach((bar,j)=>{const v=ds.data[j];if(v>0){ctx.save();ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--text')||'#fff';ctx.font='600 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(v,bar.x,bar.y-2);ctx.restore();}});});}};
+  cWowTotal=new Chart(document.getElementById('wowTotalChart'),{type:'bar',data:{labels:awl,datasets:[{data:totals,backgroundColor:accent+'99',borderColor:accent,borderWidth:1.5,borderRadius:3,borderSkipped:false}]},plugins:[wowLabelPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10}}}}}});
 
   if(view==='table'){
     document.getElementById('wow-tbl-card').style.display='';
