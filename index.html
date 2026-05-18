@@ -2093,13 +2093,88 @@ document.getElementById('entry-mgr').addEventListener('change',renderEntry);
 // ─── BACKUP HELPERS ───
 function buildBackupPayload() {
   return {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
+    // Weekly data
     extraWeeks: extraWeeks,
+    baseEdits: baseEdits,
+    // Roster
     archivedRecruiters: archivedRecruiters,
     newRecruiters: newRecruiters,
-    baseEdits: baseEdits
+    hireDates: JSON.parse(safeGet('stemHireDates') || '{}'),
+    // Auth (users + invites — NOT MFA secret for security)
+    users: JSON.parse(safeGet('stemUsers') || '[]'),
+    invites: JSON.parse(safeGet('stemInvites') || '[]'),
   };
+}
+
+// ─── FULL SETTINGS EXPORT / IMPORT ───
+// Exports everything needed to fully restore the dashboard on a new browser/device
+function exportSettings() {
+  const payload = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    label: 'STEM Dashboard full settings backup',
+    // Weekly data
+    stemXW:        safeGet('stemXW')        || '[]',
+    stemBaseEdits: safeGet('stemBaseEdits') || '{}',
+    // Roster
+    stemArchived:  safeGet('stemArchived')  || '[]',
+    stemNewRecs:   safeGet('stemNewRecs')   || '[]',
+    stemHireDates: safeGet('stemHireDates') || '{}',
+    // Auth
+    stemUsers:     safeGet('stemUsers')     || '[]',
+    stemInvites:   safeGet('stemInvites')   || '[]',
+    // Session (so they stay logged in after restore)
+    stemSession:   safeGet('stemSession')   || '',
+    // Last sync timestamp
+    stemLastSync:  safeGet('stemLastSync')  || '',
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  const stamp = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  a.download = 'stem_settings_' + stamp + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  alert('Settings exported! Keep this file safe — it restores everything including archived recruiters, hire dates, and your account.');
+}
+
+function importSettings() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const p = JSON.parse(ev.target.result);
+        if (!p.version) throw new Error('Not a valid settings file');
+
+        // Restore all keys
+        const keys = ['stemXW','stemBaseEdits','stemArchived','stemNewRecs','stemHireDates','stemUsers','stemInvites','stemSession','stemLastSync'];
+        keys.forEach(function(k) {
+          if (p[k] !== undefined && p[k] !== '') safeSet(k, p[k]);
+        });
+
+        // Also handle version 1 backups (old format)
+        if (p.extraWeeks)         safeSet('stemXW',        JSON.stringify(p.extraWeeks));
+        if (p.archivedRecruiters) safeSet('stemArchived',  JSON.stringify(p.archivedRecruiters));
+        if (p.newRecruiters)      safeSet('stemNewRecs',   JSON.stringify(p.newRecruiters));
+        if (p.baseEdits)          safeSet('stemBaseEdits', JSON.stringify(p.baseEdits));
+        if (p.hireDates)          safeSet('stemHireDates', JSON.stringify(p.hireDates));
+
+        alert('Settings restored! Reloading now…');
+        window.location.reload();
+      } catch(err) {
+        alert('Import failed: ' + err.message + '\nMake sure you selected a valid stem_settings or stem_backup file.');
+      }
+    };
+    reader.readAsText(file);
+  };
+  document.body.appendChild(input); input.click(); document.body.removeChild(input);
 }
 
 function autoBackup() {
@@ -2790,6 +2865,8 @@ function updateAuthUI() {
         <span style="font-size:11px;font-weight:600;color:var(--green);background:var(--green-bg);padding:2px 8px;border-radius:100px;white-space:nowrap">${isAdmin ? '👑 ' : '✏️ '}${currentUser.username}</span>
         <button class="btn" onclick="generatePDFReport()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Download weekly PDF report">📄 PDF Report</button>
         <button class="btn" onclick="promptEmailDigest()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Send weekly email digest">✉️ Email Digest</button>
+        <button class="btn" onclick="exportSettings()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Export all settings to a backup file">💾 Export Settings</button>
+        <button class="btn" onclick="importSettings()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Restore settings from a backup file">📂 Import Settings</button>
         ${isAdmin ? `<button class="btn" onclick="openUserModal()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap">Manage editors</button>` : ''}
         <button class="btn" onclick="signOut()" style="font-size:11px;height:26px;padding:0 8px">Sign out</button>
       </div>`;
