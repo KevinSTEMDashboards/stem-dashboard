@@ -4051,52 +4051,92 @@ function renderOrgChart() {
   if (!wrap) return;
   var all = computedAll();
 
-  function statusPill(r) {
-    var pc = r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
-    var pl = r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
-    return '<span class="pill '+pc+'" style="font-size:9px;padding:0 5px">'+pl+'</span>';
+  // Build a set of all manager first names AND full names (lowercase) to detect duplicates
+  // e.g. "Zach" matches "Zachary Jacobson", "Rachel" matches "Rachel Hewitt"
+  var displayMgrs = MGRS.filter(function(m){ return m.toLowerCase() !== 'kevin'; });
+  var mgrFirstNames = displayMgrs.map(function(m){ return m.toLowerCase(); });
+
+  function isManager(r) {
+    var firstName = r.name.split(' ')[0].toLowerCase();
+    // Match by first name OR if the recruiter's manager field is one of the manager names
+    // and their own first name starts with the same letters as a manager name
+    return mgrFirstNames.some(function(mn){
+      return firstName === mn || firstName.startsWith(mn) || mn.startsWith(firstName);
+    });
   }
 
-  var mgrHTML = MGRS.map(function(mgr) {
-    var mc = MGR_COLORS[mgr] || '#888';
-    var team = all.filter(function(r){return r.manager===mgr;});
-    var onT = team.filter(function(r){return r.status==='green';}).length;
+  // Kevin's true direct reports: assigned to Kevin AND not a manager themselves
+  var kevinDirects = all.filter(function(r){
+    return r.manager.toLowerCase() === 'kevin' && !isManager(r);
+  });
 
-    var recCards = team.map(function(r) {
-      var tenure = getHireDate(r.name) ? calcTenure(getHireDate(r.name)) : '';
-      return '<div class="org-line-v"></div>'
-        +'<div class="org-rec-card" onclick="goToRecruiter(\''+r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
-          +'<div class="org-rec-name">'+r.name+'</div>'
-          +'<div class="org-rec-sub">'
-            +(tenure ? '<span>'+tenure+'</span>' : '')
-            +'<span>'+r.totalStarts+' starts</span>'
-          +'</div>'
-        +'</div>';
-    }).join('');
+  var totalReports = all.length;
+
+  function recCard(r) {
+    var tenure = getHireDate(r.name) ? calcTenure(getHireDate(r.name)) : '';
+    return '<div class="org-line-v"></div>'
+      +'<div class="org-rec-card" onclick="goToRecruiter(\''+r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
+        +'<div class="org-rec-name">'+r.name+'</div>'
+        +'<div class="org-rec-sub">'
+          +(tenure ? '<span>'+tenure+'</span>' : '')
+          +'<span>'+r.totalStarts+' starts</span>'
+        +'</div>'
+      +'</div>';
+  }
+
+  // Manager columns
+  var mgrHTML = displayMgrs.map(function(mgr) {
+    var mc = MGR_COLORS[mgr] || '#888';
+    // Recruiters under this manager, excluding the manager themselves
+    var team = all.filter(function(r){
+      return r.manager === mgr && !isManager(r);
+    });
+    // Find the manager's own recruiter record for tenure
+    var mgrRecord = all.find(function(r){ return isManager(r) && r.manager.toLowerCase()==='kevin' && r.name.split(' ')[0].toLowerCase().startsWith(mgr.toLowerCase().slice(0,4)); })
+      || all.find(function(r){ return r.name.split(' ')[0].toLowerCase() === mgr.toLowerCase(); });
+    var mgrTenure = mgrRecord && getHireDate(mgrRecord.name) ? calcTenure(getHireDate(mgrRecord.name)) : '';
 
     return '<div class="org-manager-col">'
       +'<div class="org-line-v"></div>'
       +'<div class="org-mgr-card" style="background:'+mc+'18;border-color:'+mc+';color:'+mc+'">'
         +'<div class="org-mgr-name">'+mgr+'</div>'
-        +'<div class="org-mgr-sub">'+team.length+' recruiters &nbsp;·&nbsp; '+onT+' on target</div>'
+        +'<div class="org-mgr-sub">'+team.length+' recruiter'+(team.length!==1?'s':'')+(mgrTenure?' &nbsp;·&nbsp; '+mgrTenure:'')+'</div>'
       +'</div>'
-      +'<div class="org-recruiter-list">'+recCards+'</div>'
+      +'<div class="org-recruiter-list">'+team.map(recCard).join('')+'</div>'
     +'</div>';
   }).join('');
 
-  var lineW = Math.min(MGRS.length * 156, window.innerWidth * 0.85);
+  var lineW = Math.min((displayMgrs.length + (kevinDirects.length ? 1 : 0)) * 156, window.innerWidth * 0.85);
   var connectorLine = '<div style="display:flex;justify-content:center;width:100%">'
     +'<div style="height:2px;background:var(--border2);width:'+lineW+'px"></div>'
     +'</div>';
 
+  // Direct reports appear as plain cards in the managers row — no manager node, just recruiter cards hanging off the line
+  var directInlineHTML = kevinDirects.map(function(r) {
+    var tenure = getHireDate(r.name) ? calcTenure(getHireDate(r.name)) : '';
+    return '<div class="org-manager-col">'
+      +'<div class="org-line-v"></div>'
+      +'<div class="org-rec-card" onclick="goToRecruiter(\''+r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')"\n        style="min-width:150px;border:1px solid var(--border2)">'
+        +'<div class="org-rec-name" style="font-size:13px;font-weight:700">'+r.name+'</div>'
+        +'<div class="org-rec-sub">'
+          +(tenure ? '<span>'+tenure+'</span>' : '')
+          +'<span>'+r.totalStarts+' starts</span>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+
   wrap.innerHTML = '<div class="org-wrap">'
-    +'<div class="org-vp">'
-      +'<div class="org-vp-name">Kevin</div>'
-      +'<div class="org-vp-title">VP of Talent Delivery</div>'
+    +'<div style="display:flex;flex-direction:column;align-items:center">'
+      +'<div class="org-vp">'
+        +'<div class="org-vp-name">Kevin</div>'
+        +'<div class="org-vp-title">VP of Talent Delivery</div>'
+        +'<div style="font-size:11px;margin-top:5px;opacity:.85">'+totalReports+' total reports</div>'
+      +'</div>'
+      +'<div class="org-connector-down"></div>'
+      +connectorLine
+      +'<div class="org-managers-row">'+mgrHTML+directInlineHTML+'</div>'
     +'</div>'
-    +'<div class="org-connector-down"></div>'
-    +connectorLine
-    +'<div class="org-managers-row">'+mgrHTML+'</div>'
   +'</div>';
 }
 
