@@ -1309,14 +1309,8 @@ async function writeWeekToSheet(weekData, weekLabel) {
       const newCol = lastDataCol + 1;
       const newColLetter = colToLetter(newCol - 1); // colToLetter is 0-indexed
 
-      // Write header for new week in header row
+      // Write each recruiter's value only — do NOT touch header rows
       const updates = [];
-      updates.push({
-        range: `${tabName}!${newColLetter}${headerRowIdx + 1}`,
-        values: [[weekLabel]]
-      });
-
-      // Write each recruiter's value
       for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
         const name = (rows[ri][0]||'').trim();
         const lo = name.toLowerCase();
@@ -2425,18 +2419,24 @@ function renderSavedList(){
       <th style="text-align:left;padding:5px 8px;border-bottom:0.5px solid var(--border2);font-size:10px;text-transform:uppercase;color:var(--text3)">Week</th>
       <th style="text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--border2);font-size:10px;text-transform:uppercase;color:var(--text3)">Subs</th>
       <th style="text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--border2);font-size:10px;text-transform:uppercase;color:var(--text3)">IVs</th>
+      <th style="text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--border2);font-size:10px;text-transform:uppercase;color:var(--text3)">Pl.</th>
       <th style="text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--border2);font-size:10px;text-transform:uppercase;color:var(--text3)">Starts</th>
+      <th style="text-align:right;padding:5px 8px;border-bottom:0.5px solid var(--border2);font-size:10px;text-transform:uppercase;color:var(--text3)">Leads</th>
       ${isEditor?`<th style="padding:5px 8px;border-bottom:0.5px solid var(--border2)"></th>`:''}
     </tr></thead>
     <tbody>${extraWeeks.map((ew,i)=>{
       const ts=Object.values(ew.data).reduce((s,d)=>s+(d.subs||0),0);
       const ti=Object.values(ew.data).reduce((s,d)=>s+(d.ivs||0),0);
+      const tpl=Object.values(ew.data).reduce((s,d)=>s+(d.placements||0),0);
       const tst=Object.values(ew.data).reduce((s,d)=>s+(d.starts||0),0);
+      const tl=Object.values(ew.data).reduce((s,d)=>s+(d.leads||0),0);
       return`<tr>
         <td style="padding:5px 8px;font-weight:500">${ew.label}</td>
         <td style="text-align:right;padding:5px 8px">${ts}</td>
         <td style="text-align:right;padding:5px 8px">${ti}</td>
+        <td style="text-align:right;padding:5px 8px">${tpl}</td>
         <td style="text-align:right;padding:5px 8px">${tst}</td>
+        <td style="text-align:right;padding:5px 8px">${tl}</td>
         ${isEditor?`<td style="padding:5px 8px;text-align:right"><div style="display:flex;gap:5px;justify-content:flex-end">
           <button class="btn" style="font-size:10px;height:22px;padding:0 8px;color:var(--accent)" onclick="openEditModal(${i})">✏️ Edit</button>
           <button class="btn" style="font-size:10px;height:22px;padding:0 7px;color:var(--red)" onclick="delWeek(${i})">Remove</button>
