@@ -4150,8 +4150,10 @@ function showLbModal(kpiIdx, mgrFilter){
   sorted.sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
   var maxVal=sorted.length?sorted.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
   document.getElementById('lb-modal-title').innerHTML='<span style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span> — Full ranking ('+sorted.length+' recruiters)';
+  var prevModalRank=1;
   document.getElementById('lb-modal-body').innerHTML=sorted.map(function(r,i){
-    var rank=i+1;
+    var rank=i===0?1:(r[kpi.wkey]===sorted[i-1][kpi.wkey]?prevModalRank:i+1);
+    prevModalRank=rank;
     var rankDisp=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
     var mc=MGR_COLORS[r.manager]||'#888';
     var barW=Math.max(4,Math.round(((r[kpi.wkey]||0)/maxVal)*100));
@@ -4185,8 +4187,11 @@ function renderLeaderboard(){
     var sorted=valid.slice().sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
     var top10=sorted.slice(0,10);
     var maxVal=top10.length?top10.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
+    var prevRank=1;
     var rows=top10.map(function(r,i){
-      var rank=i+1;
+      // Tied rank: same rank number if value matches previous
+      var rank=i===0?1:(r[kpi.wkey]===top10[i-1][kpi.wkey]?prevRank:i+1);
+      prevRank=rank;
       var rankDisp=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
       var mc=MGR_COLORS[r.manager]||'#888';
       var barW=Math.max(4,Math.round(((r[kpi.wkey]||0)/maxVal)*100));
