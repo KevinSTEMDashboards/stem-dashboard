@@ -1690,6 +1690,9 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.getElementById('tab-'+t.dataset.tab).classList.add('active');
     // Hide filter bar on leaderboard, show on all other tabs
     document.querySelector('.filter-bar').style.display=t.dataset.tab==='leaderboard'?'none':'';
+    // Hide global metric dropdown on tabs that have their own metric selector
+    const metricSel = document.getElementById('metric-select');
+    if (metricSel) metricSel.style.display = (t.dataset.tab==='weekly'||t.dataset.tab==='trends') ? 'none' : '';
     if(t.dataset.tab==='weekly')renderWoW();
     if(t.dataset.tab==='managers')renderManagers();
     if(t.dataset.tab==='recruiter')renderRecruiter();
