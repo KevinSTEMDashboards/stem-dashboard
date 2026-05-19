@@ -1406,7 +1406,7 @@ function manualSync() {
 
 
 
-const MGR_COLORS={Kevin:'#378ADD',Rachel:'#1D9E75',Tyler:'#EF9F27',Brett:'#D4537E',Noah:'#7F77DD',Joe:'#888780',Zach:'#5DCAA5',Matt:'#E8845C'};
+const MGR_COLORS={Kevin:'#378ADD',Rachel:'#1D9E75',Tyler:'#EF9F27',Brett:'#D4537E',Noah:'#7F77DD',Joe:'#888780',Zach:'#5DCAA5',Matt:'#60A5FA'};
 
 const BASE_DATA=[
   {name:'Aidan (AJ) Smith',manager:'Rachel',subs:[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5],ivs:[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3],placements:[0,1,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0],starts:[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1],leads:[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0]},
@@ -1692,7 +1692,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     // Hide filter bar on leaderboard, show on all other tabs
     document.querySelector('.filter-bar').style.display=t.dataset.tab==='leaderboard'?'none':'';
     // Hide global controls on tabs that have their own built-in filters
-    const hiddenOnTabs = t.dataset.tab==='weekly' || t.dataset.tab==='trends';
+    const hiddenOnTabs = t.dataset.tab==='weekly' || t.dataset.tab==='trends' || t.dataset.tab==='managers';
     const metricSel = document.getElementById('metric-select');
     const mgrFilter = document.getElementById('mgr-filter');
     const searchBox = document.getElementById('search');
@@ -4241,18 +4241,18 @@ function renderOrgChart() {
   var all = computedAll();
 
   // Build a set of all manager first names AND full names (lowercase) to detect duplicates
-  // e.g. "Zach" matches "Zachary Jacobson", "Rachel" matches "Rachel Hewitt"
-  var displayMgrs = MGRS.filter(function(m){ return m.toLowerCase() !== 'kevin'; });
-  var mgrFirstNames = displayMgrs.map(function(m){ return m.toLowerCase(); });
+  // Use MGR_COLORS as definitive manager list — includes Matt even before MGRS rebuilds from Sheet
+  var allMgrKeys = Object.keys(MGR_COLORS).map(function(m){return m.toLowerCase();});
+  var displayMgrs = Object.keys(MGR_COLORS).filter(function(m){ return m.toLowerCase() !== 'kevin'; });
+  var mgrFirstNames = allMgrKeys.filter(function(m){ return m !== 'kevin'; });
 
   function isManager(r) {
     var firstName = r.name.split(' ')[0].toLowerCase();
-    // Match by first name OR if the recruiter's manager field is one of the manager names
-    // and their own first name starts with the same letters as a manager name
     return mgrFirstNames.some(function(mn){
       return firstName === mn || firstName.startsWith(mn) || mn.startsWith(firstName);
     });
   }
+
 
   // Kevin's true direct reports: assigned to Kevin AND not a manager themselves
   var kevinDirects = all.filter(function(r){
@@ -4285,11 +4285,32 @@ function renderOrgChart() {
       || all.find(function(r){ return r.name.split(' ')[0].toLowerCase() === mgr.toLowerCase(); });
     var mgrTenure = mgrRecord && getHireDate(mgrRecord.name) ? calcTenure(getHireDate(mgrRecord.name)) : '';
 
+    // Calculate average tenure of team recruiters
+    var teamTenures = team.map(function(r){
+      var hd = getHireDate(r.name);
+      return hd ? calcTenure(hd) : null;
+    }).filter(Boolean);
+    var avgTenureStr = '';
+    if (teamTenures.length) {
+      // Convert tenures to months for averaging
+      var totalMonths = teamTenures.reduce(function(s, t) {
+        var match = t.match(/(\d+)\.?(\d*)\s*yr/);
+        var moMatch = t.match(/^(\d+)\s*mo/);
+        if (match) { return s + parseInt(match[1])*12 + (parseInt(match[2]||0)); }
+        if (moMatch) { return s + parseInt(moMatch[1]); }
+        return s;
+      }, 0);
+      var avgMo = Math.round(totalMonths / teamTenures.length);
+      var avgYr = Math.floor(avgMo / 12);
+      var avgMoRem = avgMo % 12;
+      avgTenureStr = avgYr > 0 ? avgYr + '.' + String(avgMoRem).padStart(2,'0') + ' yrs avg' : avgMo + ' mo avg';
+    }
+
     return '<div class="org-manager-col">'
       +'<div class="org-line-v"></div>'
       +'<div class="org-mgr-card" style="background:'+mc+'18;border-color:'+mc+';color:'+mc+'">'
-        +'<div class="org-mgr-name">'+mgr+'</div>'
-        +'<div class="org-mgr-sub">'+team.length+' recruiter'+(team.length!==1?'s':'')+(mgrTenure?' &nbsp;·&nbsp; '+mgrTenure:'')+'</div>'
+        +'<div class="org-mgr-name">'+mgr+(mgrTenure?' <span style="font-size:10px;opacity:.75;font-weight:400">('+mgrTenure+')</span>':'')+'</div>'
+        +'<div class="org-mgr-sub">'+team.length+' recruiter'+(team.length!==1?'s':'')+(avgTenureStr?' &nbsp;·&nbsp; '+avgTenureStr:'')+'</div>'
       +'</div>'
       +'<div class="org-recruiter-list">'+team.map(recCard).join('')+'</div>'
     +'</div>';
