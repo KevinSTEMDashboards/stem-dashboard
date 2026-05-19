@@ -1171,6 +1171,10 @@ async function loadFromSheets() {
     // Re-apply archives
     applyArchives();
 
+    // Rebuild MGRS to include all managers from MGR_COLORS + any new ones from Sheet
+    MGRS.length = 0;
+    [...new Set([...Object.keys(MGR_COLORS), ...RECRUITERS.map(r=>r.manager)])].sort().forEach(function(m){MGRS.push(m);});
+
     hideLoadingBanner();
     safeSet('stemLastSync', new Date().toISOString());
     renderOverview();
@@ -1648,7 +1652,10 @@ function activeWkLabels(){
 }
 
 // Populate selects
-const MGRS=[...new Set(RECRUITERS.map(r=>r.manager))].sort();
+// MGRS: use MGR_COLORS as the base (ensures all managers are included even before Sheet sync)
+// Then merge in any additional managers found in Sheet data
+const MGRS_BASE = Object.keys(MGR_COLORS).sort();
+const MGRS = [...new Set([...MGRS_BASE, ...RECRUITERS.map(r=>r.manager)])].sort();
 ['mgr-filter','wow-mgr','entry-mgr','ov-mgr-filter'].forEach(id=>{
   const el=document.getElementById(id);
   if(!el)return;
