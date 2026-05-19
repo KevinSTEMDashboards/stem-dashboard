@@ -2139,7 +2139,7 @@ function renderWoW(){
         const wslText=wsl===null?'Never':wsl===0?'This wk':wsl===1?'1 wk ago':wsl+' wks ago';
         wslCell=`<td style="text-align:center;white-space:nowrap"><span style="font-size:11px;font-weight:600;color:${wslColor}">${wslText}</span></td>`;
       }
-      const editHint=currentUser?`<td style="text-align:center;padding:2px 4px"><span style="font-size:9px;color:var(--text3)" title="Click any number to edit">✏️</span></td>`:'';
+      const editHint=currentUser?`<td style="text-align:center;padding:2px 4px"><span style="font-size:9px;color:var(--text3)" title="Click any number to edit">✏️</span></td>`:'<td></td>';
       return`<tr><td style="font-weight:500;white-space:nowrap">${r.name}</td><td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>${!singleWk?`<td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right">${ytdAvg.toFixed(1)}</td><td style="text-align:right">${a4.toFixed(1)}</td>`:''  }${wslCell}${cells}${editHint}</tr>`;
     }).join('');
   } else {
@@ -4139,10 +4139,10 @@ var LB_KPIS=[
   {wkey:'_starts',     label:'Starts',             color:'var(--c-starts)', icon:'🚀',higher:true, fmt:function(v){return v||0;}},
   {wkey:'_leads',      label:'Leads',              color:'var(--c-leads)',  icon:'💡',higher:true, fmt:function(v){return v||0;}},
   {wkey:'avgSub4w',    label:'4-wk Sub Avg',       color:'var(--c-subs)',   icon:'📈',higher:true, fmt:function(v){return v!=null?v.toFixed(1):'0';}},
-  {wkey:'sub2iv',      label:'Sub→IV',        color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2iv'},
-  {wkey:'iv2placement',label:'IV→Pl.',        color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'iv2placement'},
-  {wkey:'pl2start',    label:'Pl→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'pl2start'},
-  {wkey:'sub2start',   label:'Sub→Start',     color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2start'}
+  {wkey:'sub2iv',      label:'Submittal→Interview', color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2iv'},
+  {wkey:'iv2placement',label:'Interview→Placement',  color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'iv2placement'},
+  {wkey:'pl2start',    label:'Placement→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'pl2start'},
+  {wkey:'sub2start',   label:'Submittal→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2start'}
 ];
 
 function showLbModal(kpiIdx, mgrFilter){
