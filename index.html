@@ -482,6 +482,9 @@ td.editing{padding:2px 4px!important}
     <select id="wk-to" title="To week"><option value="all">To: Latest</option></select>
     <button class="btn" id="wk-reset" style="font-size:11px;height:28px;padding:0 8px;color:var(--accent)" title="Reset to full range">✕ Reset</button>
   </div>
+  <div style="margin-left:4px;padding-left:10px;border-left:1px solid var(--border2)">
+    <button id="include-archived-btn" onclick="toggleIncludeArchived()" style="height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px">📦 Include Archived</button>
+  </div>
 </div>
 
 <div class="tabs" style="justify-content:center">
@@ -1593,7 +1596,49 @@ function compute(r){
   return{...r,totalSubs:ts,totalIvs:ti,totalPlacements:tpl,totalStarts:tst,totalLeads:totalArr(r.leads),sub2iv:s2i,iv2placement:i2pl,pl2start:pl2st,sub2start:s2s,falloffPct:falloff,avgSub4w:a4,starts4w,ivs4w,placements4w,wksSinceLast,status};
 }
 // computedAll now slices to week range before computing
-function computedAll(){return RECRUITERS.map(r=>compute(sliceRange(r)))}
+let includeArchived = false;
+
+function toggleIncludeArchived() {
+  includeArchived = !includeArchived;
+  const btn = document.getElementById('include-archived-btn');
+  if (btn) {
+    btn.style.background = includeArchived ? 'var(--amber-bg)' : 'var(--bg2)';
+    btn.style.color = includeArchived ? 'var(--amber)' : 'var(--text3)';
+    btn.style.borderColor = includeArchived ? 'var(--amber)' : 'var(--border2)';
+    btn.textContent = includeArchived ? '📦 Archived: ON' : '📦 Include Archived';
+  }
+  // Re-render active tab
+  const activeTab = document.querySelector('.tab.active');
+  if (activeTab) {
+    const t = activeTab.dataset.tab;
+    if (t==='overview') renderOverview();
+    else if (t==='managers') renderManagers();
+    else if (t==='weekly') renderWoW();
+    else if (t==='recruiter') renderRecruiter();
+    else if (t==='trends') renderTrends();
+    else if (t==='leaderboard') renderLeaderboard();
+  }
+}
+
+function computedAll() {
+  const active = RECRUITERS.map(r => compute(sliceRange(r)));
+  if (!includeArchived || !archivedRecruiters.length) return active;
+  // Include archived recruiters — pad their arrays to match current week count
+  const nW = wkLabels.length;
+  const [f, t] = getWeekRange();
+  const archived = archivedRecruiters.map(function(r) {
+    function pad(arr) { const a = [...(arr||[])]; while(a.length < nW) a.push(0); return a.slice(f, t+1); }
+    const sliced = {
+      ...r,
+      subs: pad(r.subs), ivs: pad(r.ivs),
+      placements: pad(r.placements||[]),
+      starts: pad(r.starts), leads: pad(r.leads),
+      _isArchived: true
+    };
+    return compute(sliced);
+  });
+  return [...active, ...archived];
+}
 
 // Active week labels for the selected range
 function activeWkLabels(){
@@ -1944,7 +1989,7 @@ function renderOvTable(d){
     const pl=r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
     const mc=MGR_COLORS[r.manager]||'#888';
     return `<tr>
-      <td style="font-weight:500;white-space:nowrap">${r.name}</td>
+      <td style="font-weight:500;white-space:nowrap">${r.name}${r._isArchived?'<span style="font-size:9px;color:var(--amber);margin-left:5px;padding:1px 4px;border-radius:3px;background:var(--amber-bg)">archived</span>':''}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
       <td style="color:var(--c-subs);font-weight:600">${r.avgSub4w.toFixed(1)}</td>
       <td style="color:var(--c-ivs);font-weight:600">${r.ivs4w}</td>
@@ -2036,7 +2081,8 @@ function renderWoW(){
     document.getElementById('wow-ln-card').style.display='none';
     document.getElementById('wow-tbl-title').textContent=`Recruiter weekly ${m}`;
     const thead=document.getElementById('wow-thead'),tbody=document.getElementById('wow-tbody');
-    thead.innerHTML=`<tr><th style="min-width:130px">Recruiter</th><th>Mgr</th><th style="text-align:right">Total</th><th style="text-align:right">YTD avg</th><th style="text-align:right">4w avg</th>${m==='starts'?'<th style="text-align:center;white-space:nowrap" title="Weeks since this recruiter last had a start">Wks since last start</th>':''}${awl.map(w=>`<th style="text-align:right">${w}</th>`).join('')}${currentUser?'<th style="width:32px"></th>':''}</tr>`;
+    const singleWk = awl.length === 1;
+    thead.innerHTML=`<tr><th style="min-width:130px">Recruiter</th><th>Mgr</th>${!singleWk?`<th style="text-align:right">Total</th><th style="text-align:right">YTD avg</th><th style="text-align:right">4w avg</th>`:''}${m==='starts'?'<th style="text-align:center;white-space:nowrap" title="Weeks since this recruiter last had a start">Wks since last start</th>':''}${awl.map(w=>`<th style="text-align:right">${w}</th>`).join('')}${currentUser?'<th style="width:32px"></th>':''}</tr>`;
     tbody.innerHTML=recs.map(r=>{
       const [f,t]=getWeekRange();
       const w=r[m];const tot=totalArr(w);const a4=avg4w(w);
@@ -2061,7 +2107,7 @@ function renderWoW(){
         wslCell=`<td style="text-align:center;white-space:nowrap"><span style="font-size:11px;font-weight:600;color:${wslColor}">${wslText}</span></td>`;
       }
       const editHint=currentUser?`<td style="text-align:center;padding:2px 4px"><span style="font-size:9px;color:var(--text3)" title="Click any number to edit">✏️</span></td>`:'';
-      return`<tr><td style="font-weight:500;white-space:nowrap">${r.name}</td><td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td><td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right">${ytdAvg.toFixed(1)}</td><td style="text-align:right">${a4.toFixed(1)}</td>${wslCell}${cells}${editHint}</tr>`;
+      return`<tr><td style="font-weight:500;white-space:nowrap">${r.name}</td><td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>${!singleWk?`<td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right">${ytdAvg.toFixed(1)}</td><td style="text-align:right">${a4.toFixed(1)}</td>`:''  }${wslCell}${cells}${editHint}</tr>`;
     }).join('');
   } else {
     document.getElementById('wow-tbl-card').style.display='none';
