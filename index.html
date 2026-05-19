@@ -3079,7 +3079,9 @@ function updateAuthUI() {
   renderSavedList();
 }
 
-// Init UI
+// Init UI — restore session FIRST so updateAuthUI knows who's logged in
+const saved = sessGet('stemSession');
+if (saved) { try { currentUser = JSON.parse(saved); } catch(e) {} }
 updateAuthUI();
 
 function showLogin() {
@@ -3297,10 +3299,6 @@ document.getElementById('mfa-code').addEventListener('input', function(e) {
   var digits = e.target.value.replace(/\D/g,'');
   if (digits.length >= 6) submitMfaCode();
 });
-
-// Restore session
-const saved = sessGet('stemSession');
-if (saved) { try { currentUser = JSON.parse(saved); } catch(e) {} }
 
 // Populate edit-mgr-filter
 MGRS.forEach(m => {
