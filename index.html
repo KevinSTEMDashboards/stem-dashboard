@@ -578,11 +578,11 @@ td.editing{padding:2px 4px!important}
         <th data-col="name">Recruiter</th><th data-col="manager">Manager</th>
         <th data-col="avgSub4w" style="color:var(--c-subs)" title="4-week sub average">4wk Subs</th>
         <th data-col="ivs4w" style="color:var(--c-ivs)" title="4-week interview average">4wk IVs</th>
-        <th data-col="placements4w" style="color:var(--purple)" title="4-week placements">4wk Pl.</th>
+        <th data-col="placements4w" style="color:var(--purple)" title="4-week placements">4wk Placements</th>
         <th data-col="starts4w" style="color:var(--c-starts)" title="4-week starts">4wk Starts</th>
         <th data-col="totalSubs" style="color:var(--text3)" title="Total submittals">Total Subs</th>
         <th data-col="totalIvs" style="color:var(--text3)" title="Total interviews">Total IVs</th>
-        <th data-col="totalPlacements" style="color:var(--text3)" title="Total placements">Total Pl.</th>
+        <th data-col="totalPlacements" style="color:var(--text3)" title="Total placements">Total Placements</th>
         <th data-col="totalStarts" style="color:var(--text3)" title="Total starts">Total Starts</th>
         <th data-col="sub2iv" style="color:var(--amber)" title="Submittal to Interview ratio">Sub→IV</th>
         <th data-col="iv2placement" style="color:var(--amber)" title="Interview to Placement ratio">IV→Pl.</th>
@@ -646,6 +646,7 @@ td.editing{padding:2px 4px!important}
   <div class="wctrl">
     <select id="wow-metric"><option value="subs">Submittals</option><option value="ivs">Interviews</option><option value="placements">Placements</option><option value="starts">Starts</option><option value="leads">Leads</option></select>
     <select id="wow-mgr"><option value="">All managers</option></select>
+      <button id="wow-mgrs-only-btn" onclick="toggleWowMgrsOnly()" style="height:32px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;white-space:nowrap">👥 Managers only</button>
     <select id="wow-view"><option value="table">Table view</option><option value="chart">Line chart view</option></select>
   </div>
   <div class="card" style="margin-bottom:12px">
@@ -707,7 +708,7 @@ td.editing{padding:2px 4px!important}
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">Manager</div>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">Subs</div>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">IVs</div>
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">Pl.</div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">Placements</div>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">Starts</div>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:center">Leads</div>
     </div>
@@ -867,7 +868,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Total subs</th><th>Total IVs</th><th>Starts</th><th>4-wk avg</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
+            <th>Name</th><th>Manager</th><th>Total Subs</th><th>Total Interviews</th><th>Total Placements</th><th>Total Starts</th><th>Total Leads</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
           </tr></thead>
           <tbody id="roster-active-body"></tbody>
         </table>
@@ -2069,11 +2070,32 @@ function onRangeChange(){
 
 // ─── WEEK-OVER-WEEK ───
 let cWowTotal=null,cWowLine=null;
+// ─── WoW MANAGERS ONLY TOGGLE ───
+let wowMgrsOnly = false;
+function toggleWowMgrsOnly() {
+  wowMgrsOnly = !wowMgrsOnly;
+  const btn = document.getElementById('wow-mgrs-only-btn');
+  if (btn) {
+    btn.style.background = wowMgrsOnly ? 'var(--accent-dim)' : 'var(--bg2)';
+    btn.style.color = wowMgrsOnly ? 'var(--accent)' : 'var(--text3)';
+    btn.style.borderColor = wowMgrsOnly ? 'var(--accent)' : 'var(--border2)';
+    btn.textContent = wowMgrsOnly ? '👥 Managers: ON' : '👥 Managers only';
+  }
+  renderWoW();
+}
 function renderWoW(){
   const m=document.getElementById('wow-metric').value;
   const mgr=document.getElementById('wow-mgr').value;
   const view=document.getElementById('wow-view').value;
-  const recs=computedAll().filter(r=>!mgr||r.manager===mgr);
+  let recs=computedAll().filter(r=>!mgr||r.manager===mgr);
+  // Managers only: filter to recruiters whose first name matches a manager name
+  if (wowMgrsOnly) {
+    const mgrFirstNames=MGRS.map(function(m){return m.toLowerCase();});
+    recs=recs.filter(function(r){
+      const fn=r.name.split(' ')[0].toLowerCase();
+      return mgrFirstNames.some(function(mn){return fn===mn||fn.startsWith(mn)||mn.startsWith(fn);});
+    });
+  }
   const awl=activeWkLabels();
   const nW=awl.length;
   const totals=Array(nW).fill(0);
@@ -2104,7 +2126,7 @@ function renderWoW(){
         const p=i>0?(w[i-1] != null ? w[i-1] : 0):null;
         const cls=p!=null?(v>p?'cu':v<p?'cd':'c0'):'';
         if(currentUser){
-          return`<td class="${cls} cell-edit" style="text-align:right;padding:3px 8px" onclick="startCellEdit(this,'${r.name}','${m}',${globalWi},${v})"><span class="cell-val" style="display:inline-block;min-width:20px;padding:1px 3px;border-radius:3px">${v}</span></td>`;
+          return currentUser?`<td class="${cls} cell-edit" style="text-align:right;padding:3px 8px" onclick="startCellEdit(this,'${r.name}','${m}',${globalWi},${v})"><span class="cell-val" style="display:inline-block;min-width:20px;padding:1px 3px;border-radius:3px">${v}</span></td>`:`<td class="${cls}" style="text-align:right;padding:3px 8px">${v}</td>`;
         }
         return`<td class="${cls}" style="text-align:right">${v}</td>`;
       }).join('');
@@ -3763,15 +3785,15 @@ function renderRoster() {
     const hireDateDisplay = hireDate ? formatHireDate(hireDate) : '<span style=\'color:var(--text3);font-style:italic\'>Click to add</span>';
     const tenureDisplay = hireDate ? calcTenure(hireDate) : '<span style=\'color:var(--text3)\'>—</span>';
     const annivDisplay = hireDate ? calcNextAnniversary(hireDate) : '<span style=\'color:var(--text3)\'>—</span>';
-    // Color anniversary urgency
     const annivColor = !hireDate ? 'var(--text3)' : calcNextAnniversary(hireDate).startsWith('🎉') ? 'var(--green)' : parseInt(calcNextAnniversary(hireDate)) <= 30 ? 'var(--amber)' : 'var(--text2)';
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.name}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
       <td>${r.totalSubs}</td>
       <td>${r.totalIvs}</td>
+      <td style="color:var(--purple)">${r.totalPlacements}</td>
       <td><strong>${r.totalStarts}</strong></td>
-      <td>${r.avgSub4w.toFixed(1)}</td>
+      <td>${r.totalLeads}</td>
       <td id="dh_${safeId}" onclick="editHireDate('${r.name.replace(/'/g,"\\'")}', this)" style="cursor:pointer;min-width:110px;color:${hireDate?'var(--text)':'var(--text3)'}" title="Click to edit date hired">${hireDateDisplay}</td>
       <td style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">${tenureDisplay}</td>
       <td style="font-size:12px;font-weight:600;color:${annivColor};white-space:nowrap">${annivDisplay}</td>
@@ -4087,8 +4109,9 @@ function populateLbRangeSelects(){
 
 function lbGetRangedRecs(mgrFilter){
   var win=document.getElementById('lb-window').value;
-  var all=computedAll();
-  var recs=mgrFilter?all.filter(function(r){return r.manager===mgrFilter;}):all;
+  // Use full RECRUITERS arrays (not range-sliced) so lb window filter works independently
+  var base=RECRUITERS.map(function(r){return compute(r);});
+  var recs=mgrFilter?base.filter(function(r){return r.manager===mgrFilter;}):base;
   if(win==='custom'){
     var f=parseInt(document.getElementById('lb-from').value)||0;
     var t=parseInt(document.getElementById('lb-to').value)||wkLabels.length-1;
@@ -4098,8 +4121,13 @@ function lbGetRangedRecs(mgrFilter){
       return Object.assign({},r,{_subs:sum(r.subs),_ivs:sum(r.ivs),_placements:sum(r.placements||[]),_starts:sum(r.starts),_leads:sum(r.leads)});
     });
   }
+  var nWks=win==='all'?null:parseInt(win);
   return recs.map(function(r){
-    function wsum(arr){var v=arr.filter(function(x){return x!=null;});if(win==='all')return v.reduce(function(s,x){return s+x;},0);return v.slice(-parseInt(win)).reduce(function(s,x){return s+x;},0);}
+    function wsum(arr){
+      var v=(arr||[]).filter(function(x){return x!=null;});
+      if(!nWks)return v.reduce(function(s,x){return s+x;},0);
+      return v.slice(-nWks).reduce(function(s,x){return s+x;},0);
+    }
     return Object.assign({},r,{_subs:wsum(r.subs),_ivs:wsum(r.ivs),_placements:wsum(r.placements||[]),_starts:wsum(r.starts),_leads:wsum(r.leads)});
   });
 }
