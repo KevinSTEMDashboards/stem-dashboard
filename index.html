@@ -1406,7 +1406,7 @@ function manualSync() {
 
 
 
-const MGR_COLORS={Kevin:'#378ADD',Rachel:'#1D9E75',Tyler:'#EF9F27',Brett:'#D4537E',Noah:'#7F77DD',Joe:'#888780',Zach:'#5DCAA5'};
+const MGR_COLORS={Kevin:'#378ADD',Rachel:'#1D9E75',Tyler:'#EF9F27',Brett:'#D4537E',Noah:'#7F77DD',Joe:'#888780',Zach:'#5DCAA5',Matt:'#E8845C'};
 
 const BASE_DATA=[
   {name:'Aidan (AJ) Smith',manager:'Rachel',subs:[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5],ivs:[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3],placements:[0,1,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0],starts:[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1],leads:[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0]},
@@ -4150,10 +4150,11 @@ function showLbModal(kpiIdx, mgrFilter){
   sorted.sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
   var maxVal=sorted.length?sorted.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
   document.getElementById('lb-modal-title').innerHTML='<span style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span> — Full ranking ('+sorted.length+' recruiters)';
-  var prevModalRank=1;
+  var mActualRank=0;var mPrevVal=null;var mPrevActual=0;
   document.getElementById('lb-modal-body').innerHTML=sorted.map(function(r,i){
-    var rank=i===0?1:(r[kpi.wkey]===sorted[i-1][kpi.wkey]?prevModalRank:i+1);
-    prevModalRank=rank;
+    mActualRank=i+1;
+    var rank=(mPrevVal!==null&&r[kpi.wkey]===mPrevVal)?mPrevActual:mActualRank;
+    mPrevActual=rank;mPrevVal=r[kpi.wkey];
     var rankDisp=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
     var mc=MGR_COLORS[r.manager]||'#888';
     var barW=Math.max(4,Math.round(((r[kpi.wkey]||0)/maxVal)*100));
@@ -4187,11 +4188,11 @@ function renderLeaderboard(){
     var sorted=valid.slice().sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
     var top10=sorted.slice(0,10);
     var maxVal=top10.length?top10.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
-    var prevRank=1;
+    var actualRank=0;var prevVal=null;var prevActual=0;
     var rows=top10.map(function(r,i){
-      // Tied rank: same rank number if value matches previous
-      var rank=i===0?1:(r[kpi.wkey]===top10[i-1][kpi.wkey]?prevRank:i+1);
-      prevRank=rank;
+      actualRank=i+1;
+      var rank=(prevVal!==null&&r[kpi.wkey]===prevVal)?prevActual:actualRank;
+      prevActual=rank;prevVal=r[kpi.wkey];
       var rankDisp=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
       var mc=MGR_COLORS[r.manager]||'#888';
       var barW=Math.max(4,Math.round(((r[kpi.wkey]||0)/maxVal)*100));
