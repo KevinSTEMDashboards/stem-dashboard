@@ -884,7 +884,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap" id="roster-archived-wrap" style="display:none">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Total subs</th><th>Total IVs</th><th>Starts</th><th>Archived</th><th></th>
+            <th>Name</th><th>Manager</th><th>Total Subs</th><th>Total IVs</th><th>Total Placements</th><th>Total Starts</th><th>Archived</th><th></th>
           </tr></thead>
           <tbody id="roster-archived-body"></tbody>
         </table>
@@ -3820,11 +3820,12 @@ function renderRoster() {
       const mc = MGR_COLORS[ar.manager] || '#888';
       const ts = ar.subs.reduce((s,v) => s+(v||0), 0);
       const ti = ar.ivs.reduce((s,v) => s+(v||0), 0);
+      const tpl = (ar.placements||[]).reduce((s,v) => s+(v||0), 0);
       const tst = ar.starts.reduce((s,v) => s+(v||0), 0);
       return `<tr style="opacity:0.75">
         <td style="font-weight:500;white-space:nowrap">${ar.name} <span class="archived-badge">Archived</span></td>
         <td><span class="mgr" style="background:${mc}22;color:${mc}">${ar.manager}</span></td>
-        <td>${ts}</td><td>${ti}</td><td>${tst}</td>
+        <td>${ts}</td><td>${ti}</td><td style="color:var(--purple)">${tpl}</td><td>${tst}</td>
         <td style="font-size:11px;color:var(--text3)">${ar.archivedOn || '—'}</td>
         <td style="text-align:right">
           <button class="btn" onclick="restoreRecruiter('${ar.name.replace(/'/g,"\\'")}')" style="font-size:10px;height:24px;padding:0 8px;color:var(--green)">↩ Restore</button>
