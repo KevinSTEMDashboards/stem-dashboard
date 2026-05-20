@@ -3548,6 +3548,7 @@ function confirmArchive() {
     archivedOn: new Date().toLocaleDateString(),
     subs: [...rec.subs],
     ivs: [...rec.ivs],
+    placements: [...(rec.placements||[])],
     starts: [...rec.starts],
     leads: [...rec.leads]
   });
