@@ -801,19 +801,7 @@ td.editing{padding:2px 4px!important}
 <!-- LEADERBOARD -->
 <div class="tab-panel" id="tab-leaderboard">
   <div class="wctrl">
-    <!-- Multi-select manager filter -->
-    <div style="position:relative" id="lb-mgr-wrap">
-      <button id="lb-mgr-btn" onclick="toggleLbMgrMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:140px;justify-content:space-between">
-        <span id="lb-mgr-label">All managers</span><span style="font-size:10px;opacity:.6">▾</span>
-      </button>
-      <div id="lb-mgr-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:500;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.25);padding:8px;min-width:180px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;padding:0 4px">
-          <button onclick="lbMgrSelectAll()" style="font-size:10px;border:none;background:none;color:var(--accent);cursor:pointer;padding:0">All</button>
-          <button onclick="lbMgrClearAll()" style="font-size:10px;border:none;background:none;color:var(--text3);cursor:pointer;padding:0">None</button>
-        </div>
-        <div id="lb-mgr-checks"></div>
-      </div>
-    </div>
+    <select id="lb-mgr-filter"><option value="">All managers</option></select>
     <select id="lb-window">
       <option value="all">Full YTD / selected range</option>
       <option value="4">Last 4 weeks</option>
@@ -4114,72 +4102,6 @@ document.getElementById('mgr-window').addEventListener('change',renderManagers);
 document.getElementById('mgr-sort').addEventListener('change',renderManagers);
 
 // ─── LEADERBOARD ───
-// ─── LEADERBOARD MULTI-MANAGER SELECT ───
-var lbSelectedMgrs = {};
-
-function initLbMgrChecks() {
-  var wrap = document.getElementById('lb-mgr-checks');
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  MGRS.forEach(function(m) {
-    if (lbSelectedMgrs[m] === undefined) lbSelectedMgrs[m] = true;
-    var mc = MGR_COLORS[m] || '#888';
-    var row = document.createElement('label');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 4px;cursor:pointer;border-radius:4px;font-size:12px';
-    row.onmouseenter = function(){ row.style.background='var(--bg2)'; };
-    row.onmouseleave = function(){ row.style.background=''; };
-    row.innerHTML = '<input type="checkbox" '+(lbSelectedMgrs[m]?'checked':'')+' style="accent-color:'+mc+';width:14px;height:14px">'
-      +'<span style="width:8px;height:8px;border-radius:50%;background:'+mc+';flex-shrink:0"></span>'
-      +'<span style="color:var(--text)">'+m+'</span>';
-    row.querySelector('input').addEventListener('change', function(e) {
-      lbSelectedMgrs[m] = e.target.checked;
-      updateLbMgrLabel();
-      renderLeaderboard();
-    });
-    wrap.appendChild(row);
-  });
-  updateLbMgrLabel();
-}
-
-function updateLbMgrLabel() {
-  var selected = MGRS.filter(function(m){ return lbSelectedMgrs[m]; });
-  var btn = document.getElementById('lb-mgr-label');
-  if (!btn) return;
-  if (selected.length === MGRS.length) btn.textContent = 'All managers';
-  else if (selected.length === 0) btn.textContent = 'No managers';
-  else if (selected.length === 1) btn.textContent = selected[0];
-  else btn.textContent = selected.length + ' managers';
-}
-
-function toggleLbMgrMenu() {
-  var menu = document.getElementById('lb-mgr-menu');
-  if (!menu) return;
-  var isOpen = menu.style.display !== 'none';
-  if (!isOpen) { initLbMgrChecks(); menu.style.display = 'block'; }
-  else menu.style.display = 'none';
-}
-
-function lbMgrSelectAll() {
-  MGRS.forEach(function(m){ lbSelectedMgrs[m] = true; });
-  initLbMgrChecks();
-  renderLeaderboard();
-}
-
-function lbMgrClearAll() {
-  MGRS.forEach(function(m){ lbSelectedMgrs[m] = false; });
-  initLbMgrChecks();
-  renderLeaderboard();
-}
-
-function closeLbMgrMenu(e) {
-  var wrap = document.getElementById('lb-mgr-wrap');
-  if (wrap && !wrap.contains(e.target)) {
-    var menu = document.getElementById('lb-mgr-menu');
-    if (menu) menu.style.display = 'none';
-  }
-}
-document.addEventListener('click', closeLbMgrMenu);
-
 function populateLbRangeSelects(){
   var fromSel=document.getElementById('lb-from');
   var toSel=document.getElementById('lb-to');
@@ -4194,13 +4116,9 @@ function populateLbRangeSelects(){
 
 function lbGetRangedRecs(mgrFilter){
   var win=document.getElementById('lb-window').value;
+  // Use full RECRUITERS arrays (not range-sliced) so lb window filter works independently
   var base=RECRUITERS.map(function(r){return compute(r);});
-  var recs;
-  if (mgrFilter !== undefined && mgrFilter !== null) {
-    recs = mgrFilter ? base.filter(function(r){return r.manager===mgrFilter;}) : base;
-  } else {
-    recs = base.filter(function(r){ return lbSelectedMgrs[r.manager] !== false; });
-  }
+  var recs=mgrFilter?base.filter(function(r){return r.manager===mgrFilter;}):base;
   if(win==='custom'){
     var f=parseInt(document.getElementById('lb-from').value)||0;
     var t=parseInt(document.getElementById('lb-to').value)||wkLabels.length-1;
@@ -4221,6 +4139,107 @@ function lbGetRangedRecs(mgrFilter){
   });
 }
 
+var LB_KPIS=[
+  {wkey:'_subs',       label:'Submittals',        color:'var(--c-subs)',   icon:'📋',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'_ivs',        label:'Interviews',         color:'var(--c-ivs)',    icon:'🎯',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'_placements', label:'Placements',         color:'var(--purple)',   icon:'🤝',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'_starts',     label:'Starts',             color:'var(--c-starts)', icon:'🚀',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'_leads',      label:'Leads',              color:'var(--c-leads)',  icon:'💡',higher:true, fmt:function(v){return v||0;}},
+  {wkey:'avgSub4w',    label:'4-wk Sub Avg',       color:'var(--c-subs)',   icon:'📈',higher:true, fmt:function(v){return v!=null?v.toFixed(1):'0';}},
+  {wkey:'sub2iv',      label:'Submittal→Interview', color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2iv'},
+  {wkey:'iv2placement',label:'Interview→Placement',  color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'iv2placement'},
+  {wkey:'pl2start',    label:'Placement→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'pl2start'},
+  {wkey:'sub2start',   label:'Submittal→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2start'}
+];
+
+function showLbModal(kpiIdx, mgrFilter){
+  var kpi=LB_KPIS[kpiIdx];
+  try{mgrFilter=decodeURIComponent(mgrFilter||'');}catch(e){}
+  var sorted=lbGetRangedRecs(mgrFilter||'').filter(function(r){return r[kpi.wkey]!=null&&r[kpi.wkey]>0;});
+  sorted.sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
+  var maxVal=sorted.length?sorted.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
+  document.getElementById('lb-modal-title').innerHTML='<span style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span> — Full ranking ('+sorted.length+' recruiters)';
+  var mActualRank=0;var mPrevVal=null;var mPrevActual=0;
+  document.getElementById('lb-modal-body').innerHTML=sorted.map(function(r,i){
+    mActualRank=i+1;
+    var rank=(mPrevVal!==null&&r[kpi.wkey]===mPrevVal)?mPrevActual:mActualRank;
+    mPrevActual=rank;mPrevVal=r[kpi.wkey];
+    var rankDisp=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
+    var mc=MGR_COLORS[r.manager]||'#888';
+    var barW=Math.max(4,Math.round(((r[kpi.wkey]||0)/maxVal)*100));
+    return '<div class="lb-row">'
+      +'<div class="'+(rank<=3?'lb-rank lb-rank-'+rank:'lb-rank')+'">'+rankDisp+'</div>'
+      +'<div style="flex:1;min-width:0">'
+        +'<div style="display:flex;align-items:center;gap:6px"><div class="lb-name">'+r.name+'</div>'
+        +'<span class="lb-mgr-tag" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span></div>'
+        +'<div class="lb-bar-wrap"><div class="lb-bar" style="width:'+barW+'%;background:'+kpi.color+'"></div></div>'
+      +'</div>'
+      +'<div class="lb-val" style="color:'+(kpi.ratioKey?'ratioColor(r[kpi.wkey],kpi.ratioKey)':kpi.color)+'">'+kpi.fmt(r[kpi.wkey])+'</div>'
+    +'</div>';
+  }).join('');
+  document.getElementById('lb-modal').style.display='flex';
+}
+
+function renderLeaderboard(){
+  var mgrF=document.getElementById('lb-mgr-filter').value;
+  var win=document.getElementById('lb-window').value;
+  var customDiv=document.getElementById('lb-custom-range');
+  if(customDiv)customDiv.style.display=win==='custom'?'flex':'none';
+  // Hide the global filter bar on leaderboard tab
+  document.querySelector('.filter-bar').style.display='none';
+
+  var recs=lbGetRangedRecs(mgrF);
+  var winLabel=win==='all'?'Full range':win==='custom'?'Custom range':'Last '+win+' wks';
+
+  var html=LB_KPIS.map(function(kpi,kpiIdx){
+    var valid=recs.filter(function(r){return r[kpi.wkey]!=null&&r[kpi.wkey]>0;});
+    if(!valid.length)return '<div class="lb-card"><div class="lb-card-hdr"><span class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span></div><div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No data</div></div>';
+    var sorted=valid.slice().sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
+    var top10=sorted.slice(0,10);
+    var maxVal=top10.length?top10.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
+    var actualRank=0;var prevVal=null;var prevActual=0;
+    var rows=top10.map(function(r,i){
+      actualRank=i+1;
+      var rank=(prevVal!==null&&r[kpi.wkey]===prevVal)?prevActual:actualRank;
+      prevActual=rank;prevVal=r[kpi.wkey];
+      var rankDisp=rank===1?'🥇':rank===2?'🥈':rank===3?'🥉':'#'+rank;
+      var mc=MGR_COLORS[r.manager]||'#888';
+      var barW=Math.max(4,Math.round(((r[kpi.wkey]||0)/maxVal)*100));
+      return '<div class="lb-row">'
+        +'<div class="'+(rank<=3?'lb-rank lb-rank-'+rank:'lb-rank')+'">'+rankDisp+'</div>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="display:flex;align-items:center;gap:6px"><div class="lb-name">'+r.name+'</div>'
+          +'<span class="lb-mgr-tag" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span></div>'
+          +'<div class="lb-bar-wrap"><div class="lb-bar" style="width:'+barW+'%;background:'+kpi.color+'"></div></div>'
+        +'</div>'
+        +'<div class="lb-val" style="color:'+(kpi.ratioKey?ratioColor(r[kpi.wkey],kpi.ratioKey):kpi.color)+'">'+kpi.fmt(r[kpi.wkey])+'</div>'
+      +'</div>';
+    }).join('');
+    var subtitle=winLabel+(mgrF?' · '+mgrF:' · All managers');
+    var expandBtn=sorted.length>10?'<div style="padding:8px 14px;border-top:1px solid var(--border)"><button class="btn" onclick="showLbModal('+kpiIdx+',\''+encodeURIComponent(mgrF)+'\')" style="width:100%;font-size:11px;height:28px;color:var(--accent)">View all '+sorted.length+' recruiters →</button></div>':'';
+    return '<div class="lb-card">'
+      +'<div class="lb-card-hdr">'
+        +'<div><div class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</div>'
+        +'<div style="font-size:10px;color:var(--text3);margin-top:1px">'+subtitle+'</div></div>'
+        +'<div style="font-size:11px;font-weight:700;color:var(--text3)">'+sorted.length+' ranked</div>'
+      +'</div>'+rows+expandBtn+'</div>';
+  }).join('');
+  document.getElementById('lb-boards').innerHTML=html;
+}
+
+// Populate lb-mgr-filter
+MGRS.forEach(function(m){
+  var o=document.createElement('option');o.value=m;o.textContent=m;
+  document.getElementById('lb-mgr-filter').appendChild(o);
+});
+document.getElementById('lb-mgr-filter').addEventListener('change',renderLeaderboard);
+document.getElementById('lb-window').addEventListener('change',function(){
+  var win=document.getElementById('lb-window').value;
+  if(win==='custom'){populateLbRangeSelects();}
+  renderLeaderboard();
+});
+document.getElementById('lb-from').addEventListener('change',renderLeaderboard);
+document.getElementById('lb-to').addEventListener('change',renderLeaderboard);
 
 
 
