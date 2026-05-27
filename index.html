@@ -4226,6 +4226,9 @@ function showLbModal(kpiIdx, mgrFilter){
 }
 
 function renderLeaderboard(){
+  // Initialize all managers as selected if not already set
+  MGRS.forEach(function(m){ if(lbSelectedMgrs[m]===undefined) lbSelectedMgrs[m]=true; });
+  updateLbMgrLabel();
   var selectedMgrList=MGRS.filter(function(m){return lbSelectedMgrs[m]!==false;});
   var mgrLabel=selectedMgrList.length===MGRS.length?'All managers':selectedMgrList.length===1?selectedMgrList[0]:selectedMgrList.length+' managers';
   var win=document.getElementById('lb-window').value;
@@ -4262,7 +4265,7 @@ function renderLeaderboard(){
       +'</div>';
     }).join('');
     var subtitle=winLabel+' · '+mgrLabel;
-    var expandBtn=sorted.length>10?'<div style="padding:8px 14px;border-top:1px solid var(--border)"><button class="btn" onclick="showLbModal('+kpiIdx+',\''+encodeURIComponent(mgrF)+'\')" style="width:100%;font-size:11px;height:28px;color:var(--accent)">View all '+sorted.length+' recruiters →</button></div>':'';
+    var expandBtn=sorted.length>10?'<div style="padding:8px 14px;border-top:1px solid var(--border)"><button class="btn" onclick="showLbModal('+kpiIdx+',\''+encodeURIComponent(selectedMgrList.length===1?selectedMgrList[0]:'')+'\' )" style="width:100%;font-size:11px;height:28px;color:var(--accent)">View all '+sorted.length+' recruiters →</button></div>':'';
     return '<div class="lb-card">'
       +'<div class="lb-card-hdr">'
         +'<div><div class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</div>'
