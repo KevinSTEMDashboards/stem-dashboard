@@ -1793,7 +1793,7 @@ let ovSort='name',ovDir='asc',cTop=null,cRatio=null;
 function filtered(){
   const mgr=document.getElementById('mgr-filter').value;
   const q=document.getElementById('search').value.toLowerCase();
-  return computedAll().filter(r=>(!mgr||r.manager===mgr)&&(!q||r.name.toLowerCase().includes(q)));
+  return computedAll().filter(r=>(!mgr||r.manager===mgr)&&(!q||r.name.toLowerCase().includes(q))).sort((a,b)=>a.name.localeCompare(b.name));
 }
 
 // ─── PDF REPORT & EMAIL DIGEST ───
@@ -2104,7 +2104,7 @@ function renderWoW(){
   const m=document.getElementById('wow-metric').value;
   const mgr=document.getElementById('wow-mgr').value;
   const view=document.getElementById('wow-view').value;
-  let recs=computedAll().filter(r=>!mgr||r.manager===mgr);
+  let recs=computedAll().filter(r=>!mgr||r.manager===mgr).sort((a,b)=>a.name.localeCompare(b.name));
   // Managers only: filter to recruiters whose first name matches a manager name
   if (wowMgrsOnly) {
     const mgrFirstNames=MGRS.map(function(m){return m.toLowerCase();});
@@ -3770,7 +3770,7 @@ function renderRoster() {
   const annivFilter = document.getElementById('roster-anniv-filter') ? document.getElementById('roster-anniv-filter').value : '';
 
   // Base filter
-  let all = computedAll().filter(r => (!mgrF || r.manager === mgrF) && (!q || r.name.toLowerCase().includes(q)));
+  let all = computedAll().filter(r => (!mgrF || r.manager === mgrF) && (!q || r.name.toLowerCase().includes(q))).sort((a,b)=>a.name.localeCompare(b.name));
 
   // Anniversary filter
   if (annivFilter) {
