@@ -695,8 +695,7 @@ td.editing{padding:2px 4px!important}
     <p style="font-size:12px;color:var(--text2);margin-bottom:11px">Enter activity for each recruiter. Saved data updates all charts and persists in your browser.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;color:var(--text2);font-weight:500">Week label</label>
-        <input type="text" id="entry-week" placeholder="e.g. Week 18" style="width:160px;height:32px;font-size:13px">
+
       </div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <label style="font-size:11px;color:var(--text2);font-weight:500">Filter by manager</label>
@@ -801,7 +800,18 @@ td.editing{padding:2px 4px!important}
 <!-- LEADERBOARD -->
 <div class="tab-panel" id="tab-leaderboard">
   <div class="wctrl">
-    <select id="lb-mgr-filter"><option value="">All managers</option></select>
+    <div style="position:relative" id="lb-mgr-wrap">
+      <button id="lb-mgr-btn" onclick="toggleLbMgrMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:140px;justify-content:space-between">
+        <span id="lb-mgr-label">All managers</span><span style="font-size:10px;opacity:.6">&#9662;</span>
+      </button>
+      <div id="lb-mgr-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:500;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.25);padding:8px;min-width:180px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;padding:0 4px">
+          <button onclick="lbMgrSelectAll()" style="font-size:10px;border:none;background:none;color:var(--accent);cursor:pointer;padding:0">All</button>
+          <button onclick="lbMgrClearAll()" style="font-size:10px;border:none;background:none;color:var(--text3);cursor:pointer;padding:0">None</button>
+        </div>
+        <div id="lb-mgr-checks"></div>
+      </div>
+    </div>
     <select id="lb-window">
       <option value="all">Full YTD / selected range</option>
       <option value="4">Last 4 weeks</option>
@@ -884,7 +894,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap" id="roster-archived-wrap" style="display:none">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Total Subs</th><th>Total IVs</th><th>Total Placements</th><th>Total Starts</th><th>Archived</th><th></th>
+            <th>Name</th><th>Manager</th><th>Total Subs</th><th>Total IVs</th><th>Total Placements</th><th>Total Starts</th><th>Date Ended</th><th>Archived</th><th></th>
           </tr></thead>
           <tbody id="roster-archived-body"></tbody>
         </table>
@@ -1662,7 +1672,7 @@ const MGRS = [...new Set([...MGRS_BASE, ...RECRUITERS.map(r=>r.manager)])].sort(
   MGRS.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;el.appendChild(o)});
 });
 const recSel=document.getElementById('rec-select');
-RECRUITERS.forEach(r=>{const o=document.createElement('option');o.value=r.name;o.textContent=`${r.name} (${r.manager})`;recSel.appendChild(o)});
+[...RECRUITERS].sort((a,b)=>a.name.localeCompare(b.name)).forEach(r=>{const o=document.createElement('option');o.value=r.name;o.textContent=`${r.name} (${r.manager})`;recSel.appendChild(o)});
 
 // Populate Trends tab scope selectors
 function populateTrendsSelectors(){
@@ -2252,9 +2262,8 @@ document.getElementById('rec-select').addEventListener('change',renderRecruiter)
 // ─── DATA ENTRY ───
 function renderEntry(){
   const mgr=document.getElementById('entry-mgr').value;
-  const recs=RECRUITERS.filter(r=>!mgr||r.manager===mgr);
+  const recs=RECRUITERS.filter(r=>!mgr||r.manager===mgr).slice().sort((a,b)=>a.name.localeCompare(b.name));
   const wn=wkLabels.length+1;
-  if(!document.getElementById('entry-week').value)document.getElementById('entry-week').value=`Week ${wn}`;
   document.getElementById('entry-rows').innerHTML=recs.map(r=>`
     <div class="entry-row-item">
       <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.name}">${r.name}</div>
@@ -2376,7 +2385,7 @@ function autoBackup() {
 }
 
 document.getElementById('save-btn').addEventListener('click', async ()=>{
-  const label=document.getElementById('entry-week').value.trim()||'Week '+(wkLabels.length+1);
+  const label='Week '+(wkLabels.length+1);
   const data={};
   document.querySelectorAll('#entry-rows input[type=number]').forEach(inp=>{
     const rec=inp.dataset.rec,met=inp.dataset.m;
@@ -2387,7 +2396,6 @@ document.getElementById('save-btn').addEventListener('click', async ()=>{
   extraWeeks.push({label,data});
   safeSet('stemXW', JSON.stringify(extraWeeks));
   wkLabels.push(label);
-  document.getElementById('entry-week').value='Week '+(wkLabels.length+1);
   const m=document.getElementById('smsg');m.style.display='inline';setTimeout(()=>m.style.display='none',3500);
   renderSavedList();renderOverview();
   populateWkSelects();
@@ -3546,6 +3554,7 @@ function confirmArchive() {
     name: rec.name,
     manager: rec.manager,
     archivedOn: new Date().toLocaleDateString(),
+    endedOn: '',
     subs: [...rec.subs],
     ivs: [...rec.ivs],
     placements: [...(rec.placements||[])],
@@ -3656,6 +3665,29 @@ function editHireDate(name, td) {
   if (inp) {
     inp.focus();
     inp.addEventListener('blur', function() { saveHireDate(name, inp.value, td); });
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') inp.blur();
+      if (e.key === 'Escape') { inp.value = current; inp.blur(); }
+    });
+  }
+}
+
+function editEndDate(name, td) {
+  const ar = archivedRecruiters.find(r => r.name === name);
+  if (!ar) return;
+  const current = ar.endedOn || '';
+  td.innerHTML = '<input type="date" value="'+current+'" style="height:24px;font-size:11px;width:130px;padding:0 4px" />';
+  const inp = td.querySelector('input');
+  if (inp) {
+    inp.focus();
+    inp.addEventListener('blur', function() {
+      ar.endedOn = inp.value ? formatHireDate(inp.value) : '';
+      saveArchived();
+      td.innerHTML = ar.endedOn
+        ? '<span style="color:var(--text)">'+ar.endedOn+'</span>'
+        : '<span style="color:var(--text3);font-style:italic">Click to add</span>';
+      td.style.color = ar.endedOn ? 'var(--text)' : 'var(--text3)';
+    });
     inp.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') inp.blur();
       if (e.key === 'Escape') { inp.value = current; inp.blur(); }
@@ -3827,6 +3859,7 @@ function renderRoster() {
         <td style="font-weight:500;white-space:nowrap">${ar.name} <span class="archived-badge">Archived</span></td>
         <td><span class="mgr" style="background:${mc}22;color:${mc}">${ar.manager}</span></td>
         <td>${ts}</td><td>${ti}</td><td style="color:var(--purple)">${tpl}</td><td>${tst}</td>
+        <td id="de_${ar.name.replace(/[^a-zA-Z0-9]/g,'_')}" onclick="editEndDate('${ar.name.replace(/'/g,"\\'")}'  ,this)" style="cursor:pointer;font-size:11px;color:${ar.endedOn?'var(--text)':'var(--text3)'}" title="Click to edit date ended">${ar.endedOn||'<span style=\'font-style:italic\'>Click to add</span>'}</td>
         <td style="font-size:11px;color:var(--text3)">${ar.archivedOn || '—'}</td>
         <td style="text-align:right">
           <button class="btn" onclick="restoreRecruiter('${ar.name.replace(/'/g,"\\'")}')" style="font-size:10px;height:24px;padding:0 8px;color:var(--green)">↩ Restore</button>
@@ -4118,7 +4151,12 @@ function lbGetRangedRecs(mgrFilter){
   var win=document.getElementById('lb-window').value;
   // Use full RECRUITERS arrays (not range-sliced) so lb window filter works independently
   var base=RECRUITERS.map(function(r){return compute(r);});
-  var recs=mgrFilter?base.filter(function(r){return r.manager===mgrFilter;}):base;
+  var recs;
+  if(mgrFilter!==undefined&&mgrFilter!==null&&mgrFilter!==''){
+    recs=base.filter(function(r){return r.manager===mgrFilter;});
+  }else{
+    recs=base.filter(function(r){return lbSelectedMgrs[r.manager]!==false;});
+  }
   if(win==='custom'){
     var f=parseInt(document.getElementById('lb-from').value)||0;
     var t=parseInt(document.getElementById('lb-to').value)||wkLabels.length-1;
@@ -4138,6 +4176,8 @@ function lbGetRangedRecs(mgrFilter){
     return Object.assign({},r,{_subs:wsum(r.subs),_ivs:wsum(r.ivs),_placements:wsum(r.placements||[]),_starts:wsum(r.starts),_leads:wsum(r.leads)});
   });
 }
+
+var lbSelectedMgrs={};
 
 var LB_KPIS=[
   {wkey:'_subs',       label:'Submittals',        color:'var(--c-subs)',   icon:'📋',higher:true, fmt:function(v){return v||0;}},
@@ -4181,14 +4221,15 @@ function showLbModal(kpiIdx, mgrFilter){
 }
 
 function renderLeaderboard(){
-  var mgrF=document.getElementById('lb-mgr-filter').value;
+  var selectedMgrList=MGRS.filter(function(m){return lbSelectedMgrs[m]!==false;});
+  var mgrLabel=selectedMgrList.length===MGRS.length?'All managers':selectedMgrList.length===1?selectedMgrList[0]:selectedMgrList.length+' managers';
   var win=document.getElementById('lb-window').value;
   var customDiv=document.getElementById('lb-custom-range');
   if(customDiv)customDiv.style.display=win==='custom'?'flex':'none';
   // Hide the global filter bar on leaderboard tab
   document.querySelector('.filter-bar').style.display='none';
 
-  var recs=lbGetRangedRecs(mgrF);
+  var recs=lbGetRangedRecs();
   var winLabel=win==='all'?'Full range':win==='custom'?'Custom range':'Last '+win+' wks';
 
   var html=LB_KPIS.map(function(kpi,kpiIdx){
@@ -4215,7 +4256,7 @@ function renderLeaderboard(){
         +'<div class="lb-val" style="color:'+(kpi.ratioKey?ratioColor(r[kpi.wkey],kpi.ratioKey):kpi.color)+'">'+kpi.fmt(r[kpi.wkey])+'</div>'
       +'</div>';
     }).join('');
-    var subtitle=winLabel+(mgrF?' · '+mgrF:' · All managers');
+    var subtitle=winLabel+' · '+mgrLabel;
     var expandBtn=sorted.length>10?'<div style="padding:8px 14px;border-top:1px solid var(--border)"><button class="btn" onclick="showLbModal('+kpiIdx+',\''+encodeURIComponent(mgrF)+'\')" style="width:100%;font-size:11px;height:28px;color:var(--accent)">View all '+sorted.length+' recruiters →</button></div>':'';
     return '<div class="lb-card">'
       +'<div class="lb-card-hdr">'
@@ -4227,12 +4268,50 @@ function renderLeaderboard(){
   document.getElementById('lb-boards').innerHTML=html;
 }
 
-// Populate lb-mgr-filter
-MGRS.forEach(function(m){
-  var o=document.createElement('option');o.value=m;o.textContent=m;
-  document.getElementById('lb-mgr-filter').appendChild(o);
+function initLbMgrChecks(){
+  var wrap=document.getElementById('lb-mgr-checks');
+  if(!wrap)return;
+  wrap.innerHTML='';
+  MGRS.forEach(function(m){
+    if(lbSelectedMgrs[m]===undefined)lbSelectedMgrs[m]=true;
+    var mc=MGR_COLORS[m]||'#888';
+    var row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:4px;cursor:pointer;border-radius:4px;font-size:12px';
+    row.onmouseenter=function(){row.style.background='var(--bg2)';};
+    row.onmouseleave=function(){row.style.background='';};
+    row.innerHTML='<input type="checkbox" '+(lbSelectedMgrs[m]?'checked':'')+' style="accent-color:'+mc+';width:14px;height:14px">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+mc+';flex-shrink:0"></span>'
+      +'<span style="color:var(--text)">'+m+'</span>';
+    row.querySelector('input').addEventListener('change',function(e){
+      lbSelectedMgrs[m]=e.target.checked;
+      updateLbMgrLabel();
+      renderLeaderboard();
+    });
+    wrap.appendChild(row);
+  });
+  updateLbMgrLabel();
+}
+function updateLbMgrLabel(){
+  var sel=MGRS.filter(function(m){return lbSelectedMgrs[m];});
+  var btn=document.getElementById('lb-mgr-label');
+  if(!btn)return;
+  if(sel.length===MGRS.length)btn.textContent='All managers';
+  else if(sel.length===0)btn.textContent='No managers';
+  else if(sel.length===1)btn.textContent=sel[0];
+  else btn.textContent=sel.length+' managers';
+}
+function toggleLbMgrMenu(){
+  var menu=document.getElementById('lb-mgr-menu');
+  if(!menu)return;
+  if(menu.style.display!=='none')menu.style.display='none';
+  else{initLbMgrChecks();menu.style.display='block';}
+}
+function lbMgrSelectAll(){MGRS.forEach(function(m){lbSelectedMgrs[m]=true;});initLbMgrChecks();renderLeaderboard();}
+function lbMgrClearAll(){MGRS.forEach(function(m){lbSelectedMgrs[m]=false;});initLbMgrChecks();renderLeaderboard();}
+document.addEventListener('click',function(e){
+  var wrap=document.getElementById('lb-mgr-wrap');
+  if(wrap&&!wrap.contains(e.target)){var menu=document.getElementById('lb-mgr-menu');if(menu)menu.style.display='none';}
 });
-document.getElementById('lb-mgr-filter').addEventListener('change',renderLeaderboard);
 document.getElementById('lb-window').addEventListener('change',function(){
   var win=document.getElementById('lb-window').value;
   if(win==='custom'){populateLbRangeSelects();}
