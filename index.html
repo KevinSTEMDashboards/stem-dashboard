@@ -1195,7 +1195,7 @@ async function loadFromSheets() {
     const recSelEl = document.getElementById('rec-select');
     const prevVal = recSelEl.value;
     recSelEl.innerHTML = '';
-    RECRUITERS.forEach(r=>{
+    [...RECRUITERS].sort((a,b)=>a.name.localeCompare(b.name)).forEach(r=>{
       const o=document.createElement('option');
       o.value=r.name;o.textContent=r.name+' ('+r.manager+')';
       recSelEl.appendChild(o);
@@ -3518,11 +3518,14 @@ function saveNewRecruiter() {
   newRecruiters.push({ name, manager: mgr, addedOn: newRec.addedOn, startWeekIndex: startWkIdx });
   saveNewRecs();
 
-  // Update selects that list recruiters
+  // Rebuild rec-select sorted alphabetically
   const recSelEl = document.getElementById('rec-select');
-  const o = document.createElement('option');
-  o.value = name; o.textContent = `${name} (${mgr})`;
-  recSelEl.appendChild(o);
+  recSelEl.innerHTML = '';
+  [...RECRUITERS].sort((a,b)=>a.name.localeCompare(b.name)).forEach(r=>{
+    const o=document.createElement('option');
+    o.value=r.name;o.textContent=`${r.name} (${r.manager})`;
+    recSelEl.appendChild(o);
+  });
 
   closeAddRecModal();
   renderOverview();
@@ -3610,14 +3613,14 @@ function restoreRecruiter(name) {
   archivedRecruiters.splice(arIdx, 1);
   saveArchived();
 
-  // Re-add to rec-select
+  // Rebuild rec-select sorted alphabetically
   const recSelEl = document.getElementById('rec-select');
-  const exists = Array.from(recSelEl.options).some(o => o.value === ar.name);
-  if (!exists) {
-    const o = document.createElement('option');
-    o.value = ar.name; o.textContent = `${ar.name} (${ar.manager})`;
+  recSelEl.innerHTML = '';
+  [...RECRUITERS].sort((a,b)=>a.name.localeCompare(b.name)).forEach(r=>{
+    const o=document.createElement('option');
+    o.value=r.name;o.textContent=`${r.name} (${r.manager})`;
     recSelEl.appendChild(o);
-  }
+  });
 
   renderOverview();
   renderRoster();
@@ -3874,14 +3877,16 @@ applyNewRecruiters();
 applyArchives();
 
 // Also update rec-select for new/restored recruiters that may have been added previously
-newRecruiters.forEach(nr => {
+{
+  // Rebuild rec-select sorted alphabetically
   const recSelEl = document.getElementById('rec-select');
-  if (!Array.from(recSelEl.options).some(o => o.value === nr.name)) {
-    const o = document.createElement('option');
-    o.value = nr.name; o.textContent = `${nr.name} (${nr.manager})`;
-    recSelEl.appendChild(o);
-  }
-});
+  recSelEl.innerHTML = '';
+  [...RECRUITERS].sort((a,b)=>a.name.localeCompare(b.name)).forEach(r=>{
+    const opt=document.createElement('option');
+    opt.value=r.name;opt.textContent=`${r.name} (${r.manager})`;
+    recSelEl.appendChild(opt);
+  });
+}
 
 
 
