@@ -801,7 +801,7 @@ td.editing{padding:2px 4px!important}
 <div class="tab-panel" id="tab-leaderboard">
   <div class="wctrl">
     <div style="position:relative" id="lb-mgr-wrap">
-      <button id="lb-mgr-btn" onclick="toggleLbMgrMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:140px;justify-content:space-between">
+      <button type="button" id="lb-mgr-btn" onclick="toggleLbMgrMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:140px;justify-content:space-between">
         <span id="lb-mgr-label">All managers</span><span style="font-size:10px;opacity:.6">&#9662;</span>
       </button>
       <div id="lb-mgr-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:500;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.25);padding:8px;min-width:180px">
@@ -812,12 +812,31 @@ td.editing{padding:2px 4px!important}
         <div id="lb-mgr-checks"></div>
       </div>
     </div>
-    <select id="lb-window">
-      <option value="all">Full YTD / selected range</option>
-      <option value="4">Last 4 weeks</option>
-      <option value="8">Last 8 weeks</option>
-      <option value="custom">Custom range…</option>
-    </select>
+    <div style="position:relative" id="lb-rec-wrap">
+      <button type="button" id="lb-rec-btn" onclick="toggleLbRecMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:160px;justify-content:space-between">
+        <span id="lb-rec-label">All recruiters</span><span style="font-size:10px;opacity:.6">&#9662;</span>
+      </button>
+      <div id="lb-rec-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:500;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.25);padding:8px;min-width:200px;max-height:320px;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;padding:0 4px;position:sticky;top:0;background:var(--bg);padding-top:4px">
+          <button onclick="lbRecSelectAll()" style="font-size:10px;border:none;background:none;color:var(--accent);cursor:pointer;padding:0">All</button>
+          <input id="lb-rec-search" type="text" placeholder="Search…" oninput="filterLbRecList(this.value)" style="height:22px;font-size:11px;width:110px;padding:0 6px;border-radius:4px;border:1px solid var(--border2);background:var(--bg2);color:var(--text)">
+          <button onclick="lbRecClearAll()" style="font-size:10px;border:none;background:none;color:var(--text3);cursor:pointer;padding:0">None</button>
+        </div>
+        <div id="lb-rec-checks"></div>
+      </div>
+    </div>
+    <div style="position:relative" id="lb-win-wrap">
+      <button type="button" id="lb-win-btn" onclick="toggleLbWinMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:180px;justify-content:space-between">
+        <span id="lb-win-label">Full YTD / selected range</span><span style="font-size:10px;opacity:.6">&#9662;</span>
+      </button>
+      <div id="lb-win-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:500;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.25);padding:4px;min-width:200px">
+        <div onclick="setLbWindow('all')" style="padding:8px 12px;cursor:pointer;border-radius:4px;font-size:12px" onmouseenter="this.style.background='var(--bg2)'" onmouseleave="this.style.background=''">Full YTD / selected range</div>
+        <div onclick="setLbWindow('4')" style="padding:8px 12px;cursor:pointer;border-radius:4px;font-size:12px" onmouseenter="this.style.background='var(--bg2)'" onmouseleave="this.style.background=''">Last 4 weeks</div>
+        <div onclick="setLbWindow('8')" style="padding:8px 12px;cursor:pointer;border-radius:4px;font-size:12px" onmouseenter="this.style.background='var(--bg2)'" onmouseleave="this.style.background=''">Last 8 weeks</div>
+        <div onclick="setLbWindow('custom')" style="padding:8px 12px;cursor:pointer;border-radius:4px;font-size:12px" onmouseenter="this.style.background='var(--bg2)'" onmouseleave="this.style.background=''">Custom range…</div>
+      </div>
+    </div>
+    <input type="hidden" id="lb-window" value="all">
     <div id="lb-custom-range" style="display:none;align-items:center;gap:6px">
       <select id="lb-from" style="height:32px;font-size:12px"></select>
       <span style="font-size:11px;color:var(--text3)">→</span>
@@ -4162,6 +4181,8 @@ function lbGetRangedRecs(mgrFilter){
   }else{
     recs=base.filter(function(r){return lbSelectedMgrs[r.manager]!==false;});
   }
+  // Apply individual recruiter filter
+  recs=recs.filter(function(r){return lbSelectedRecs[r.name]!==false;});
   if(win==='custom'){
     var f=parseInt(document.getElementById('lb-from').value)||0;
     var t=parseInt(document.getElementById('lb-to').value)||wkLabels.length-1;
@@ -4276,6 +4297,113 @@ function renderLeaderboard(){
   document.getElementById('lb-boards').innerHTML=html;
 }
 
+// ─── LEADERBOARD RECRUITER EXCLUDE FILTER ───
+var lbSelectedRecs = {}; // name -> true (included) / false (excluded)
+
+function initLbMgrChecks(){
+  var wrap=document.getElementById('lb-mgr-checks');
+  if(!wrap)return;
+  wrap.innerHTML='';
+  MGRS.forEach(function(m){
+    if(lbSelectedMgrs[m]===undefined)lbSelectedMgrs[m]=true;
+    var mc=MGR_COLORS[m]||'#888';
+    var row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:4px;cursor:pointer;border-radius:4px;font-size:12px';
+    row.onmouseenter=function(){row.style.background='var(--bg2)';};
+    row.onmouseleave=function(){row.style.background='';};
+    row.innerHTML='<input type="checkbox" '+(lbSelectedMgrs[m]?'checked':'')+' style="accent-color:'+mc+';width:14px;height:14px">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+mc+';flex-shrink:0"></span>'
+      +'<span style="color:var(--text)">'+m+'</span>';
+    row.querySelector('input').addEventListener('change',function(e){
+      lbSelectedMgrs[m]=e.target.checked;
+      updateLbMgrLabel();
+      renderLeaderboard();
+    });
+    wrap.appendChild(row);
+  });
+  updateLbMgrLabel();
+}
+
+function initLbRecChecks(query) {
+  var wrap = document.getElementById('lb-rec-checks');
+  if (!wrap) return;
+  var q = (query||'').toLowerCase();
+  var names = [...RECRUITERS].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>r.name);
+  wrap.innerHTML = '';
+  names.forEach(function(name) {
+    if (lbSelectedRecs[name] === undefined) lbSelectedRecs[name] = true;
+    if (q && !name.toLowerCase().includes(q)) return;
+    var mc = MGR_COLORS[RECRUITERS.find(r=>r.name===name)?.manager]||'#888';
+    var row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px;cursor:pointer;border-radius:4px;font-size:12px';
+    row.onmouseenter = function(){row.style.background='var(--bg2)';};
+    row.onmouseleave = function(){row.style.background='';};
+    row.innerHTML = '<input type="checkbox" '+(lbSelectedRecs[name]?'checked':'')+' style="width:14px;height:14px">'
+      +'<span style="flex:1;color:var(--text)">'+name+'</span>';
+    row.querySelector('input').addEventListener('change', function(e) {
+      lbSelectedRecs[name] = e.target.checked;
+      updateLbRecLabel();
+      renderLeaderboard();
+    });
+    wrap.appendChild(row);
+  });
+  updateLbRecLabel();
+}
+
+function filterLbRecList(q) { initLbRecChecks(q); }
+
+function updateLbRecLabel() {
+  var total = RECRUITERS.length;
+  var excluded = Object.values(lbSelectedRecs).filter(function(v){return v===false;}).length;
+  var btn = document.getElementById('lb-rec-label');
+  if (!btn) return;
+  if (excluded === 0) btn.textContent = 'All recruiters';
+  else if (excluded === total) btn.textContent = 'No recruiters';
+  else btn.textContent = (total - excluded) + ' / ' + total + ' recruiters';
+}
+
+function toggleLbWinMenu() {
+  var menu = document.getElementById('lb-win-menu');
+  if (!menu) return;
+  var mgrMenu = document.getElementById('lb-mgr-menu');
+  var recMenu = document.getElementById('lb-rec-menu');
+  if (mgrMenu) mgrMenu.style.display = 'none';
+  if (recMenu) recMenu.style.display = 'none';
+  menu.style.display = menu.style.display !== 'none' ? 'none' : 'block';
+}
+
+function setLbWindow(val) {
+  document.getElementById('lb-window').value = val;
+  var labels = {'all':'Full YTD / selected range','4':'Last 4 weeks','8':'Last 8 weeks','custom':'Custom range…'};
+  document.getElementById('lb-win-label').textContent = labels[val] || val;
+  document.getElementById('lb-win-menu').style.display = 'none';
+  var customDiv = document.getElementById('lb-custom-range');
+  if (customDiv) customDiv.style.display = val === 'custom' ? 'flex' : 'none';
+  if (val === 'custom') populateLbRangeSelects();
+  renderLeaderboard();
+}
+
+function toggleLbRecMenu() {
+  var menu = document.getElementById('lb-rec-menu');
+  if (!menu) return;
+  // Close manager menu if open
+  var mgrMenu = document.getElementById('lb-mgr-menu');
+  if (mgrMenu) mgrMenu.style.display = 'none';
+  if (menu.style.display !== 'none') menu.style.display = 'none';
+  else { initLbRecChecks(''); menu.style.display = 'block'; }
+}
+
+function lbRecSelectAll() {
+  RECRUITERS.forEach(function(r){ lbSelectedRecs[r.name] = true; });
+  initLbRecChecks(document.getElementById('lb-rec-search')?.value||'');
+  renderLeaderboard();
+}
+
+function lbRecClearAll() {
+  RECRUITERS.forEach(function(r){ lbSelectedRecs[r.name] = false; });
+  initLbRecChecks(document.getElementById('lb-rec-search')?.value||'');
+  renderLeaderboard();
+}
 function initLbMgrChecks(){
   var wrap=document.getElementById('lb-mgr-checks');
   if(!wrap)return;
@@ -4317,13 +4445,12 @@ function toggleLbMgrMenu(){
 function lbMgrSelectAll(){MGRS.forEach(function(m){lbSelectedMgrs[m]=true;});initLbMgrChecks();renderLeaderboard();}
 function lbMgrClearAll(){MGRS.forEach(function(m){lbSelectedMgrs[m]=false;});initLbMgrChecks();renderLeaderboard();}
 document.addEventListener('click',function(e){
-  var wrap=document.getElementById('lb-mgr-wrap');
-  if(wrap&&!wrap.contains(e.target)){var menu=document.getElementById('lb-mgr-menu');if(menu)menu.style.display='none';}
-});
-document.getElementById('lb-window').addEventListener('change',function(){
-  var win=document.getElementById('lb-window').value;
-  if(win==='custom'){populateLbRangeSelects();}
-  renderLeaderboard();
+  var mgrWrap=document.getElementById('lb-mgr-wrap');
+  if(mgrWrap&&!mgrWrap.contains(e.target)){var m=document.getElementById('lb-mgr-menu');if(m)m.style.display='none';}
+  var recWrap=document.getElementById('lb-rec-wrap');
+  if(recWrap&&!recWrap.contains(e.target)){var m2=document.getElementById('lb-rec-menu');if(m2)m2.style.display='none';}
+  var winWrap=document.getElementById('lb-win-wrap');
+  if(winWrap&&!winWrap.contains(e.target)){var m3=document.getElementById('lb-win-menu');if(m3)m3.style.display='none';}
 });
 document.getElementById('lb-from').addEventListener('change',renderLeaderboard);
 document.getElementById('lb-to').addEventListener('change',renderLeaderboard);
