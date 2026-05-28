@@ -740,62 +740,29 @@ td.editing{padding:2px 4px!important}
 </div>
 <!-- TRENDS & INSIGHTS -->
 <div class="tab-panel" id="tab-trends">
-  <div class="trend-filters">
-    <select id="tr-window">
-      <option value="4">Last 4 weeks</option>
-      <option value="8">Last 8 weeks</option>
-      <option value="all">Full YTD / selected range</option>
-    </select>
-    <select id="tr-focus">
-      <option value="all">All metrics</option>
-      <option value="subs">Submittals only</option>
-      <option value="ivs">Interviews only</option>
-      <option value="placements">Placements only</option>
-      <option value="starts">Starts only</option>
-      <option value="leads">Leads only</option>
-    </select>
-    <div style="display:flex;align-items:center;gap:6px;padding-left:10px;border-left:1px solid var(--border2)">
-      <span style="font-size:11px;font-weight:600;color:var(--text3);white-space:nowrap">VIEW</span>
-      <select id="tr-scope" style="min-width:130px">
-        <option value="all">Whole team</option>
-        <option value="manager">— by manager —</option>
-        <option value="recruiter">— by recruiter —</option>
-      </select>
-      <select id="tr-manager-sel" style="min-width:140px;display:none"><option value="">Select manager…</option></select>
-      <select id="tr-recruiter-sel" style="min-width:180px;display:none"><option value="">Select recruiter…</option></select>
+  <div class="wctrl" style="flex-wrap:wrap;gap:8px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:11px;font-weight:600;color:var(--text3);white-space:nowrap">WEEK</span>
+      <select id="ti-wk-from" style="height:32px;font-size:12px"></select>
+      <span style="font-size:11px;color:var(--text3)">→</span>
+      <select id="ti-wk-to" style="height:32px;font-size:12px"></select>
     </div>
-    <button class="btn" id="tr-refresh">↻ Refresh</button>
+    <select id="ti-mgr" style="height:32px;font-size:12px"><option value="">All managers</option></select>
+    <button class="btn" onclick="renderTrends()" style="height:32px;font-size:12px;padding:0 12px">↻ Refresh</button>
   </div>
 
-  <!-- Dynamic scope banner -->
-  <div id="tr-scope-banner" style="display:none;padding:10px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg2);margin-bottom:12px;display:flex;align-items:center;gap:10px">
-    <div id="tr-scope-icon" style="font-size:20px"></div>
-    <div>
-      <div id="tr-scope-title" style="font-size:13px;font-weight:700;color:var(--text)"></div>
-      <div id="tr-scope-sub" style="font-size:11px;color:var(--text3);margin-top:1px"></div>
-    </div>
+  <!-- Section tabs -->
+  <div style="display:flex;gap:2px;margin:14px 0 16px;border-bottom:1px solid var(--border2)">
+    <button class="ti-sec-btn active" onclick="showTiSection('health')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px">Team Health</button>
+    <button class="ti-sec-btn" onclick="showTiSection('snapshot')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">Weekly Snapshot</button>
+    <button class="ti-sec-btn" onclick="showTiSection('sparklines')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">Sparkline Grid</button>
   </div>
 
-  <div class="section-hdr" id="tr-hdr-holistic">🌐 Holistic signals</div>
-  <div class="insight-grid" id="tr-holistic"></div>
-
-  <div id="tr-manager-section">
-    <div class="section-hdr">👥 Manager breakdown</div>
-    <div id="tr-manager"></div>
-  </div>
-
-  <div class="section-hdr" id="tr-hdr-spotlight">⭐ Spotlight — trending up</div>
-  <div class="spotlight-row" id="tr-spotlight-up"></div>
-
-  <div class="section-hdr" id="tr-hdr-action">⚠️ Action needed</div>
-  <div class="spotlight-row" id="tr-spotlight-dn"></div>
-
-  <!-- Recruiter deep-dive (shown only in recruiter scope) -->
-  <div id="tr-recruiter-section" style="display:none">
-    <div class="section-hdr">📊 Recruiter deep-dive</div>
-    <div id="tr-recruiter-detail"></div>
-  </div>
+  <div id="ti-health" class="ti-section"></div>
+  <div id="ti-snapshot" class="ti-section" style="display:none"></div>
+  <div id="ti-sparklines" class="ti-section" style="display:none"></div>
 </div>
+
 
 <!-- LEADERBOARD -->
 <div class="tab-panel" id="tab-leaderboard">
@@ -1217,6 +1184,7 @@ async function loadFromSheets() {
     safeSet('stemLastSync', new Date().toISOString());
     renderOverview();
     populateWkSelects();
+    populateTiSelects();
     populateTrendsSelectors();
 
     // Refresh rec-select with updated roster
@@ -1706,6 +1674,7 @@ const recSel=document.getElementById('rec-select');
 function populateTrendsSelectors(){
   const mgrSelT=document.getElementById('tr-manager-sel');
   const recSelT=document.getElementById('tr-recruiter-sel');
+  if(!mgrSelT||!recSelT)return;
   const prevMgr=mgrSelT.value;
   const prevRec=recSelT.value;
   mgrSelT.innerHTML='<option value="">Select manager…</option>';
@@ -2584,275 +2553,329 @@ function priorLabel(arr){const h=Math.ceil(arr.length/2);return h===1?'vs prior 
 function sparkHtml(arr,color){return '';} // Sparklines removed
 function trendArrow(sl){if(sl>0.15)return{icon:'↑',cls:'badge-up'};if(sl<-0.15)return{icon:'↓',cls:'badge-dn'};return{icon:'→',cls:'badge-info'}}
 
-function renderTrends(){
-  const w=document.getElementById('tr-window').value;
-  const focus=document.getElementById('tr-focus').value;
-  const scope=document.getElementById('tr-scope').value;
-  const selMgr=document.getElementById('tr-manager-sel').value;
-  const selRec=document.getElementById('tr-recruiter-sel').value;
-  const allRecs=computedAll();
-  const awl=activeWkLabels();
-  const METRICS=focus==='all'?['subs','ivs','placements','starts','leads']:[focus];
-  const MLABELS={subs:'Submittals',ivs:'Interviews',placements:'Placements',starts:'Starts',leads:'Leads'};
-  const MCOLORS={subs:'#185FA5',ivs:'#1D9E75',placements:'#a855f7',starts:'#D4537E',leads:'#EF9F27'};
-  const MICONS={subs:'📋',ivs:'🎯',placements:'🤝',starts:'🚀',leads:'💡'};
-
-  // ── Determine working set of recruiters based on scope ──
-  let scopeRecs=allRecs;
-  let scopeLabel='Whole team';
-  let scopeIcon='🌐';
-  let scopeSub=`${allRecs.length} recruiters · ${w==='all'?'Full range':'Last '+w+' wks'}`;
-  const banner=document.getElementById('tr-scope-banner');
-  const mgrSection=document.getElementById('tr-manager-section');
-  const recSection=document.getElementById('tr-recruiter-section');
-
-  if(scope==='manager'&&selMgr){
-    scopeRecs=allRecs.filter(r=>r.manager===selMgr);
-    scopeLabel=selMgr+"'s team";
-    scopeIcon='👤';
-    const mc=MGR_COLORS[selMgr]||'#888';
-    scopeSub=`${scopeRecs.length} recruiters · ${w==='all'?'Full range':'Last '+w+' wks'}`;
-    banner.style.display='flex';
-    document.getElementById('tr-scope-icon').textContent=scopeIcon;
-    document.getElementById('tr-scope-title').textContent=scopeLabel;
-    document.getElementById('tr-scope-title').style.color=mc;
-    document.getElementById('tr-scope-sub').textContent=scopeSub;
-    mgrSection.style.display='none';
-    recSection.style.display='none';
-    document.getElementById('tr-hdr-holistic').textContent='📊 Team signals — '+selMgr;
-    document.getElementById('tr-hdr-spotlight').textContent='⭐ Top performers — '+selMgr+"'s team";
-    document.getElementById('tr-hdr-action').textContent='⚠️ Needs attention — '+selMgr+"'s team";
-  } else if(scope==='recruiter'&&selRec){
-    scopeRecs=allRecs.filter(r=>r.name===selRec);
-    const rec=scopeRecs[0];
-    scopeLabel=selRec;
-    scopeIcon='🧑';
-    scopeSub=rec?rec.manager+"'s team · "+(w==='all'?'Full range':'Last '+w+' wks'):'';
-    banner.style.display='flex';
-    document.getElementById('tr-scope-icon').textContent=scopeIcon;
-    document.getElementById('tr-scope-title').textContent=scopeLabel;
-    document.getElementById('tr-scope-title').style.color=rec?MGR_COLORS[rec.manager]||'#888':'var(--text)';
-    document.getElementById('tr-scope-sub').textContent=scopeSub;
-    mgrSection.style.display='none';
-    recSection.style.display='block';
-    document.getElementById('tr-hdr-holistic').textContent='📈 Activity overview — '+selRec;
-    document.getElementById('tr-hdr-spotlight').textContent='';
-    document.getElementById('tr-hdr-action').textContent='';
-  } else {
-    // Whole team
-    banner.style.display='none';
-    mgrSection.style.display='block';
-    recSection.style.display='none';
-    document.getElementById('tr-hdr-holistic').textContent='🌐 Holistic — team-wide signals';
-    document.getElementById('tr-hdr-spotlight').textContent='⭐ Spotlight — trending up';
-    document.getElementById('tr-hdr-action').textContent='⚠️ Action needed';
-    scopeRecs=allRecs;
-  }
-
-  // Helper: build weekly totals for a set of recruiters over awl
-  function teamWeekly(recs,m){
-    return awl.map((_,wi)=>recs.reduce((s,r)=>s+(r[m][wi]||0),0));
-  }
-
-  // ── HOLISTIC / OVERVIEW CARDS ──
-  let holisticHTML='';
-  METRICS.forEach(m=>{
-    const tw=teamWeekly(scopeRecs,m);
-    const win=getWindow(tw,w);
-    const sl=slope(win);const pc=pctChange(win);
-    const avg=win.length?win.reduce((s,v)=>s+v,0)/win.length:0;
-    const last=win[win.length-1]||0;
-    const arr=trendArrow(sl);
-    const pcStr=(pc>=0?'+':'')+pc.toFixed(1)+'%';
-    const pcCol=pc>=5?'var(--green)':pc<=-5?'var(--red)':'var(--amber)';
-    const note=sl>0.3?'Strong upward trajectory.':sl>0.1?'Gradual improvement.':sl<-0.3?'Notable decline — warrants attention.':sl<-0.1?'Slight softening — monitor closely.':'Relatively stable.';
-    const subLabel=scope==='recruiter'&&selRec?w==='all'?'Full range':'Last '+w+' wks':(scope==='manager'&&selMgr?selMgr+"'s team":'Team-wide')+' · '+(w==='all'?'Full range':'Last '+w+' wks');
-    holisticHTML+=`<div class="insight-card">
-      <div class="insight-card-hdr"><div class="insight-icon" style="background:${MCOLORS[m]}22;color:${MCOLORS[m]}">${MICONS[m]}</div><div><div class="insight-card-title">${MLABELS[m]}</div><div class="insight-card-sub">${subLabel}</div></div></div>
-      ${sparkHtml(tw,MCOLORS[m])}
-      <div class="trend-item"><div class="trend-badge ${arr.cls}">${arr.icon}</div><div class="trend-text"><div class="trend-main">Avg ${avg.toFixed(1)}/wk &nbsp;·&nbsp; Last: ${last}</div><div class="trend-detail">${priorLabel(win)}: <span style="color:${pcCol};font-weight:600">${pcStr}</span></div></div></div>
-      <div class="trend-item"><div class="trend-badge badge-info">i</div><div class="trend-text"><div class="trend-detail">${note}</div></div></div>
-    </div>`;
+function populateTiSelects() {
+  var fromSel = document.getElementById('ti-wk-from');
+  var toSel = document.getElementById('ti-wk-to');
+  var mgrSel = document.getElementById('ti-mgr');
+  if (!fromSel || !toSel) return;
+  var prevFrom = fromSel.value;
+  var prevTo = toSel.value;
+  fromSel.innerHTML = '';
+  toSel.innerHTML = '';
+  wkLabels.forEach(function(lbl, i) {
+    var oF = document.createElement('option'); oF.value = i; oF.textContent = 'From: ' + lbl; fromSel.appendChild(oF);
+    var oT = document.createElement('option'); oT.value = i; oT.textContent = 'To: ' + lbl; toSel.appendChild(oT);
   });
-  document.getElementById('tr-holistic').innerHTML=holisticHTML;
-
-  // ── MANAGER SECTION (whole-team scope only) ──
-  if(scope==='all'||(scope==='manager'&&!selMgr)){
-    const mgrGroups={};
-    scopeRecs.forEach(r=>{if(!mgrGroups[r.manager])mgrGroups[r.manager]=[];mgrGroups[r.manager].push(r)});
-    let mgrHTML='<div class="insight-grid">';
-    Object.keys(mgrGroups).sort().forEach(mgr=>{
-      const team=mgrGroups[mgr];const mc=MGR_COLORS[mgr]||'#888';
-      let items='';
-      METRICS.forEach(m=>{
-        const tw=teamWeekly(team,m);
-        const win=getWindow(tw,w);const sl=slope(win);const pc=pctChange(win);
-        const avg=win.length?win.reduce((s,v)=>s+v,0)/win.length:0;
-        const arr=trendArrow(sl);const pcStr=(pc>=0?'+':'')+pc.toFixed(1)+'%';
-        const pcCol=pc>=5?'var(--green)':pc<=-5?'var(--red)':'var(--amber)';
-        const hot=sl>0.2?' · 🔥 Hot':sl<-0.2?' · ⚡ Cooling':'';
-        items+=`<div class="trend-item"><div class="trend-badge ${arr.cls}">${arr.icon}</div><div class="trend-text"><div class="trend-main" style="color:${MCOLORS[m]}">${MLABELS[m]}: avg ${avg.toFixed(1)}/wk</div><div class="trend-detail">${priorLabel(win)}: <span style="color:${pcCol};font-weight:600">${pcStr}</span>${hot}</div></div></div>`;
-      });
-      const topR=[...team].sort((a,b)=>b.totalStarts-a.totalStarts)[0];
-      const botR=[...team].filter(r=>r.avgSub4w>0).sort((a,b)=>a.avgSub4w-b.avgSub4w)[0];
-      mgrHTML+=`<div class="insight-card" style="cursor:pointer" onclick="document.getElementById('tr-scope').value='manager';document.getElementById('tr-manager-sel').value='${mgr}';document.getElementById('tr-manager-sel').style.display='';onTrScopeChange();" title="Click to drill into ${mgr}'s team">
-        <div class="insight-card-hdr"><div class="insight-icon" style="background:${mc}22;color:${mc}">👤</div><div><div class="insight-card-title" style="color:${mc}">${mgr}</div><div class="insight-card-sub">${team.length} recruiters · click to drill in</div></div></div>
-        ${items}
-        ${topR?`<div class="trend-item"><div class="trend-badge badge-up">⭐</div><div class="trend-text"><div class="trend-main">Top: ${topR.name.split(' ')[0]}</div><div class="trend-detail">${topR.totalStarts} starts · sub→start ${topR.sub2start?topR.sub2start.toFixed(1)+':1':'—'}</div></div></div>`:''}
-        ${botR?`<div class="trend-item"><div class="trend-badge badge-warn">!</div><div class="trend-text"><div class="trend-main">Lowest subs: ${botR.name.split(' ')[0]}</div><div class="trend-detail">4-wk avg ${botR.avgSub4w.toFixed(1)}/wk</div></div></div>`:''}
-      </div>`;
-    });
-    mgrHTML+='</div>';
-    document.getElementById('tr-manager').innerHTML=mgrHTML;
-  }
-
-  // ── RECRUITER DEEP-DIVE (recruiter scope) ──
-  if(scope==='recruiter'&&selRec){
-    const rec=scopeRecs[0];
-    if(rec){
-      const mc=MGR_COLORS[rec.manager]||'#888';
-      const allMetrics=['subs','ivs','starts','leads'];
-      // Individual trend cards
-      let deepHTML='<div class="insight-grid">';
-      allMetrics.forEach(m=>{
-        const arr_data=rec[m];
-        const win=getWindow(arr_data,w);
-        const sl=slope(win);const pc=pctChange(win);
-        const avg=win.length?win.reduce((s,v)=>s+v,0)/win.length:0;
-        const tot=totalArr(arr_data);
-        const tArr=trendArrow(sl);
-        const pcStr=(pc>=0?'+':'')+pc.toFixed(1)+'%';
-        const pcCol=pc>=5?'var(--green)':pc<=-5?'var(--red)':'var(--amber)';
-        const note=sl>0.3?'Strongly trending up.':sl>0.1?'Gradually improving.':sl<-0.3?'Declining — needs attention.':sl<-0.1?'Slightly softening.':'Holding steady.';
-        deepHTML+=`<div class="insight-card">
-          <div class="insight-card-hdr"><div class="insight-icon" style="background:${MCOLORS[m]}22;color:${MCOLORS[m]}">${MICONS[m]}</div><div><div class="insight-card-title">${MLABELS[m]}</div><div class="insight-card-sub">Total: ${tot}</div></div></div>
-          ${sparkHtml(arr_data,MCOLORS[m])}
-          <div class="trend-item"><div class="trend-badge ${tArr.cls}">${tArr.icon}</div><div class="trend-text"><div class="trend-main">Avg ${avg.toFixed(1)}/wk in window</div><div class="trend-detail">vs prior half: <span style="color:${pcCol};font-weight:600">${pcStr}</span></div></div></div>
-          <div class="trend-item"><div class="trend-badge badge-info">i</div><div class="trend-text"><div class="trend-detail">${note}</div></div></div>
-        </div>`;
-      });
-      deepHTML+='</div>';
-
-      // Ratios + status summary
-      deepHTML+=`<div class="card" style="margin-top:12px">
-        <div class="card-hdr"><span class="card-title">Conversion ratios</span></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;padding:4px 0">
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-subs)">${rec.totalSubs}</div><div class="mgr-stat-lbl">Total subs</div></div>
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-ivs)">${rec.totalIvs}</div><div class="mgr-stat-lbl">Total IVs</div></div>
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-starts)">${rec.totalStarts}</div><div class="mgr-stat-lbl">Total starts</div></div>
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--amber)">${rec.sub2iv?rec.sub2iv.toFixed(1)+':1':'—'}</div><div class="mgr-stat-lbl">Sub→IV</div></div>
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--amber)">${rec.iv2start?rec.iv2start.toFixed(1)+':1':'—'}</div><div class="mgr-stat-lbl">IV→Start</div></div>
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--amber)">${rec.sub2start?rec.sub2start.toFixed(1)+':1':'—'}</div><div class="mgr-stat-lbl">Sub→Start</div></div>
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:${mc}">${rec.avgSub4w.toFixed(1)}</div><div class="mgr-stat-lbl">4-wk sub avg</div></div>
-        </div>
-      </div>`;
-
-      // Compare to team average
-      const teamAll=allRecs.filter(r=>r.manager===rec.manager);
-      const teamAvgSubs=teamAll.length?teamAll.reduce((s,r)=>s+r.totalSubs,0)/teamAll.length:0;
-      const teamAvgStarts=teamAll.length?teamAll.reduce((s,r)=>s+r.totalStarts,0)/teamAll.length:0;
-      const teamAvgSub4w=teamAll.length?teamAll.reduce((s,r)=>s+r.avgSub4w,0)/teamAll.length:0;
-      const subVsTeam=teamAvgSubs>0?((rec.totalSubs-teamAvgSubs)/teamAvgSubs*100):0;
-      const startVsTeam=teamAvgStarts>0?((rec.totalStarts-teamAvgStarts)/teamAvgStarts*100):0;
-      const sub4wVsTeam=teamAvgSub4w>0?((rec.avgSub4w-teamAvgSub4w)/teamAvgSub4w*100):0;
-      function vsStr(pct){return(pct>=0?'+':'')+pct.toFixed(0)+'% vs team avg';}
-      function vsCol(pct){return pct>=5?'var(--green)':pct<=-5?'var(--red)':'var(--text3)';}
-
-      deepHTML+=`<div class="card" style="margin-top:10px">
-        <div class="card-hdr"><span class="card-title">vs ${rec.manager}'s team average</span></div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:4px 0">
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:${vsCol(subVsTeam)}">${vsStr(subVsTeam)}</div><div class="mgr-stat-lbl">Subs</div></div>
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:${vsCol(startVsTeam)}">${vsStr(startVsTeam)}</div><div class="mgr-stat-lbl">Starts</div></div>
-          <div class="mgr-stat"><div class="mgr-stat-val" style="color:${vsCol(sub4wVsTeam)}">${vsStr(sub4wVsTeam)}</div><div class="mgr-stat-lbl">4-wk avg</div></div>
-        </div>
-      </div>`;
-
-      document.getElementById('tr-recruiter-detail').innerHTML=deepHTML;
-    }
-  }
-
-  // ── SPOTLIGHT & ACTION (team and manager scopes) ──
-  if(scope!=='recruiter'||!selRec){
-    document.getElementById('tr-hdr-spotlight').style.display='';
-    document.getElementById('tr-hdr-action').style.display='';
-    document.getElementById('tr-spotlight-up').style.display='';
-    document.getElementById('tr-spotlight-dn').style.display='';
-    const scored=scopeRecs.map(r=>{
-      const sw=getWindow(r.subs,w),iw=getWindow(r.ivs,w),stw=getWindow(r.starts,w);
-      const sl_s=slope(sw),sl_i=slope(iw),sl_st=slope(stw),pc_s=pctChange(sw);
-      const avg_s=sw.length?sw.reduce((a,v)=>a+v,0)/sw.length:0;
-      const cons=sw.length>=3?1-(Math.max(...sw)-Math.min(...sw))/(Math.max(...sw)+1):0;
-      const upScore=sl_s*3+sl_i*2+sl_st*4+(pc_s/100)+cons;
-      const dnScore=-(sl_s*3+sl_i*2)+(avg_s<3?2:0)+(r.totalStarts===0?3:0);
-      return{...r,sl_s,sl_i,sl_st,pc_s,avg_s,upScore,dnScore};
-    });
-    const limit=scope==='manager'?scopeRecs.length:4;
-    const upList=[...scored].sort((a,b)=>b.upScore-a.upScore).slice(0,limit);
-    const dnList=[...scored].filter(r=>r.avg_s<5||r.totalStarts===0||r.sl_s<-0.3).sort((a,b)=>b.dnScore-a.dnScore).slice(0,limit);
-
-    function spotCard(r,type){
-      const mc=MGR_COLORS[r.manager]||'#888';
-      const tagCls=type==='up'?'tag-spotlight':'tag-action';
-      const tagLabel=type==='up'?'⭐ Spotlight':'⚠️ Action needed';
-      const pcStr=(r.pc_s>=0?'+':'')+r.pc_s.toFixed(1)+'%';
-      const pcCol=r.pc_s>=5?'var(--green)':r.pc_s<=-5?'var(--red)':'var(--amber)';
-      let reason='';
-      if(type==='up'){
-        if(r.sl_st>0.1)reason='Starts trending up — conversion accelerating.';
-        else if(r.sl_s>0.3)reason='Submission volume ramping — strong top-of-funnel.';
-        else if(r.sl_i>0.2)reason='Interview rate climbing — pipeline quality improving.';
-        else reason='Consistent upward trajectory across metrics.';
-      } else {
-        if(r.totalStarts===0)reason='Zero starts — priority for coaching.';
-        else if(r.avg_s<3)reason='Sub volume critically low — pipeline at risk.';
-        else if(r.sl_s<-0.3)reason='Submission activity declining sharply.';
-        else reason='Activity trending down — worth a check-in.';
-      }
-      return`<div class="spotlight-card" style="cursor:pointer" onclick="document.getElementById('tr-scope').value='recruiter';document.getElementById('tr-recruiter-sel').value='${r.name}';document.getElementById('tr-recruiter-sel').style.display='';onTrScopeChange();" title="Click to drill into ${r.name}">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
-          <div><div class="spotlight-name">${r.name}</div><div class="spotlight-mgr" style="color:${mc}">${r.manager}'s team</div></div>
-          <span class="action-tag ${tagCls}">${tagLabel}</span>
-        </div>
-        <div style="display:flex;gap:12px;margin-bottom:4px">
-          <div style="flex:1">${sparkHtml(r.subs,MCOLORS.subs)}<div style="font-size:10px;color:var(--text3);text-align:center">Subs</div></div>
-          <div style="flex:1">${sparkHtml(r.ivs,MCOLORS.ivs)}<div style="font-size:10px;color:var(--text3);text-align:center">IVs</div></div>
-          <div style="flex:1">${sparkHtml(r.starts,MCOLORS.starts)}<div style="font-size:10px;color:var(--text3);text-align:center">Starts</div></div>
-        </div>
-        <div class="metric-row">
-          <div class="mini-stat"><div class="mini-stat-val">${r.totalSubs}</div><div class="mini-stat-lbl">Subs</div></div>
-          <div class="mini-stat"><div class="mini-stat-val">${r.totalStarts}</div><div class="mini-stat-lbl">Starts</div></div>
-          <div class="mini-stat"><div class="mini-stat-val" style="color:${pcCol}">${pcStr}</div><div class="mini-stat-lbl">Sub trend</div></div>
-          <div class="mini-stat"><div class="mini-stat-val">${r.avgSub4w.toFixed(1)}</div><div class="mini-stat-lbl">4-wk avg</div></div>
-        </div>
-        <div style="margin-top:7px;font-size:11px;color:var(--text2);padding-top:7px;border-top:0.5px solid var(--border)">💬 ${reason} <span style="color:var(--accent);font-size:10px">Click to drill in →</span></div>
-      </div>`;
-    }
-
-    document.getElementById('tr-spotlight-up').innerHTML=upList.length?upList.map(r=>spotCard(r,'up')).join(''):'<div class="trends-empty">No strong upward trends.</div>';
-    document.getElementById('tr-spotlight-dn').innerHTML=dnList.length?dnList.map(r=>spotCard(r,'dn')).join(''):'<div class="trends-empty">No recruiters flagged for action.</div>';
-  } else {
-    // Hide spotlight sections in recruiter scope
-    ['tr-hdr-spotlight','tr-hdr-action','tr-spotlight-up','tr-spotlight-dn'].forEach(id=>{
-      document.getElementById(id).style.display='none';
+  fromSel.value = prevFrom || '0';
+  toSel.value = prevTo || String(wkLabels.length - 1);
+  if (!toSel.value || toSel.selectedIndex < 0) toSel.selectedIndex = toSel.options.length - 1;
+  // Populate mgr filter
+  if (mgrSel && mgrSel.options.length <= 1) {
+    MGRS.forEach(function(m) {
+      var o = document.createElement('option'); o.value = m; o.textContent = m; mgrSel.appendChild(o);
     });
   }
 }
 
-function onTrScopeChange(){
-  const scope=document.getElementById('tr-scope').value;
-  const mgrSel=document.getElementById('tr-manager-sel');
-  const recSel=document.getElementById('tr-recruiter-sel');
-  mgrSel.style.display=scope==='manager'?'':'none';
-  recSel.style.display=scope==='recruiter'?'':'none';
-  if(scope==='all'){mgrSel.value='';recSel.value='';}
+function showTiSection(name) {
+  ['health','snapshot','sparklines'].forEach(function(s) {
+    document.getElementById('ti-'+s).style.display = s===name ? '' : 'none';
+  });
+  document.querySelectorAll('.ti-sec-btn').forEach(function(btn) {
+    var active = btn.textContent.toLowerCase().replace(/\s/g,'').includes(name) ||
+      (name==='health' && btn.textContent.includes('Health')) ||
+      (name==='snapshot' && btn.textContent.includes('Snapshot')) ||
+      (name==='sparklines' && btn.textContent.includes('Sparkline'));
+    btn.style.color = active ? 'var(--accent)' : 'var(--text3)';
+    btn.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+  });
   renderTrends();
 }
 
-['tr-window','tr-focus'].forEach(id=>document.getElementById(id).addEventListener('change',renderTrends));
-document.getElementById('tr-scope').addEventListener('change',onTrScopeChange);
-document.getElementById('tr-manager-sel').addEventListener('change',renderTrends);
-document.getElementById('tr-recruiter-sel').addEventListener('change',renderTrends);
-document.getElementById('tr-refresh').addEventListener('click',renderTrends);
+function renderTrends() {
+  populateTiSelects();
+  var f = parseInt(document.getElementById('ti-wk-from').value) || 0;
+  var t = parseInt(document.getElementById('ti-wk-to').value);
+  if (isNaN(t)) t = wkLabels.length - 1;
+  if (t < f) t = f;
+  var mgrF = document.getElementById('ti-mgr').value;
+
+  // Get data sliced to selected range
+  var all = computedAll().filter(function(r){ return !mgrF || r.manager === mgrF; });
+
+  // Helper: sum array slice
+  function sliceSum(arr, from, to) {
+    var s = 0;
+    for (var i = from; i <= to && i < (arr||[]).length; i++) s += (arr[i]||0);
+    return s;
+  }
+  function priorSliceSum(arr, from, to) {
+    var len = to - from + 1;
+    var pf = Math.max(0, from - len);
+    var pt = from - 1;
+    var s = 0;
+    for (var i = pf; i <= pt && i < (arr||[]).length; i++) s += (arr[i]||0);
+    return s;
+  }
+  function pct(a, b) { if (!b) return null; return Math.round((a - b) / b * 100); }
+
+  // Build per-recruiter range stats
+  var recs = all.map(function(r) {
+    return {
+      name: r.name, manager: r.manager,
+      subs: sliceSum(r.subs, f, t),
+      ivs: sliceSum(r.ivs, f, t),
+      placements: sliceSum(r.placements||[], f, t),
+      starts: sliceSum(r.starts, f, t),
+      leads: sliceSum(r.leads, f, t),
+      priorSubs: priorSliceSum(r.subs, f, t),
+      priorStarts: priorSliceSum(r.starts, f, t),
+      weeklyData: { subs: r.subs, ivs: r.ivs, starts: r.starts }
+    };
+  });
+
+  var activeSection = 'health';
+  document.querySelectorAll('.ti-sec-btn').forEach(function(btn) {
+    if (btn.style.color === 'var(--accent)' || btn.style.color.includes('378ADD')) {
+      if (btn.textContent.includes('Snapshot')) activeSection = 'snapshot';
+      else if (btn.textContent.includes('Sparkline')) activeSection = 'sparklines';
+      else activeSection = 'health';
+    }
+  });
+
+  if (activeSection === 'health') renderTiHealth(recs, mgrF, f, t);
+  else if (activeSection === 'snapshot') renderTiSnapshot(recs, f, t);
+  else renderTiSparklines(recs, f, t);
+}
+
+function renderTiHealth(recs, mgrF, f, t) {
+  var wrap = document.getElementById('ti-health');
+  if (!wrap) return;
+
+  var mgrs = mgrF ? [mgrF] : MGRS.filter(function(m){ return m !== 'Kevin'; });
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">';
+  mgrs.forEach(function(mgr) {
+    var mc = MGR_COLORS[mgr] || '#888';
+    var team = recs.filter(function(r){ return r.manager === mgr; });
+    if (!team.length) return;
+    var totalStarts = team.reduce(function(s,r){return s+r.starts;},0);
+    var totalSubs = team.reduce(function(s,r){return s+r.subs;},0);
+    var priorStarts = team.reduce(function(s,r){return s+r.priorStarts;},0);
+    var priorSubs = team.reduce(function(s,r){return s+r.priorSubs;},0);
+    var startTrend = priorStarts ? Math.round((totalStarts-priorStarts)/priorStarts*100) : null;
+    var subTrend = priorSubs ? Math.round((totalSubs-priorSubs)/priorSubs*100) : null;
+    var onTrack = team.filter(function(r){return r.starts>=2;}).length;
+    var status = onTrack >= team.length*0.7 ? 'green' : onTrack >= team.length*0.4 ? 'amber' : 'red';
+    var statusText = status==='green'?'On track':status==='amber'?'Watch':'Needs attention';
+    var statusBg = status==='green'?'#EAF3DE':status==='amber'?'#FAEEDA':'#FCEBEB';
+    var statusCol = status==='green'?'#3B6D11':status==='amber'?'#854F0B':'#A32D2D';
+    var trendHtml = function(v) {
+      if (v===null) return '<span style="color:var(--text3)">—</span>';
+      var col = v>0?'#3B6D11':v<0?'#A32D2D':'var(--text3)';
+      return '<span style="color:'+col+'">'+(v>0?'+':'')+v+'%</span>';
+    };
+    var barPct = Math.min(100, Math.round(onTrack/team.length*100));
+
+    html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+        +'<span style="font-size:14px;font-weight:700;color:'+mc+'">'+mgr+'</span>'
+        +'<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:100px;background:'+statusBg+';color:'+statusCol+'">'+statusText+'</span>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">'
+        +'<div style="font-size:12px;color:var(--text3)">Recruiters</div><div style="font-size:12px;text-align:right;color:var(--text)">'+team.length+'</div>'
+        +'<div style="font-size:12px;color:var(--text3)">Starts</div><div style="font-size:12px;text-align:right;color:var(--text)">'+totalStarts+' '+trendHtml(startTrend)+'</div>'
+        +'<div style="font-size:12px;color:var(--text3)">Subs</div><div style="font-size:12px;text-align:right;color:var(--text)">'+totalSubs+' '+trendHtml(subTrend)+'</div>'
+        +'<div style="font-size:12px;color:var(--text3)">On target</div><div style="font-size:12px;text-align:right;color:var(--text)">'+onTrack+' / '+team.length+'</div>'
+      +'</div>'
+      +'<div style="height:4px;background:var(--border2);border-radius:2px;overflow:hidden">'
+        +'<div style="height:100%;width:'+barPct+'%;background:'+mc+';border-radius:2px"></div>'
+      +'</div>'
+    +'</div>';
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function renderTiSnapshot(recs, f, t) {
+  var wrap = document.getElementById('ti-snapshot');
+  if (!wrap) return;
+
+  var totalSubs = recs.reduce(function(s,r){return s+r.subs;},0);
+  var totalStarts = recs.reduce(function(s,r){return s+r.starts;},0);
+  var totalIvs = recs.reduce(function(s,r){return s+r.ivs;},0);
+  var totalPl = recs.reduce(function(s,r){return s+r.placements;},0);
+  var priorSubs = recs.reduce(function(s,r){return s+r.priorSubs;},0);
+  var priorStarts = recs.reduce(function(s,r){return s+r.priorStarts;},0);
+  var sub2start = totalStarts ? (totalSubs/totalStarts).toFixed(1)+':1' : '—';
+
+  function diffBadge(cur, prior) {
+    if (!prior) return '';
+    var d = cur - prior;
+    var col = d>0?'color:#3B6D11':d<0?'color:#A32D2D':'color:var(--text3)';
+    return ' <span style="font-size:11px;'+col+'">'+(d>0?'+':'')+d+'</span>';
+  }
+
+  // Top performer by starts
+  var topPerf = recs.slice().sort(function(a,b){return b.starts-a.starts;})[0];
+  // Biggest improvement by subs
+  var improved = recs.filter(function(r){return r.priorSubs>0;}).slice().sort(function(a,b){
+    return (b.subs-b.priorSubs)-(a.subs-a.priorSubs);
+  })[0];
+  // Biggest drop
+  var dropped = recs.filter(function(r){return r.priorSubs>0;}).slice().sort(function(a,b){
+    return (a.subs-a.priorSubs)-(b.subs-b.priorSubs);
+  })[0];
+  // Zero activity — show exactly what's missing per recruiter
+  var zeroRecs = recs.filter(function(r){
+    return r.subs===0||r.starts===0||r.ivs===0;
+  }).slice(0,6);
+
+  function snapshotRow(iconClass, iconBg, iconCol, title, sub) {
+    return '<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--border)">'
+      +'<div style="width:36px;height:36px;border-radius:8px;background:'+iconBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+        +'<i class="ti '+iconClass+'" style="font-size:17px;color:'+iconCol+'" aria-hidden="true"></i>'
+      +'</div>'
+      +'<div><div style="font-size:13px;font-weight:600;color:var(--text)">'+title+'</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:2px">'+sub+'</div></div>'
+    +'</div>';
+  }
+
+  var wkRange = wkLabels[f] + (t!==f?' → '+wkLabels[t]:'');
+
+  var html = '<p style="font-size:11px;color:var(--text3);margin-bottom:10px">'+wkRange+'</p>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">'
+      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Subs</div><div style="font-size:20px;font-weight:700;color:var(--c-subs)">'+totalSubs+diffBadge(totalSubs,priorSubs)+'</div></div>'
+      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Interviews</div><div style="font-size:20px;font-weight:700;color:var(--c-ivs)">'+totalIvs+'</div></div>'
+      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Placements</div><div style="font-size:20px;font-weight:700;color:var(--purple)">'+totalPl+'</div></div>'
+      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Starts</div><div style="font-size:20px;font-weight:700;color:var(--c-starts)">'+totalStarts+diffBadge(totalStarts,priorStarts)+'</div></div>'
+      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Sub→Start</div><div style="font-size:20px;font-weight:700;color:var(--c-leads)">'+sub2start+'</div></div>'
+    +'</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px 14px">';
+
+  if (topPerf) html += snapshotRow('ti-trophy','#EAF3DE','#3B6D11',
+    'Top performer — '+topPerf.name,
+    topPerf.starts+' starts · '+topPerf.subs+' subs · '+topPerf.ivs+' IVs · '+(topPerf.placements||0)+' placements · '+topPerf.manager+"'s team");
+
+  if (improved && improved.subs > improved.priorSubs) html += snapshotRow('ti-trending-up','#EAF3DE','#3B6D11',
+    'Biggest improvement — '+improved.name,
+    improved.subs+' subs (+'+(improved.subs-improved.priorSubs)+' vs prior period) · '+improved.starts+' starts');
+
+  if (dropped && dropped.subs < dropped.priorSubs) html += snapshotRow('ti-trending-down','#FCEBEB','#A32D2D',
+    'Biggest drop — '+dropped.name,
+    dropped.subs+' subs ('+(dropped.subs-dropped.priorSubs)+' vs prior period) · '+dropped.starts+' starts');
+
+  if (zeroRecs.length) {
+    var zeroLines = zeroRecs.map(function(r){
+      var missing = [];
+      if (r.subs===0) missing.push('0 subs');
+      if (r.ivs===0) missing.push('0 interviews');
+      if (r.placements===0) missing.push('0 placements');
+      if (r.starts===0) missing.push('0 starts');
+      return r.name+' — '+missing.join(', ');
+    }).join('<br>');
+    html += snapshotRow('ti-alert-triangle','#FAEEDA','#854F0B',
+      'Missing activity ('+zeroRecs.length+' recruiters)', zeroLines);
+  }
+
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function renderTiSparklines(recs, f, t) {
+  var wrap = document.getElementById('ti-sparklines');
+  if (!wrap) return;
+
+  // Build spark data (weekly subs for the selected range)
+  var sorted = recs.slice().sort(function(a,b){return a.name.localeCompare(b.name);});
+  var canvasIds = [];
+  var sparkDataMap = {};
+
+  var html = '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+    +'<div style="display:grid;grid-template-columns:150px 1fr 60px;gap:8px;padding:8px 14px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text3)">'
+      +'<div>Recruiter</div><div>Subs — last '+(t-f+1)+' weeks</div><div style="text-align:right">Trend</div>'
+    +'</div>';
+
+  sorted.forEach(function(r, idx) {
+    var cid = 'tisp_'+idx;
+    canvasIds.push(cid);
+    // Get weekly subs for selected range
+    var weeklySlice = [];
+    for (var i = f; i <= t; i++) {
+      weeklySlice.push((r.weeklyData.subs[i])||0);
+    }
+    sparkDataMap[cid] = weeklySlice;
+
+    // Trend: compare first half vs second half of range
+    var mid = Math.floor(weeklySlice.length/2);
+    var first = weeklySlice.slice(0,mid).reduce(function(s,v){return s+v;},0);
+    var last = weeklySlice.slice(mid).reduce(function(s,v){return s+v;},0);
+    var trendPct = first ? Math.round((last-first)/first*100) : null;
+    var trendStr = trendPct===null?'—':trendPct>0?'+'+trendPct+'%':trendPct+'%';
+    var trendCol = trendPct===null?'var(--text3)':trendPct>0?'#3B6D11':trendPct<0?'#A32D2D':'var(--text3)';
+    var sparkColor = trendPct>0?'#639922':trendPct<0?'#E24B4A':'#888780';
+
+    html += '<div style="display:grid;grid-template-columns:150px 1fr 60px;gap:8px;align-items:center;padding:6px 14px;border-bottom:0.5px solid var(--border)">'
+      +'<div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
+      +'<div style="height:32px;position:relative"><canvas id="'+cid+'" role="img" aria-label="'+r.name+' trend" style="position:absolute;inset:0;width:100%;height:100%"></canvas></div>'
+      +'<div style="font-size:12px;font-weight:600;text-align:right;color:'+trendCol+'">'+trendStr+'</div>'
+    +'</div>';
+  });
+
+  html += '</div>';
+  wrap.innerHTML = html;
+  wrap._sparkData = sparkDataMap;
+  wrap._sparkColor = {};
+  sorted.forEach(function(r,idx){
+    var cid='tisp_'+idx;
+    var weeklySlice=sparkDataMap[cid];
+    var mid=Math.floor(weeklySlice.length/2);
+    var first=weeklySlice.slice(0,mid).reduce(function(s,v){return s+v;},0);
+    var last=weeklySlice.slice(mid).reduce(function(s,v){return s+v;},0);
+    var tp=first?Math.round((last-first)/first*100):null;
+    wrap._sparkColor[cid]=tp>0?'#639922':tp<0?'#E24B4A':'#888780';
+  });
+
+  // Draw sparklines after DOM update
+  requestAnimationFrame(function(){
+    canvasIds.forEach(function(cid){
+      var canvas=document.getElementById(cid);
+      if(!canvas)return;
+      var data=sparkDataMap[cid];
+      var color=wrap._sparkColor[cid]||'#888780';
+      var labels=data.map(function(_,i){return 'Wk'+(f+i+1);});
+      if(canvas._chartInst){canvas._chartInst.destroy();}
+      canvas._chartInst=new Chart(canvas,{
+        type:'line',
+        data:{labels:labels,datasets:[{data:data,borderColor:color,borderWidth:1.5,pointRadius:0,fill:false,tension:.3}]},
+        options:{responsive:false,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{enabled:false}},
+          scales:{x:{display:false},y:{display:false}}}
+      });
+    });
+  });
+}
+
+
+function onTrScopeChange(){
+  const scope=document.getElementById('tr-scope');
+  if(!scope)return;
+  const mgrSel=document.getElementById('tr-manager-sel');
+  const recSel=document.getElementById('tr-recruiter-sel');
+  if(!mgrSel||!recSel)return;
+  mgrSel.style.display=scope.value==='manager'?'':'none';
+  recSel.style.display=scope.value==='recruiter'?'':'none';
+  if(scope.value==='all'){mgrSel.value='';recSel.value='';}
+  renderTrends();
+}
+
+['tr-window','tr-focus','tr-scope','tr-manager-sel','tr-recruiter-sel','tr-refresh'].forEach(function(id){
+  var el=document.getElementById(id);
+  if(!el)return;
+  if(id==='tr-scope') el.addEventListener('change',onTrScopeChange);
+  else if(id==='tr-refresh') el.addEventListener('click',renderTrends);
+  else el.addEventListener('change',renderTrends);
+});
 
 // ─── AUTH SYSTEM ───
 // Pure-JS SHA-256 — works on file://, iOS Safari, and any non-HTTPS context
