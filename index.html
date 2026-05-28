@@ -598,11 +598,17 @@ td.editing{padding:2px 4px!important}
 <!-- MANAGER ROLLUP -->
 <div class="tab-panel" id="tab-managers">
   <div class="wctrl">
-    <select id="mgr-window">
+    <select id="mgr-window" onchange="onMgrWindowChange()">
       <option value="4">Last 4 weeks</option>
       <option value="8">Last 8 weeks</option>
       <option value="all">Full YTD</option>
+      <option value="custom">Custom range…</option>
     </select>
+    <div id="mgr-custom-range" style="display:none;align-items:center;gap:6px">
+      <select id="mgr-wk-from" onchange="renderManagers()" style="height:32px;font-size:12px"></select>
+      <span style="font-size:11px;color:var(--text3)">→</span>
+      <select id="mgr-wk-to" onchange="renderManagers()" style="height:32px;font-size:12px"></select>
+    </div>
     <select id="mgr-sort">
       <option value="starts">Sort by starts</option>
       <option value="subs">Sort by submittals</option>
@@ -743,12 +749,11 @@ td.editing{padding:2px 4px!important}
   <div class="wctrl" style="flex-wrap:wrap;gap:8px">
     <div style="display:flex;align-items:center;gap:6px">
       <span style="font-size:11px;font-weight:600;color:var(--text3);white-space:nowrap">WEEK</span>
-      <select id="ti-wk-from" style="height:32px;font-size:12px"></select>
+      <select id="ti-wk-from" onchange="renderTrends()" style="height:32px;font-size:12px"></select>
       <span style="font-size:11px;color:var(--text3)">→</span>
-      <select id="ti-wk-to" style="height:32px;font-size:12px"></select>
+      <select id="ti-wk-to" onchange="renderTrends()" style="height:32px;font-size:12px"></select>
     </div>
-    <select id="ti-mgr" style="height:32px;font-size:12px"><option value="">All managers</option></select>
-    <button class="btn" onclick="renderTrends()" style="height:32px;font-size:12px;padding:0 12px">↻ Refresh</button>
+    <select id="ti-mgr" onchange="renderTrends()" style="height:32px;font-size:12px"><option value="">All managers</option></select>
   </div>
 
   <!-- Section tabs -->
@@ -759,7 +764,35 @@ td.editing{padding:2px 4px!important}
   </div>
 
   <div id="ti-health" class="ti-section"></div>
-  <div id="ti-snapshot" class="ti-section" style="display:none"></div>
+  <div id="ti-snapshot" class="ti-section" style="display:none">
+    <!-- Snapshot sub-tabs -->
+    <div style="display:flex;gap:4px;margin-bottom:14px">
+      <button type="button" id="snap-this-btn" onclick="setSnapMode('thisweek')" style="padding:5px 14px;font-size:12px;font-weight:600;border-radius:100px;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);cursor:pointer">This Week</button>
+      <button type="button" id="snap-cmp-btn" onclick="setSnapMode('compare')" style="padding:5px 14px;font-size:12px;font-weight:600;border-radius:100px;border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">Period Comparison</button>
+    </div>
+    <!-- This Week controls -->
+    <div id="snap-thisweek-ctrl" style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <span style="font-size:11px;font-weight:600;color:var(--text3)">WEEK</span>
+      <select id="snap-wk" onchange="renderTiSnapshot()" style="height:30px;font-size:12px"></select>
+    </div>
+    <!-- Period Comparison controls -->
+    <div id="snap-compare-ctrl" style="display:none;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--accent-dim);border-radius:8px;border:1px solid var(--accent)">
+        <span style="font-size:11px;font-weight:700;color:var(--accent)">A</span>
+        <select id="snap-a-from" onchange="renderTiSnapshot()" style="height:28px;font-size:12px"></select>
+        <span style="font-size:11px;color:var(--text3)">→</span>
+        <select id="snap-a-to" onchange="renderTiSnapshot()" style="height:28px;font-size:12px"></select>
+      </div>
+      <span style="font-size:13px;color:var(--text3)">vs</span>
+      <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--bg2);border-radius:8px;border:1px solid var(--border2)">
+        <span style="font-size:11px;font-weight:700;color:var(--text3)">B</span>
+        <select id="snap-b-from" onchange="renderTiSnapshot()" style="height:28px;font-size:12px"></select>
+        <span style="font-size:11px;color:var(--text3)">→</span>
+        <select id="snap-b-to" onchange="renderTiSnapshot()" style="height:28px;font-size:12px"></select>
+      </div>
+    </div>
+    <div id="snap-content"></div>
+  </div>
   <div id="ti-sparklines" class="ti-section" style="display:none"></div>
 </div>
 
@@ -1185,6 +1218,8 @@ async function loadFromSheets() {
     renderOverview();
     populateWkSelects();
     populateTiSelects();
+    populateMgrWkSelects();
+    populateSnapSelects();
     populateTrendsSelectors();
 
     // Refresh rec-select with updated roster
@@ -2644,7 +2679,7 @@ function renderTrends() {
   });
 
   if (activeSection === 'health') renderTiHealth(recs, mgrF, f, t);
-  else if (activeSection === 'snapshot') renderTiSnapshot(recs, f, t);
+  else if (activeSection === 'snapshot') renderTiSnapshot();
   else renderTiSparklines(recs, f, t);
 }
 
@@ -2697,90 +2732,218 @@ function renderTiHealth(recs, mgrF, f, t) {
   wrap.innerHTML = html;
 }
 
-function renderTiSnapshot(recs, f, t) {
-  var wrap = document.getElementById('ti-snapshot');
-  if (!wrap) return;
+var snapMode = 'thisweek';
 
-  var totalSubs = recs.reduce(function(s,r){return s+r.subs;},0);
-  var totalStarts = recs.reduce(function(s,r){return s+r.starts;},0);
-  var totalIvs = recs.reduce(function(s,r){return s+r.ivs;},0);
-  var totalPl = recs.reduce(function(s,r){return s+r.placements;},0);
-  var priorSubs = recs.reduce(function(s,r){return s+r.priorSubs;},0);
-  var priorStarts = recs.reduce(function(s,r){return s+r.priorStarts;},0);
-  var sub2start = totalStarts ? (totalSubs/totalStarts).toFixed(1)+':1' : '—';
-
-  function diffBadge(cur, prior) {
-    if (!prior) return '';
-    var d = cur - prior;
-    var col = d>0?'color:#3B6D11':d<0?'color:#A32D2D':'color:var(--text3)';
-    return ' <span style="font-size:11px;'+col+'">'+(d>0?'+':'')+d+'</span>';
+function setSnapMode(mode) {
+  snapMode = mode;
+  var twCtrl = document.getElementById('snap-thisweek-ctrl');
+  var cmpCtrl = document.getElementById('snap-compare-ctrl');
+  var twBtn = document.getElementById('snap-this-btn');
+  var cmpBtn = document.getElementById('snap-cmp-btn');
+  if (twCtrl) twCtrl.style.display = mode==='thisweek' ? 'flex' : 'none';
+  if (cmpCtrl) cmpCtrl.style.display = mode==='compare' ? 'flex' : 'none';
+  if (twBtn) {
+    twBtn.style.borderColor = mode==='thisweek'?'var(--accent)':'var(--border2)';
+    twBtn.style.background = mode==='thisweek'?'var(--accent-dim)':'var(--bg2)';
+    twBtn.style.color = mode==='thisweek'?'var(--accent)':'var(--text3)';
   }
-
-  // Top performer by starts
-  var topPerf = recs.slice().sort(function(a,b){return b.starts-a.starts;})[0];
-  // Biggest improvement by subs
-  var improved = recs.filter(function(r){return r.priorSubs>0;}).slice().sort(function(a,b){
-    return (b.subs-b.priorSubs)-(a.subs-a.priorSubs);
-  })[0];
-  // Biggest drop
-  var dropped = recs.filter(function(r){return r.priorSubs>0;}).slice().sort(function(a,b){
-    return (a.subs-a.priorSubs)-(b.subs-b.priorSubs);
-  })[0];
-  // Zero activity — show exactly what's missing per recruiter
-  var zeroRecs = recs.filter(function(r){
-    return r.subs===0||r.starts===0||r.ivs===0;
-  }).slice(0,6);
-
-  function snapshotRow(iconClass, iconBg, iconCol, title, sub) {
-    return '<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--border)">'
-      +'<div style="width:36px;height:36px;border-radius:8px;background:'+iconBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
-        +'<i class="ti '+iconClass+'" style="font-size:17px;color:'+iconCol+'" aria-hidden="true"></i>'
-      +'</div>'
-      +'<div><div style="font-size:13px;font-weight:600;color:var(--text)">'+title+'</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:2px">'+sub+'</div></div>'
-    +'</div>';
+  if (cmpBtn) {
+    cmpBtn.style.borderColor = mode==='compare'?'var(--accent)':'var(--border2)';
+    cmpBtn.style.background = mode==='compare'?'var(--accent-dim)':'var(--bg2)';
+    cmpBtn.style.color = mode==='compare'?'var(--accent)':'var(--text3)';
   }
-
-  var wkRange = wkLabels[f] + (t!==f?' → '+wkLabels[t]:'');
-
-  var html = '<p style="font-size:11px;color:var(--text3);margin-bottom:10px">'+wkRange+'</p>'
-    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">'
-      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Subs</div><div style="font-size:20px;font-weight:700;color:var(--c-subs)">'+totalSubs+diffBadge(totalSubs,priorSubs)+'</div></div>'
-      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Interviews</div><div style="font-size:20px;font-weight:700;color:var(--c-ivs)">'+totalIvs+'</div></div>'
-      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Placements</div><div style="font-size:20px;font-weight:700;color:var(--purple)">'+totalPl+'</div></div>'
-      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Starts</div><div style="font-size:20px;font-weight:700;color:var(--c-starts)">'+totalStarts+diffBadge(totalStarts,priorStarts)+'</div></div>'
-      +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Sub→Start</div><div style="font-size:20px;font-weight:700;color:var(--c-leads)">'+sub2start+'</div></div>'
-    +'</div>'
-    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px 14px">';
-
-  if (topPerf) html += snapshotRow('ti-trophy','#EAF3DE','#3B6D11',
-    'Top performer — '+topPerf.name,
-    topPerf.starts+' starts · '+topPerf.subs+' subs · '+topPerf.ivs+' IVs · '+(topPerf.placements||0)+' placements · '+topPerf.manager+"'s team");
-
-  if (improved && improved.subs > improved.priorSubs) html += snapshotRow('ti-trending-up','#EAF3DE','#3B6D11',
-    'Biggest improvement — '+improved.name,
-    improved.subs+' subs (+'+(improved.subs-improved.priorSubs)+' vs prior period) · '+improved.starts+' starts');
-
-  if (dropped && dropped.subs < dropped.priorSubs) html += snapshotRow('ti-trending-down','#FCEBEB','#A32D2D',
-    'Biggest drop — '+dropped.name,
-    dropped.subs+' subs ('+(dropped.subs-dropped.priorSubs)+' vs prior period) · '+dropped.starts+' starts');
-
-  if (zeroRecs.length) {
-    var zeroLines = zeroRecs.map(function(r){
-      var missing = [];
-      if (r.subs===0) missing.push('0 subs');
-      if (r.ivs===0) missing.push('0 interviews');
-      if (r.placements===0) missing.push('0 placements');
-      if (r.starts===0) missing.push('0 starts');
-      return r.name+' — '+missing.join(', ');
-    }).join('<br>');
-    html += snapshotRow('ti-alert-triangle','#FAEEDA','#854F0B',
-      'Missing activity ('+zeroRecs.length+' recruiters)', zeroLines);
-  }
-
-  html += '</div>';
-  wrap.innerHTML = html;
+  populateSnapSelects();
+  renderTiSnapshot();
 }
+
+function populateSnapSelects() {
+  // Populate single-week select
+  var wkSel = document.getElementById('snap-wk');
+  if (wkSel && wkSel.options.length !== wkLabels.length) {
+    var prev = wkSel.value;
+    wkSel.innerHTML = '';
+    wkLabels.forEach(function(lbl, i) {
+      var o = document.createElement('option'); o.value = i; o.textContent = lbl; wkSel.appendChild(o);
+    });
+    wkSel.value = prev || String(wkLabels.length - 1);
+    if (wkSel.selectedIndex < 0) wkSel.selectedIndex = wkSel.options.length - 1;
+  }
+  // Populate period A/B selects
+  ['snap-a-from','snap-a-to','snap-b-from','snap-b-to'].forEach(function(id, idx) {
+    var sel = document.getElementById(id);
+    if (!sel || sel.options.length === wkLabels.length) return;
+    sel.innerHTML = '';
+    var prefix = id.includes('from') ? 'From: ' : 'To: ';
+    wkLabels.forEach(function(lbl, i) {
+      var o = document.createElement('option'); o.value = i; o.textContent = prefix+lbl; sel.appendChild(o);
+    });
+    // Defaults: A=first half, B=second half
+    if (id==='snap-a-from') sel.selectedIndex = 0;
+    if (id==='snap-a-to') sel.value = String(Math.floor((wkLabels.length-1)/2));
+    if (id==='snap-b-from') sel.value = String(Math.floor((wkLabels.length-1)/2)+1);
+    if (id==='snap-b-to') sel.selectedIndex = sel.options.length-1;
+  });
+}
+
+function renderTiSnapshot(recsArg, fArg, tArg) {
+  var wrap = document.getElementById('snap-content');
+  if (!wrap) return;
+  populateSnapSelects();
+
+  var mgrF = document.getElementById('ti-mgr') ? document.getElementById('ti-mgr').value : '';
+  var allRecs = computedAll().filter(function(r){ return !mgrF || r.manager===mgrF; });
+
+  function sliceSum(arr, f, t) { var s=0; for(var i=f;i<=t&&i<(arr||[]).length;i++) s+=(arr[i]||0); return s; }
+
+  if (snapMode === 'thisweek') {
+    var wkSel = document.getElementById('snap-wk');
+    var wkIdx = wkSel ? parseInt(wkSel.value) : wkLabels.length - 1;
+    var priorIdx = wkIdx - 1;
+    var wkLabel = wkLabels[wkIdx] || ('Wk '+(wkIdx+1));
+
+    var recs = allRecs.map(function(r) {
+      return {
+        name: r.name, manager: r.manager,
+        subs: sliceSum(r.subs, wkIdx, wkIdx),
+        ivs: sliceSum(r.ivs, wkIdx, wkIdx),
+        placements: sliceSum(r.placements||[], wkIdx, wkIdx),
+        starts: sliceSum(r.starts, wkIdx, wkIdx),
+        leads: sliceSum(r.leads, wkIdx, wkIdx),
+        priorSubs:    priorIdx>=0 ? sliceSum(r.subs, priorIdx, priorIdx) : 0,
+        priorStarts:  priorIdx>=0 ? sliceSum(r.starts, priorIdx, priorIdx) : 0,
+        priorIvs:     priorIdx>=0 ? sliceSum(r.ivs, priorIdx, priorIdx) : 0,
+        priorPl:      priorIdx>=0 ? sliceSum(r.placements||[], priorIdx, priorIdx) : 0,
+        priorLeads:   priorIdx>=0 ? sliceSum(r.leads, priorIdx, priorIdx) : 0,
+        weeklyData: { subs: r.subs, starts: r.starts }
+      };
+    });
+
+    var totalSubs   = recs.reduce(function(s,r){return s+r.subs;},0);
+    var totalStarts = recs.reduce(function(s,r){return s+r.starts;},0);
+    var totalIvs    = recs.reduce(function(s,r){return s+r.ivs;},0);
+    var totalPl     = recs.reduce(function(s,r){return s+r.placements;},0);
+    var totalLeads  = recs.reduce(function(s,r){return s+r.leads;},0);
+    var priorSubs   = recs.reduce(function(s,r){return s+r.priorSubs;},0);
+    var priorStarts = recs.reduce(function(s,r){return s+r.priorStarts;},0);
+    var priorIvs    = recs.reduce(function(s,r){return s+r.priorIvs;},0);
+    var priorPl     = recs.reduce(function(s,r){return s+r.priorPl;},0);
+    var priorLeads  = recs.reduce(function(s,r){return s+r.priorLeads;},0);
+
+    function diffBadge(cur, prior) {
+      if (priorIdx < 0) return '';
+      var d = cur - prior;
+      var col = d>0?'color:#3B6D11':d<0?'color:#A32D2D':'color:var(--text3)';
+      var str = d>0?'+'+d:d===0?'—':String(d);
+      return ' <span style="font-size:11px;'+col+'">'+str+'</span>';
+    }
+
+    var topPerf = recs.slice().sort(function(a,b){return b.starts-a.starts;})[0];
+    var improved = recs.filter(function(r){return r.priorSubs>0;}).sort(function(a,b){return (b.subs-b.priorSubs)-(a.subs-a.priorSubs);})[0];
+    var dropped = recs.filter(function(r){return r.priorSubs>0;}).sort(function(a,b){return (a.subs-a.priorSubs)-(b.subs-b.priorSubs);})[0];
+    var zeroRecs = recs.filter(function(r){ return r.subs===0||r.starts===0||r.ivs===0; }).slice(0,8);
+
+    function snapshotRow(iconBg, iconCol, icon, title, sub) {
+      return '<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--border)">'
+        +'<div style="width:34px;height:34px;border-radius:8px;background:'+iconBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">'+icon+'</div>'
+        +'<div><div style="font-size:13px;font-weight:600;color:var(--text)">'+title+'</div>'
+        +'<div style="font-size:12px;color:var(--text3);margin-top:2px;line-height:1.5">'+sub+'</div></div>'
+      +'</div>';
+    }
+
+    var html = '<p style="font-size:11px;color:var(--text3);margin-bottom:10px">'+wkLabel+(priorIdx>=0?' vs '+wkLabels[priorIdx]:'')+'</p>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px">'
+        +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Subs</div><div style="font-size:20px;font-weight:700;color:var(--c-subs)">'+totalSubs+diffBadge(totalSubs,priorSubs)+'</div></div>'
+        +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Interviews</div><div style="font-size:20px;font-weight:700;color:var(--c-ivs)">'+totalIvs+diffBadge(totalIvs,priorIvs)+'</div></div>'
+        +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Placements</div><div style="font-size:20px;font-weight:700;color:var(--purple)">'+totalPl+diffBadge(totalPl,priorPl)+'</div></div>'
+        +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Starts</div><div style="font-size:20px;font-weight:700;color:var(--c-starts)">'+totalStarts+diffBadge(totalStarts,priorStarts)+'</div></div>'
+        +'<div style="background:var(--bg2);border-radius:8px;padding:10px 12px"><div style="font-size:11px;color:var(--text3)">Leads</div><div style="font-size:20px;font-weight:700;color:var(--c-leads)">'+totalLeads+diffBadge(totalLeads,priorLeads)+'</div></div>'
+      +'</div>'
+      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px 14px">';
+
+    if (topPerf) html += snapshotRow('#EAF3DE','#3B6D11','🏆','Top performer — '+topPerf.name, topPerf.starts+' starts · '+topPerf.subs+' subs · '+topPerf.ivs+' IVs · '+(topPerf.placements||0)+' placements · '+topPerf.manager+"'s team");
+    if (improved && improved.subs > improved.priorSubs) html += snapshotRow('#EAF3DE','#3B6D11','📈','Biggest improvement — '+improved.name, improved.subs+' subs (+'+(improved.subs-improved.priorSubs)+' vs prior week) · '+improved.starts+' starts');
+    if (dropped && dropped.subs < dropped.priorSubs) html += snapshotRow('#FCEBEB','#A32D2D','📉','Biggest drop — '+dropped.name, dropped.subs+' subs ('+(dropped.subs-dropped.priorSubs)+' vs prior week) · '+dropped.starts+' starts');
+    if (zeroRecs.length) {
+      var zLines = zeroRecs.map(function(r){
+        var m=[]; if(r.subs===0)m.push('0 subs'); if(r.ivs===0)m.push('0 interviews'); if(r.placements===0)m.push('0 placements'); if(r.starts===0)m.push('0 starts');
+        return r.name+' — '+m.join(', ');
+      }).join('<br>');
+      html += snapshotRow('#FAEEDA','#854F0B','⚠️','Missing activity ('+zeroRecs.length+' recruiters)', zLines);
+    }
+    html += '</div>';
+    wrap.innerHTML = html;
+
+  } else {
+    // ── Period Comparison ──
+    var aF = parseInt(document.getElementById('snap-a-from').value)||0;
+    var aT = parseInt(document.getElementById('snap-a-to').value)||0;
+    var bF = parseInt(document.getElementById('snap-b-from').value)||0;
+    var bT = parseInt(document.getElementById('snap-b-to').value)||(wkLabels.length-1);
+    if(aT<aF)aT=aF; if(bT<bF)bT=bF;
+    var aLen = aT-aF+1; var bLen = bT-bF+1;
+    var aLabel = wkLabels[aF]+(aT!==aF?' → '+wkLabels[aT]:'');
+    var bLabel = wkLabels[bF]+(bT!==bF?' → '+wkLabels[bT]:'');
+
+    function periodTotals(recs, f, t) {
+      return {
+        subs: recs.reduce(function(s,r){return s+sliceSum(r.subs,f,t);},0),
+        ivs:  recs.reduce(function(s,r){return s+sliceSum(r.ivs,f,t);},0),
+        placements: recs.reduce(function(s,r){return s+sliceSum(r.placements||[],f,t);},0),
+        starts: recs.reduce(function(s,r){return s+sliceSum(r.starts,f,t);},0),
+        leads:  recs.reduce(function(s,r){return s+sliceSum(r.leads,f,t);},0)
+      };
+    }
+
+    var a = periodTotals(allRecs, aF, aT);
+    var b = periodTotals(allRecs, bF, bT);
+
+    function pctChg(av, bv) {
+      if (!av) return bv>0?'+∞':'—';
+      var p = Math.round((bv-av)/av*100);
+      return (p>0?'+':'')+p+'%';
+    }
+    function chgCol(av, bv, higherBetter) {
+      if (av===bv) return 'var(--text3)';
+      var better = higherBetter ? bv>av : bv<av;
+      return better ? '#3B6D11' : '#A32D2D';
+    }
+
+    var metrics = [
+      {key:'subs', label:'Submittals', color:'var(--c-subs)', higher:true},
+      {key:'ivs', label:'Interviews', color:'var(--c-ivs)', higher:true},
+      {key:'placements', label:'Placements', color:'var(--purple)', higher:true},
+      {key:'starts', label:'Starts', color:'var(--c-starts)', higher:true},
+      {key:'leads', label:'Leads', color:'var(--c-leads)', higher:true}
+    ];
+
+    var html = '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+      +'<div style="display:grid;grid-template-columns:140px 1fr 1fr 1fr 1fr;gap:0;padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--text3)">'
+        +'<div></div>'
+        +'<div style="text-align:right;color:var(--accent)">Period A<br><span style="font-weight:400;font-size:10px">'+aLabel+'</span></div>'
+        +'<div style="text-align:right;color:var(--text2)">Period B<br><span style="font-weight:400;font-size:10px">'+bLabel+'</span></div>'
+        +'<div style="text-align:right">Change</div>'
+        +'<div style="text-align:right">Wkly avg A→B</div>'
+      +'</div>';
+
+    metrics.forEach(function(m) {
+      var av=a[m.key], bv=b[m.key];
+      var col=chgCol(av,bv,m.higher);
+      var aAvg=(av/aLen).toFixed(1); var bAvg=(bv/bLen).toFixed(1);
+      var avgChg=parseFloat(aAvg)>0?((parseFloat(bAvg)-parseFloat(aAvg))/parseFloat(aAvg)*100).toFixed(0)+'%':'—';
+      var avgChgCol=chgCol(parseFloat(aAvg),parseFloat(bAvg),m.higher);
+      html += '<div style="display:grid;grid-template-columns:140px 1fr 1fr 1fr 1fr;gap:0;padding:10px 16px;border-bottom:0.5px solid var(--border)">'
+        +'<div style="font-size:13px;font-weight:600;color:'+m.color+'">'+m.label+'</div>'
+        +'<div style="text-align:right;font-size:14px;font-weight:700;color:var(--text)">'+av+'<div style="font-size:10px;color:var(--text3)">'+aAvg+'/wk</div></div>'
+        +'<div style="text-align:right;font-size:14px;font-weight:700;color:var(--text)">'+bv+'<div style="font-size:10px;color:var(--text3)">'+bAvg+'/wk</div></div>'
+        +'<div style="text-align:right;font-size:14px;font-weight:700;color:'+col+'">'+pctChg(av,bv)+'<div style="font-size:10px;color:'+col+'">'+(bv-av>=0?'+':'')+(bv-av)+'</div></div>'
+        +'<div style="text-align:right;font-size:14px;font-weight:700;color:'+avgChgCol+'">'+avgChg+'</div>'
+      +'</div>';
+    });
+    html += '</div>';
+    wrap.innerHTML = html;
+  }
+}
+
 
 function renderTiSparklines(recs, f, t) {
   var wrap = document.getElementById('ti-sparklines');
@@ -3944,11 +4107,48 @@ applyArchives();
 // ─── MANAGER ROLLUP ───
 var cMgrSubs=null,cMgrStarts=null,cMgrRatio=null,cMgrAvg=null;
 
+function populateMgrWkSelects() {
+  var fromSel = document.getElementById('mgr-wk-from');
+  var toSel = document.getElementById('mgr-wk-to');
+  if (!fromSel || !toSel || fromSel.options.length === wkLabels.length) return;
+  fromSel.innerHTML = '';
+  toSel.innerHTML = '';
+  wkLabels.forEach(function(lbl, i) {
+    var oF = document.createElement('option'); oF.value = i; oF.textContent = 'From: '+lbl; fromSel.appendChild(oF);
+    var oT = document.createElement('option'); oT.value = i; oT.textContent = 'To: '+lbl; toSel.appendChild(oT);
+  });
+  toSel.selectedIndex = toSel.options.length - 1;
+}
+
+function onMgrWindowChange() {
+  var win = document.getElementById('mgr-window').value;
+  var cr = document.getElementById('mgr-custom-range');
+  if (cr) cr.style.display = win === 'custom' ? 'flex' : 'none';
+  if (win === 'custom') populateMgrWkSelects();
+  renderManagers();
+}
+
 function renderManagers(){
   var w=document.getElementById('mgr-window').value;
+  var isCustom = w === 'custom';
+  var customF = isCustom ? (parseInt(document.getElementById('mgr-wk-from').value)||0) : null;
+  var customT = isCustom ? (parseInt(document.getElementById('mgr-wk-to').value)||(wkLabels.length-1)) : null;
+
+  function getMgrRecs(all) {
+    if (!isCustom) return all;
+    return all.map(function(r) {
+      function sliceSum(arr) { var s=0; for(var i=customF;i<=customT&&i<(arr||[]).length;i++)s+=(arr[i]||0); return s; }
+      return Object.assign({}, r, {
+        totalSubs: sliceSum(r.subs), totalIvs: sliceSum(r.ivs),
+        totalPlacements: sliceSum(r.placements||[]),
+        totalStarts: sliceSum(r.starts), totalLeads: sliceSum(r.leads),
+        avgSub4w: sliceSum(r.subs)/(customT-customF+1||1)
+      });
+    });
+  }
   var sortBy=document.getElementById('mgr-sort').value;
-  var all=computedAll();
-  var awl=activeWkLabels();
+  var all=getMgrRecs(computedAll());
+  var awl=isCustom ? wkLabels.slice(customF, customT+1) : activeWkLabels();
   var nW=awl.length;
   var gc='rgba(128,128,128,0.1)';
   var tf={size:10};
