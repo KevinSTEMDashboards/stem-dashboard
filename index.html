@@ -842,6 +842,15 @@ td.editing{padding:2px 4px!important}
       <span style="font-size:11px;color:var(--text3)">→</span>
       <select id="lb-to" style="height:32px;font-size:12px"></select>
     </div>
+    <div style="display:flex;align-items:center;gap:4px;padding-left:8px;border-left:1px solid var(--border2)">
+      <span style="font-size:11px;color:var(--text3);white-space:nowrap">Show top</span>
+      <div style="display:flex;gap:3px">
+        <button type="button" onclick="setLbTopN(5)"  id="lb-topn-5"  style="height:28px;padding:0 8px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">5</button>
+        <button type="button" onclick="setLbTopN(10)" id="lb-topn-10" style="height:28px;padding:0 8px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);cursor:pointer">10</button>
+        <button type="button" onclick="setLbTopN(15)" id="lb-topn-15" style="height:28px;padding:0 8px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">15</button>
+        <button type="button" onclick="setLbTopN(20)" id="lb-topn-20" style="height:28px;padding:0 8px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">20</button>
+      </div>
+    </div>
   </div>
   <div id="lb-boards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px"></div>
   <!-- Full ranking modal -->
@@ -4265,7 +4274,7 @@ function renderLeaderboard(){
     var valid=recs.filter(function(r){return r[kpi.wkey]!=null&&r[kpi.wkey]>0;});
     if(!valid.length)return '<div class="lb-card"><div class="lb-card-hdr"><span class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span></div><div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No data</div></div>';
     var sorted=valid.slice().sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
-    var top10=sorted.slice(0,10);
+    var top10=sorted.slice(0,lbTopN);
     var maxVal=top10.length?top10.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
     var actualRank=0;var prevVal=null;var prevActual=0;
     var rows=top10.map(function(r,i){
@@ -4286,7 +4295,7 @@ function renderLeaderboard(){
       +'</div>';
     }).join('');
     var subtitle=winLabel+' · '+mgrLabel;
-    var expandBtn=sorted.length>10?'<div style="padding:8px 14px;border-top:1px solid var(--border)"><button class="btn" onclick="showLbModal('+kpiIdx+',\''+encodeURIComponent(selectedMgrList.length===1?selectedMgrList[0]:'')+'\' )" style="width:100%;font-size:11px;height:28px;color:var(--accent)">View all '+sorted.length+' recruiters →</button></div>':'';
+    var expandBtn=sorted.length>lbTopN?'<div style="padding:8px 14px;border-top:1px solid var(--border)"><button class="btn" onclick="showLbModal('+kpiIdx+',\''+encodeURIComponent(selectedMgrList.length===1?selectedMgrList[0]:'')+'\' )" style="width:100%;font-size:11px;height:28px;color:var(--accent)">View all '+sorted.length+' recruiters →</button></div>':'';
     return '<div class="lb-card">'
       +'<div class="lb-card-hdr">'
         +'<div><div class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</div>'
@@ -4360,6 +4369,26 @@ function updateLbRecLabel() {
   if (excluded === 0) btn.textContent = 'All recruiters';
   else if (excluded === total) btn.textContent = 'No recruiters';
   else btn.textContent = (total - excluded) + ' / ' + total + ' recruiters';
+}
+
+var lbTopN = 10;
+
+function setLbTopN(n) {
+  lbTopN = n;
+  [5,10,15,20].forEach(function(v) {
+    var btn = document.getElementById('lb-topn-'+v);
+    if (!btn) return;
+    if (v === n) {
+      btn.style.border = '1px solid var(--accent)';
+      btn.style.background = 'var(--accent-dim)';
+      btn.style.color = 'var(--accent)';
+    } else {
+      btn.style.border = '1px solid var(--border2)';
+      btn.style.background = 'var(--bg2)';
+      btn.style.color = 'var(--text3)';
+    }
+  });
+  renderLeaderboard();
 }
 
 function toggleLbWinMenu() {
