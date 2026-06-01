@@ -4038,28 +4038,52 @@ function getVertical(name) { return getVerticals()[name] || ''; }
 
 function editVertical(name, td) {
   if (!currentUser) return;
-  if (td.querySelector('select')) return; // already open
+  if (td.querySelector('.vert-dropdown')) return; // already open
   const current = getVertical(name);
-  const opts = VERTICALS.map(function(v) {
-    return '<option value="'+v+'"'+(v===current?' selected':'')+'>'+v+'</option>';
-  }).join('');
-  td.innerHTML = '<select style="height:26px;font-size:11px;max-width:220px">'
-    +'<option value="">— Select —</option>'+opts+'</select>';
-  const sel = td.querySelector('select');
-  if (sel) {
-    sel.addEventListener('click', function(e) { e.stopPropagation(); });
-    sel.focus();
-    sel.addEventListener('change', function() { saveVertical(name, sel.value, td); });
-    sel.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') { saveVertical(name, current, td); }
-    });
+
+  // Build custom dropdown to avoid native select focus issues
+  const menu = document.createElement('div');
+  menu.className = 'vert-dropdown';
+  menu.style.cssText = 'position:absolute;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.3);min-width:240px;padding:4px;max-height:280px;overflow-y:auto';
+
+  // Add "clear" option
+  const clearOpt = document.createElement('div');
+  clearOpt.textContent = '— Clear —';
+  clearOpt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;color:var(--text3);border-radius:4px';
+  clearOpt.onmouseenter = function(){clearOpt.style.background='var(--bg2)';};
+  clearOpt.onmouseleave = function(){clearOpt.style.background='';};
+  clearOpt.onmousedown = function(e){ e.preventDefault(); saveVertical(name, '', td); menu.remove(); };
+  menu.appendChild(clearOpt);
+
+  VERTICALS.forEach(function(v) {
+    const opt = document.createElement('div');
+    opt.textContent = v;
+    opt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;border-radius:4px;'+(v===current?'background:var(--accent-dim);color:var(--accent);font-weight:600':'color:var(--text)');
+    opt.onmouseenter = function(){if(v!==current)opt.style.background='var(--bg2)';};
+    opt.onmouseleave = function(){opt.style.background=v===current?'var(--accent-dim)':'';};
+    opt.onmousedown = function(e){ e.preventDefault(); saveVertical(name, v, td); menu.remove(); };
+    menu.appendChild(opt);
+  });
+
+  // Position relative to td
+  td.style.position = 'relative';
+  td.appendChild(menu);
+
+  // Close if clicking outside
+  function onOutside(e) {
+    if (!menu.contains(e.target) && e.target !== td) {
+      menu.remove();
+      document.removeEventListener('mousedown', onOutside);
+    }
   }
+  setTimeout(function(){ document.addEventListener('mousedown', onOutside); }, 0);
 }
 
 function saveVertical(name, value, td) {
   const verts = getVerticals();
   if (value) verts[name] = value; else delete verts[name];
   saveVerticals(verts);
+  td.style.position = '';
   td.innerHTML = value
     ? '<span style="font-size:11px;color:var(--text)">'+value+'</span>'
     : '<span style="font-size:11px;color:var(--text3);font-style:italic">Click to set</span>';
