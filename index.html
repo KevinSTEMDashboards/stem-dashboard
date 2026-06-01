@@ -4048,8 +4048,9 @@ function editVertical(name, td) {
   if (sel) {
     sel.focus();
     sel.addEventListener('change', function() { saveVertical(name, sel.value, td); });
-    sel.addEventListener('blur', function() { saveVertical(name, sel.value, td); });
-    sel.addEventListener('keydown', function(e) { if(e.key==='Escape'){ sel.value=current; sel.blur(); } });
+    sel.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { sel.value = current; saveVertical(name, current, td); }
+    });
   }
 }
 
