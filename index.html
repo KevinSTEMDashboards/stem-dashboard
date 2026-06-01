@@ -4038,6 +4038,7 @@ function getVertical(name) { return getVerticals()[name] || ''; }
 
 function editVertical(name, td) {
   if (!currentUser) return;
+  if (td.querySelector('select')) return; // already open
   const current = getVertical(name);
   const opts = VERTICALS.map(function(v) {
     return '<option value="'+v+'"'+(v===current?' selected':'')+'>'+v+'</option>';
@@ -4046,10 +4047,11 @@ function editVertical(name, td) {
     +'<option value="">— Select —</option>'+opts+'</select>';
   const sel = td.querySelector('select');
   if (sel) {
+    sel.addEventListener('click', function(e) { e.stopPropagation(); });
     sel.focus();
     sel.addEventListener('change', function() { saveVertical(name, sel.value, td); });
     sel.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') { sel.value = current; saveVertical(name, current, td); }
+      if (e.key === 'Escape') { saveVertical(name, current, td); }
     });
   }
 }
