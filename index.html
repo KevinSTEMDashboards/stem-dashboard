@@ -503,6 +503,7 @@ td.editing{padding:2px 4px!important}
 
 <!-- OVERVIEW -->
 <div class="tab-panel active" id="tab-overview">
+  <div id="anniversary-banner" style="display:none;margin-bottom:14px"></div>
   <div class="kpis" id="kpis"></div>
   <div class="charts-row">
     <div class="card card-accent-blue">
@@ -906,7 +907,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Total Subs</th><th>Total Interviews</th><th>Total Placements</th><th>Total Starts</th><th>Total Leads</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
+            <th>Name</th><th>Manager</th><th>Total Subs</th><th>Total Interviews</th><th>Total Placements</th><th>Total Starts</th><th>Total Leads</th><th>Vertical</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
           </tr></thead>
           <tbody id="roster-active-body"></tbody>
         </table>
@@ -2038,6 +2039,21 @@ function renderRatioChart(d){
   cRatio=new Chart(document.getElementById('ratioChart'),{type:'bar',data:{labels:lbs,datasets:[{data:lbs.map(m=>bm[m].st>0?parseFloat((bm[m].s/bm[m].st).toFixed(1)):null),backgroundColor:lbs.map(m=>MGR_COLORS[m]||'#888'),borderRadius:4,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw}:1`}}},scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10}},title:{display:true,text:'Lower = better',font:{size:10}}}}}});
 }
 
+// ─── RAMP MODE ───
+// Returns true if recruiter was hired within 60 days
+function isRamping(name) {
+  var hd = getHireDate(name);
+  if (!hd) return false;
+  var hired = new Date(hd + 'T00:00:00');
+  var now = new Date();
+  var diffDays = Math.round((now - hired) / (1000*60*60*24));
+  return diffDays <= 60;
+}
+function rampIcon(name) {
+  if (!isRamping(name)) return '';
+  return ' <span title="In Ramp Mode — hired within 60 days" style="cursor:default;font-size:12px">🌱</span>';
+}
+
 function renderOvTable(d){
   const ovMgrF=document.getElementById('ov-mgr-filter').value;
   const filtered_d=ovMgrF?d.filter(function(r){return r.manager===ovMgrF;}):d;
@@ -2047,7 +2063,7 @@ function renderOvTable(d){
     const pl=r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
     const mc=MGR_COLORS[r.manager]||'#888';
     return `<tr>
-      <td style="font-weight:500;white-space:nowrap">${r.name}${r._isArchived?'<span style="font-size:9px;color:var(--amber);margin-left:5px;padding:1px 4px;border-radius:3px;background:var(--amber-bg)">archived</span>':''}</td>
+      <td style="font-weight:500;white-space:nowrap">${r.name}${r._isArchived?'<span style="font-size:9px;color:var(--amber);margin-left:5px;padding:1px 4px;border-radius:3px;background:var(--amber-bg)">archived</span>':''  }${rampIcon(r.name)}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
       <td style="color:var(--c-subs);font-weight:600">${r.avgSub4w.toFixed(1)}</td>
       <td style="color:var(--c-ivs);font-weight:600">${r.ivs4w}</td>
@@ -2067,8 +2083,46 @@ function renderOvTable(d){
   document.querySelectorAll('#tab-overview thead th').forEach(th=>{th.classList.remove('sa','sd');if(th.dataset.col===ovSort)th.classList.add(ovDir==='asc'?'sa':'sd')});
 }
 
+// ─── ANNIVERSARY BANNER ───
+function renderAnniversaryBanner() {
+  var banner = document.getElementById('anniversary-banner');
+  if (!banner) return;
+  var now = new Date();
+  var upcoming = [];
+  RECRUITERS.forEach(function(r) {
+    var hd = getHireDate(r.name);
+    if (!hd) return;
+    var hired = new Date(hd + 'T00:00:00');
+    var nextAnn = new Date(now.getFullYear(), hired.getMonth(), hired.getDate());
+    if (nextAnn <= now) nextAnn = new Date(now.getFullYear()+1, hired.getMonth(), hired.getDate());
+    var diffDays = Math.ceil((nextAnn - now) / (1000*60*60*24));
+    if (diffDays <= 30) {
+      var years = nextAnn.getFullYear() - hired.getFullYear();
+      var suffix = years===1?'1st':years===2?'2nd':years===3?'3rd':years+'th';
+      upcoming.push({ name: r.name, manager: r.manager, diffDays: diffDays, years: years, suffix: suffix });
+    }
+  });
+  if (!upcoming.length) { banner.style.display='none'; return; }
+  upcoming.sort(function(a,b){return a.diffDays-b.diffDays;});
+  var items = upcoming.map(function(a) {
+    var mc = MGR_COLORS[a.manager]||'#888';
+    var isToday = a.diffDays === 0;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">'
+      +(isToday?'🎉':'📅')
+      +'<span style="font-size:12px;font-weight:600;color:var(--text)">'+a.name+'</span>'
+      +'<span style="font-size:11px;color:'+mc+'">'+a.manager+'</span>'
+      +'<span style="font-size:11px;color:var(--text3)">'+a.suffix+' anniversary'+(isToday?' — Today!':' in '+a.diffDays+'d')+'</span>'
+    +'</div>';
+  }).join('');
+  banner.style.display = '';
+  banner.innerHTML = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border)">'
+    +'<span style="font-size:11px;font-weight:700;color:var(--text3);white-space:nowrap;margin-right:4px">🗓 UPCOMING ANNIVERSARIES</span>'
+    +items
+    +'</div>';
+}
+
 function renderOverview(){
-  const d=filtered();renderKPIs(d);renderTopChart(d);renderRatioChart(d);renderOvTable(d);
+  const d=filtered();renderKPIs(d);renderTopChart(d);renderRatioChart(d);renderOvTable(d);renderAnniversaryBanner();
   const awl=activeWkLabels();
   const full=isFullRange();
   document.getElementById('wk-ct').textContent=full?`${wkLabels.length} weeks tracked`:`${awl.length} of ${wkLabels.length} wks`;
@@ -2189,7 +2243,7 @@ function renderWoW(){
         wslCell=`<td style="text-align:center;white-space:nowrap"><span style="font-size:11px;font-weight:600;color:${wslColor}">${wslText}</span></td>`;
       }
       const editHint=currentUser?`<td style="text-align:center;padding:2px 4px"><span style="font-size:9px;color:var(--text3)" title="Click any number to edit">✏️</span></td>`:'<td></td>';
-      return`<tr><td style="font-weight:500;white-space:nowrap">${r.name}</td><td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>${!singleWk?`<td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right">${ytdAvg.toFixed(1)}</td><td style="text-align:right">${a4.toFixed(1)}</td>`:''  }${wslCell}${cells}${editHint}</tr>`;
+      return`<tr><td style="font-weight:500;white-space:nowrap">${r.name}${rampIcon(r.name)}</td><td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>${!singleWk?`<td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right">${ytdAvg.toFixed(1)}</td><td style="text-align:right">${a4.toFixed(1)}</td>`:''  }${wslCell}${cells}${editHint}</tr>`;
     }).join('');
   } else {
     document.getElementById('wow-tbl-card').style.display='none';
@@ -2343,6 +2397,7 @@ function exportSettings() {
     stemArchived:  safeGet('stemArchived')  || '[]',
     stemNewRecs:   safeGet('stemNewRecs')   || '[]',
     stemHireDates: safeGet('stemHireDates') || '{}',
+    stemVerticals:  safeGet('stemVerticals')  || '{}',
     // Auth
     stemUsers:     safeGet('stemUsers')     || '[]',
     stemInvites:   safeGet('stemInvites')   || '[]',
@@ -2386,6 +2441,7 @@ function importSettings() {
         if (p.newRecruiters)      safeSet('stemNewRecs',   JSON.stringify(p.newRecruiters));
         if (p.baseEdits)          safeSet('stemBaseEdits', JSON.stringify(p.baseEdits));
         if (p.hireDates)          safeSet('stemHireDates', JSON.stringify(p.hireDates));
+        if (p.stemVerticals)       safeSet('stemVerticals',  p.stemVerticals);
 
         alert('Settings restored! Reloading now…');
         window.location.reload();
@@ -3966,6 +4022,46 @@ function calcNextAnniversary(isoDate) {
   return months + 'mo ' + days + 'd (' + suffix + ')';
 }
 
+// ─── VERTICAL MANAGEMENT ───
+const VERTICALS = [
+  'BFSI, Tech, Retail & FMCG & Business Services',
+  'Data Centers & InfraOps',
+  'Energy, Oil, Gas & Utilities',
+  'Life Sciences',
+  'T&M: Airline & Heavy Equipment',
+  'T&M: Auto',
+  'Telecom'
+];
+function getVerticals() { return JSON.parse(safeGet('stemVerticals') || '{}'); }
+function saveVerticals(d) { safeSet('stemVerticals', JSON.stringify(d)); }
+function getVertical(name) { return getVerticals()[name] || ''; }
+
+function editVertical(name, td) {
+  if (!currentUser) return;
+  const current = getVertical(name);
+  const opts = VERTICALS.map(function(v) {
+    return '<option value="'+v+'"'+(v===current?' selected':'')+'>'+v+'</option>';
+  }).join('');
+  td.innerHTML = '<select style="height:26px;font-size:11px;max-width:220px">'
+    +'<option value="">— Select —</option>'+opts+'</select>';
+  const sel = td.querySelector('select');
+  if (sel) {
+    sel.focus();
+    sel.addEventListener('change', function() { saveVertical(name, sel.value, td); });
+    sel.addEventListener('blur', function() { saveVertical(name, sel.value, td); });
+    sel.addEventListener('keydown', function(e) { if(e.key==='Escape'){ sel.value=current; sel.blur(); } });
+  }
+}
+
+function saveVertical(name, value, td) {
+  const verts = getVerticals();
+  if (value) verts[name] = value; else delete verts[name];
+  saveVerticals(verts);
+  td.innerHTML = value
+    ? '<span style="font-size:11px;color:var(--text)">'+value+'</span>'
+    : '<span style="font-size:11px;color:var(--text3);font-style:italic">Click to set</span>';
+}
+
 function renderRoster() {
   const isEditor = !!currentUser;
   document.getElementById('roster-auth-gate').style.display = isEditor ? 'none' : 'block';
@@ -4049,6 +4145,7 @@ function renderRoster() {
       <td style="color:var(--purple)">${r.totalPlacements}</td>
       <td><strong>${r.totalStarts}</strong></td>
       <td>${r.totalLeads}</td>
+      <td id="vert_${safeId}" data-name="${r.name.replace(/"/g,'&quot;')}" onclick="editVertical(this.dataset.name, this)" style="cursor:pointer;min-width:140px;font-size:11px" title="Click to set vertical"><span style="color:${getVertical(r.name)?'var(--text)':'var(--text3)'};font-style:${getVertical(r.name)?'normal':'italic'}">${getVertical(r.name)||'Click to set'}</span></td>
       <td id="dh_${safeId}" onclick="editHireDate('${r.name.replace(/'/g,"\\'")}', this)" style="cursor:pointer;min-width:110px;color:${hireDate?'var(--text)':'var(--text3)'}" title="Click to edit date hired">${hireDateDisplay}</td>
       <td style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">${tenureDisplay}</td>
       <td style="font-size:12px;font-weight:600;color:${annivColor};white-space:nowrap">${annivDisplay}</td>
@@ -4738,11 +4835,13 @@ function renderOrgChart() {
 
   function recCard(r) {
     var tenure = getHireDate(r.name) ? calcTenure(getHireDate(r.name)) : '';
+    var vertical = getVertical(r.name);
     return '<div class="org-line-v"></div>'
       +'<div class="org-rec-card" onclick="goToRecruiter(\''+r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
         +'<div class="org-rec-name">'+r.name+'</div>'
         +'<div class="org-rec-sub">'
           +(tenure ? '<span>'+tenure+'</span>' : '')
+          +(vertical ? '<span style="font-size:9px;color:var(--accent)">'+vertical+'</span>' : '')
           +'<span>'+r.totalStarts+' starts</span>'
         +'</div>'
       +'</div>';
