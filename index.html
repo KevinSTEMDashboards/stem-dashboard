@@ -2186,6 +2186,61 @@ function toggleWowMgrsOnly() {
   }
   renderWoW();
 }
+// ─── WEEK FLAGS ───
+const FLAG_TYPES = {
+  pto:   { icon: '🏖️', label: 'PTO' },
+  leave: { icon: '🤱', label: 'Leave' },
+  new:   { icon: '🆕', label: 'Not yet started' }
+};
+
+function getWeekFlags() { return JSON.parse(safeGet('stemWeekFlags') || '{}'); }
+function saveWeekFlags(d) { safeSet('stemWeekFlags', JSON.stringify(d)); }
+
+function getFlag(recName, wkIdx) {
+  var flags = getWeekFlags();
+  return (flags[recName] && flags[recName][String(wkIdx)]) || null;
+}
+
+function setFlag(recName, wkIdx, type) {
+  var flags = getWeekFlags();
+  if (!flags[recName]) flags[recName] = {};
+  if (type) flags[recName][String(wkIdx)] = type;
+  else delete flags[recName][String(wkIdx)];
+  saveWeekFlags(flags);
+}
+
+function showFlagMenu(td, recName, wkIdx, currentFlag) {
+  // Close any existing flag menus
+  document.querySelectorAll('.flag-menu').forEach(function(m){ m.remove(); });
+  var menu = document.createElement('div');
+  menu.className = 'flag-menu';
+  menu.style.cssText = 'position:absolute;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.3);padding:4px;min-width:160px';
+  // Clear option
+  var clearOpt = document.createElement('div');
+  clearOpt.innerHTML = '✕ &nbsp;Clear flag';
+  clearOpt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;color:var(--text3);border-radius:4px';
+  clearOpt.onmouseenter = function(){clearOpt.style.background='var(--bg2)';};
+  clearOpt.onmouseleave = function(){clearOpt.style.background='';};
+  clearOpt.onmousedown = function(e){ e.preventDefault(); setFlag(recName,wkIdx,null); menu.remove(); renderWoW(); };
+  menu.appendChild(clearOpt);
+  Object.keys(FLAG_TYPES).forEach(function(type) {
+    var ft = FLAG_TYPES[type];
+    var opt = document.createElement('div');
+    opt.innerHTML = ft.icon + ' &nbsp;' + ft.label;
+    opt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;border-radius:4px;color:var(--text)'+(type===currentFlag?';background:var(--accent-dim);font-weight:600':'');
+    opt.onmouseenter = function(){if(type!==currentFlag)opt.style.background='var(--bg2)';};
+    opt.onmouseleave = function(){opt.style.background=type===currentFlag?'var(--accent-dim)':'';};
+    opt.onmousedown = function(e){ e.preventDefault(); setFlag(recName,wkIdx,type); menu.remove(); renderWoW(); };
+    menu.appendChild(opt);
+  });
+  td.style.position = 'relative';
+  td.appendChild(menu);
+  function onOutside(e) {
+    if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', onOutside); }
+  }
+  setTimeout(function(){ document.addEventListener('mousedown', onOutside); }, 0);
+}
+
 function renderWoW(){
   const m=document.getElementById('wow-metric').value;
   const mgr=document.getElementById('wow-mgr').value;
@@ -2222,14 +2277,24 @@ function renderWoW(){
     tbody.innerHTML=recs.map(r=>{
       const [f,t]=getWeekRange();
       const w=r[m];const tot=totalArr(w);const a4=avg4w(w);
-      const ytdArr=r[m];const ytdAvg=ytdArr&&ytdArr.filter(x=>x!=null).length?ytdArr.filter(x=>x!=null).reduce((s,x)=>s+x,0)/ytdArr.filter(x=>x!=null).length:0;
+      // YTD avg excludes flagged weeks
+      const ytdArr=r[m];
+      const ytdVals=ytdArr?ytdArr.filter(function(x,i){ return x!=null && !getFlag(r.name,f+i); }):[];
+      const ytdAvg=ytdVals.length?ytdVals.reduce(function(s,x){return s+x;},0)/ytdVals.length:0;
       const cells=Array(nW).fill(0).map((_,i)=>{
-        const globalWi=f+i; // actual week index in full RECRUITERS array
+        const globalWi=f+i;
+        const flag=getFlag(r.name, globalWi);
         const v=(w[i] != null ? w[i] : 0);
         const p=i>0?(w[i-1] != null ? w[i-1] : 0):null;
         const cls=p!=null?(v>p?'cu':v<p?'cd':'c0'):'';
+        if(flag){
+          const ft=FLAG_TYPES[flag];
+          const tooltip=ft.label+(currentUser?' (right-click to change)':'');
+          const flagCell=`<td class="${cls}" style="text-align:right;padding:3px 8px;cursor:${currentUser?'context-menu':'default'}" title="${tooltip}" oncontextmenu="${currentUser?`event.preventDefault();showFlagMenu(this,'${r.name.replace(/'/g,"\\'")}',${globalWi},'${flag}')`:''}">${ft.icon}</td>`;
+          return flagCell;
+        }
         if(currentUser){
-          return currentUser?`<td class="${cls} cell-edit" style="text-align:right;padding:3px 8px" onclick="startCellEdit(this,'${r.name}','${m}',${globalWi},${v})"><span class="cell-val" style="display:inline-block;min-width:20px;padding:1px 3px;border-radius:3px">${v}</span></td>`:`<td class="${cls}" style="text-align:right;padding:3px 8px">${v}</td>`;
+          return`<td class="${cls} cell-edit" style="text-align:right;padding:3px 8px" onclick="startCellEdit(this,'${r.name}','${m}',${globalWi},${v})" oncontextmenu="event.preventDefault();showFlagMenu(this,'${r.name.replace(/'/g,"\\'")}',${globalWi},null)"><span class="cell-val" style="display:inline-block;min-width:20px;padding:1px 3px;border-radius:3px">${v}</span></td>`;
         }
         return`<td class="${cls}" style="text-align:right">${v}</td>`;
       }).join('');
@@ -2398,6 +2463,7 @@ function exportSettings() {
     stemNewRecs:   safeGet('stemNewRecs')   || '[]',
     stemHireDates: safeGet('stemHireDates') || '{}',
     stemVerticals:  safeGet('stemVerticals')  || '{}',
+    stemWeekFlags:  safeGet('stemWeekFlags')  || '{}',
     // Auth
     stemUsers:     safeGet('stemUsers')     || '[]',
     stemInvites:   safeGet('stemInvites')   || '[]',
