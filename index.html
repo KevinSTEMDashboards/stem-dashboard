@@ -5220,24 +5220,29 @@ async function _writeWeekToSheet(weekData, weekLabel) {
       var hdrRow = -1;
       for (var r=0; r<rows.length; r++) { if ((rows[r][0]||'').toLowerCase().includes('recruiter')) { hdrRow=r; break; } }
       if (hdrRow < 0) { results.push({tab:tab,ok:false,err:'Header not found'}); continue; }
-      // Find last column with actual recruiter data (not just a header)
-      // Scan data rows to find rightmost column that has any non-empty value
+      // Find last column that has non-zero data from any recruiter
+      // (zeros in future weeks don't count — they're just empty/placeholder)
       var hdr = rows[hdrRow];
       var lastDataCol = 1;
-      for (var rx2=hdrRow+1; rx2<rows.length; rx2++) {
-        var row = rows[rx2];
-        if (!row || !(row[0]||'').trim()) continue;
-        var recName2 = row[0].trim().toLowerCase();
-        if (['total','avg','average','ytd'].some(function(x){return recName2.includes(x);})) continue;
-        for (var c2=row.length-1; c2>=1; c2--) {
-          if (row[c2] !== undefined && row[c2] !== null && String(row[c2]).trim() !== '') {
-            if (c2 > lastDataCol) lastDataCol = c2;
-            break;
-          }
+      
+      for (var c2=1; c2<hdr.length; c2++) {
+        var h2 = String(hdr[c2]||'').toLowerCase().trim();
+        if (!h2) continue;
+        if (['total','avg','average','ytd','sum'].some(function(x){return h2.includes(x);})) continue;
+        // Check if any recruiter row has a non-zero, non-empty value in this column
+        var hasRealData = false;
+        for (var rx2=hdrRow+2; rx2<rows.length; rx2++) {
+          var row2 = rows[rx2];
+          if (!row2 || !(row2[0]||'').trim()) continue;
+          var recN = row2[0].trim().toLowerCase();
+          if (['total','avg','average'].some(function(x){return recN.includes(x);})) continue;
+          var v2 = String(row2[c2]||'').trim();
+          if (v2 !== '' && v2 !== '0') { hasRealData = true; break; }
         }
+        if (hasRealData) lastDataCol = c2;
       }
+      
       var newCol = lastDataCol + 1;
-      // Safety check
       if (newCol > 300) { results.push({tab:tab,ok:false,err:'Column out of range: '+newCol}); continue; }
       var colLetter = _colToLetter(newCol);
       // Build batch update
