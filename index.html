@@ -5245,13 +5245,23 @@ async function _writeWeekToSheet(weekData, weekLabel) {
       var newCol = lastDataCol + 1;
       if (newCol > 300) { results.push({tab:tab,ok:false,err:'Column out of range: '+newCol}); continue; }
       var colLetter = _colToLetter(newCol);
+      // Build list of archived recruiter names to skip
+      var archivedNames = [];
+      try {
+        var arch = JSON.parse(_safeGet('stemArchived') || '[]');
+        archivedNames = arch.map(function(a){ return (a.name||'').trim().toLowerCase(); });
+      } catch(e2) {}
+
       // Build batch update
       var data = [];
       for (var rx=0; rx<rows.length; rx++) {
-        if (rx === hdrRow) continue;
+        if (rx === hdrRow || rx === hdrRow+1) continue;
         var recName = (rows[rx][0]||'').trim();
         if (!recName || ['total','avg','average'].some(function(x){return recName.toLowerCase().includes(x);})) continue;
-        var val = weekData[recName] ? (weekData[recName][mk]||0) : 0;
+        // Skip archived recruiters
+        if (archivedNames.indexOf(recName.toLowerCase()) >= 0) continue;
+        var val = weekData[recName] ? (weekData[recName][mk]||0) : null;
+        if (val === null) continue; // skip if not in this week's data at all
         data.push({range:tab+'!'+colLetter+(rx+1),values:[[val]]});
       }
       if (!data.length) { results.push({tab:tab,ok:true}); continue; }
