@@ -5148,8 +5148,13 @@ loadFromSheets();
 <script>
 // pushWeekToSheet outside main try{} so onclick attributes can access it
 async function pushWeekToSheet(i) {
-  var ew = (typeof extraWeeks !== 'undefined') ? extraWeeks[i] : null;
-  if (!ew) { alert('No week data found at index ' + i); return; }
+  // Read extraWeeks from localStorage since this is outside the main try block
+  var ew;
+  try {
+    var weeks = JSON.parse(localStorage.getItem('stemXW') || '[]');
+    ew = weeks[i];
+  } catch(err) { ew = null; }
+  if (!ew) { alert('No week data found at index ' + i + '. Try refreshing the page and trying again.'); return; }
   var btn = document.getElementById('push-btn-' + i);
   if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
   if (typeof showLoadingBanner === 'function') showLoadingBanner('Saving to Google Sheets…');
