@@ -2787,7 +2787,7 @@ function renderSavedList(){
         <td style="text-align:right;padding:5px 8px">${tl}</td>
         ${isEditor?`<td style="padding:5px 8px;text-align:right"><div style="display:flex;gap:5px;justify-content:flex-end">
           <button class="btn" style="font-size:10px;height:22px;padding:0 8px;color:var(--accent)" onclick="openEditModal(${i})">✏️ Edit</button>
-          <button class="btn" style="font-size:10px;height:22px;padding:0 8px;color:var(--green)" onclick="pushWeekToSheet(${i})" title="Push this week's data to Google Sheets">📤 Push to Sheet</button>
+          <button class="btn" style="font-size:10px;height:22px;padding:0 8px;color:var(--green)" onclick="pushWeekToSheet(${i}, this)" title="Push this week's data to Google Sheets">📤 Push to Sheet</button>
           <button class="btn" style="font-size:10px;height:22px;padding:0 7px;color:var(--red)" onclick="delWeek(${i})">Remove</button>
         </div></td>`:''}
       </tr>`;
@@ -2803,19 +2803,23 @@ function delWeek(i){
   populateWkSelects();
 }
 
-async function pushWeekToSheet(i) {
+async function pushWeekToSheet(i, btn) {
   const ew = extraWeeks[i];
-  if (!ew) return;
-  const btn = document.querySelector('[onclick="pushWeekToSheet('+i+')"]');
+  if (!ew) { alert('No week data found at index ' + i); return; }
   if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
   showLoadingBanner('Saving to Google Sheets…');
   try {
-    await writeWeekToSheet(ew.data, ew.label);
+    const results = await writeWeekToSheet(ew.data, ew.label);
     hideLoadingBanner();
     safeSet('stemLastSync', new Date().toISOString());
     updateSyncBadge();
     if (btn) { btn.textContent = '✅ Done'; setTimeout(function(){ btn.textContent='📤 Push to Sheet'; btn.disabled=false; }, 2500); }
-    alert('✅ Week data pushed to Google Sheets successfully!');
+    const failed = (results||[]).filter(function(r){return !r.ok;});
+    if (failed.length) {
+      alert('⚠️ Partially saved. Failed tabs: ' + failed.map(function(r){return r.tab+' ('+r.err+')';}).join(', '));
+    } else {
+      alert('✅ Week data pushed to Google Sheets successfully!');
+    }
   } catch(e) {
     hideLoadingBanner();
     if (btn) { btn.textContent = '📤 Push to Sheet'; btn.disabled = false; }
