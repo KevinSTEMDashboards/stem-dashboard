@@ -2192,47 +2192,110 @@ const FLAG_TYPES = {
   leave: { icon: '🤱', label: 'Leave' },
   new:   { icon: '🆕', label: 'Not yet started' }
 };
+const ALL_METRICS = ['subs','ivs','placements','starts','leads'];
 
 function getWeekFlags() { return JSON.parse(safeGet('stemWeekFlags') || '{}'); }
 function saveWeekFlags(d) { safeSet('stemWeekFlags', JSON.stringify(d)); }
 
-function getFlag(recName, wkIdx) {
+// Get flag for a specific metric (or any metric if metric omitted)
+function getFlag(recName, wkIdx, metric) {
   var flags = getWeekFlags();
-  return (flags[recName] && flags[recName][String(wkIdx)]) || null;
+  var wk = flags[recName] && flags[recName][String(wkIdx)];
+  if (!wk) return null;
+  if (metric) return wk[metric] || null;
+  // Return flag if ALL metrics have the same flag (for display in single-flag mode)
+  var vals = ALL_METRICS.map(function(m){ return wk[m] || null; });
+  var first = vals[0];
+  return (first && vals.every(function(v){return v===first;})) ? first : 'mixed';
 }
 
-function setFlag(recName, wkIdx, type) {
+function getFlagForMetric(recName, wkIdx, metric) {
+  var flags = getWeekFlags();
+  var wk = flags[recName] && flags[recName][String(wkIdx)];
+  return (wk && wk[metric]) || null;
+}
+
+// Set flag for specific metrics (array) or all if metrics omitted
+function setFlag(recName, wkIdx, type, metrics) {
   var flags = getWeekFlags();
   if (!flags[recName]) flags[recName] = {};
-  if (type) flags[recName][String(wkIdx)] = type;
-  else delete flags[recName][String(wkIdx)];
+  if (!flags[recName][String(wkIdx)]) flags[recName][String(wkIdx)] = {};
+  var mets = metrics || ALL_METRICS;
+  mets.forEach(function(m) {
+    if (type) flags[recName][String(wkIdx)][m] = type;
+    else delete flags[recName][String(wkIdx)][m];
+  });
+  // Clean up empty objects
+  if (Object.keys(flags[recName][String(wkIdx)]).length === 0) delete flags[recName][String(wkIdx)];
+  if (flags[recName] && Object.keys(flags[recName]).length === 0) delete flags[recName];
   saveWeekFlags(flags);
 }
 
-function showFlagMenu(td, recName, wkIdx, currentFlag) {
-  // Close any existing flag menus
+function showFlagMenu(td, recName, wkIdx, metric) {
   document.querySelectorAll('.flag-menu').forEach(function(m){ m.remove(); });
+  var currentMetricFlag = getFlagForMetric(recName, wkIdx, metric);
   var menu = document.createElement('div');
   menu.className = 'flag-menu';
-  menu.style.cssText = 'position:absolute;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.3);padding:4px;min-width:160px';
-  // Clear option
-  var clearOpt = document.createElement('div');
-  clearOpt.innerHTML = '✕ &nbsp;Clear flag';
-  clearOpt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;color:var(--text3);border-radius:4px';
-  clearOpt.onmouseenter = function(){clearOpt.style.background='var(--bg2)';};
-  clearOpt.onmouseleave = function(){clearOpt.style.background='';};
-  clearOpt.onmousedown = function(e){ e.preventDefault(); setFlag(recName,wkIdx,null); menu.remove(); renderWoW(); };
-  menu.appendChild(clearOpt);
+  menu.style.cssText = 'position:absolute;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.3);padding:4px;min-width:200px';
+
+  // Section header
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'padding:4px 12px 6px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border2);margin-bottom:4px';
+  hdr.textContent = 'Flag this week for ' + recName.split(' ')[0];
+  menu.appendChild(hdr);
+
+  // Flag ALL metrics at once
   Object.keys(FLAG_TYPES).forEach(function(type) {
     var ft = FLAG_TYPES[type];
     var opt = document.createElement('div');
-    opt.innerHTML = ft.icon + ' &nbsp;' + ft.label;
-    opt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;border-radius:4px;color:var(--text)'+(type===currentFlag?';background:var(--accent-dim);font-weight:600':'');
-    opt.onmouseenter = function(){if(type!==currentFlag)opt.style.background='var(--bg2)';};
-    opt.onmouseleave = function(){opt.style.background=type===currentFlag?'var(--accent-dim)':'';};
-    opt.onmousedown = function(e){ e.preventDefault(); setFlag(recName,wkIdx,type); menu.remove(); renderWoW(); };
+    opt.innerHTML = ft.icon + ' &nbsp;<strong>'+ft.label+'</strong> — all metrics';
+    opt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;border-radius:4px;color:var(--text)';
+    opt.onmouseenter = function(){opt.style.background='var(--bg2)';};
+    opt.onmouseleave = function(){opt.style.background='';};
+    opt.onmousedown = function(e){
+      e.preventDefault();
+      setFlag(recName, wkIdx, type, ALL_METRICS);
+      menu.remove();
+      renderWoW();
+    };
     menu.appendChild(opt);
   });
+
+  // Divider
+  var div = document.createElement('div');
+  div.style.cssText = 'border-top:1px solid var(--border2);margin:4px 0';
+  menu.appendChild(div);
+
+  // Clear THIS metric only
+  if (currentMetricFlag) {
+    var clrMetric = document.createElement('div');
+    clrMetric.innerHTML = '✕ &nbsp;Clear <strong>'+metric+'</strong> flag only';
+    clrMetric.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;border-radius:4px;color:var(--amber)';
+    clrMetric.onmouseenter = function(){clrMetric.style.background='var(--bg2)';};
+    clrMetric.onmouseleave = function(){clrMetric.style.background='';};
+    clrMetric.onmousedown = function(e){
+      e.preventDefault();
+      setFlag(recName, wkIdx, null, [metric]);
+      menu.remove();
+      renderWoW();
+    };
+    menu.appendChild(clrMetric);
+  }
+
+  // Clear ALL metrics
+  var clrAll = document.createElement('div');
+  clrAll.innerHTML = '✕ &nbsp;Clear <strong>all flags</strong> this week';
+  clrAll.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;border-radius:4px;color:var(--text3)';
+  clrAll.onmouseenter = function(){clrAll.style.background='var(--bg2)';};
+  clrAll.onmouseleave = function(){clrAll.style.background='';};
+  clrAll.onmousedown = function(e){
+    e.preventDefault();
+    setFlag(recName, wkIdx, null, ALL_METRICS);
+    menu.remove();
+    renderWoW();
+  };
+  menu.appendChild(clrAll);
+
   td.style.position = 'relative';
   td.appendChild(menu);
   function onOutside(e) {
@@ -2240,6 +2303,7 @@ function showFlagMenu(td, recName, wkIdx, currentFlag) {
   }
   setTimeout(function(){ document.addEventListener('mousedown', onOutside); }, 0);
 }
+
 
 function renderWoW(){
   const m=document.getElementById('wow-metric').value;
@@ -2262,7 +2326,7 @@ function renderWoW(){
   recs.forEach(r=>{
     for(let i=0;i<nW;i++){
       totals[i]+=(r[m][i]||0);
-      if(!getFlag(r.name, f+i)) availableHeadcount[i]++;
+      if(!getFlagForMetric(r.name, f+i, m)) availableHeadcount[i]++;
     }
   });
   document.getElementById('wow-total-title').textContent=`Weekly ${m} — team total`;
@@ -2286,22 +2350,24 @@ function renderWoW(){
       const w=r[m];const tot=totalArr(w);const a4=avg4w(w);
       // YTD avg excludes flagged weeks
       const ytdArr=r[m];
-      const ytdVals=ytdArr?ytdArr.filter(function(x,i){ return x!=null && !getFlag(r.name,f+i); }):[];
+      const ytdVals=ytdArr?ytdArr.filter(function(x,i){ return x!=null && !getFlagForMetric(r.name,f+i,m); }):[];
       const ytdAvg=ytdVals.length?ytdVals.reduce(function(s,x){return s+x;},0)/ytdVals.length:0;
       const cells=Array(nW).fill(0).map((_,i)=>{
         const globalWi=f+i;
-        const flag=getFlag(r.name, globalWi);
+        const flag=getFlagForMetric(r.name, globalWi, m);
         const v=(w[i] != null ? w[i] : 0);
         const p=i>0?(w[i-1] != null ? w[i-1] : 0):null;
         const cls=p!=null?(v>p?'cu':v<p?'cd':'c0'):'';
         if(flag){
           const ft=FLAG_TYPES[flag];
-          const tooltip=ft.label+(currentUser?' (right-click to change)':'');
-          const flagCell=`<td class="${cls}" style="text-align:right;padding:3px 8px;cursor:${currentUser?'context-menu':'default'}" title="${tooltip}" oncontextmenu="${currentUser?`event.preventDefault();showFlagMenu(this,'${r.name.replace(/'/g,"\\'")}',${globalWi},'${flag}')`:''}">${ft.icon}</td>`;
-          return flagCell;
+          const tooltip=ft.label+(currentUser?' (right-click to flag/edit)':'');
+          if(currentUser){
+            return`<td class="${cls}" style="text-align:right;padding:3px 8px;cursor:context-menu" title="${tooltip}" oncontextmenu="event.preventDefault();showFlagMenu(this,'${r.name.replace(/'/g,"\\'")}',${globalWi},'${m}')">${ft.icon}</td>`;
+          }
+          return`<td class="${cls}" style="text-align:right;padding:3px 8px" title="${tooltip}">${ft.icon}</td>`;
         }
         if(currentUser){
-          return`<td class="${cls} cell-edit" style="text-align:right;padding:3px 8px" onclick="startCellEdit(this,'${r.name}','${m}',${globalWi},${v})" oncontextmenu="event.preventDefault();showFlagMenu(this,'${r.name.replace(/'/g,"\\'")}',${globalWi},null)"><span class="cell-val" style="display:inline-block;min-width:20px;padding:1px 3px;border-radius:3px">${v}</span></td>`;
+          return`<td class="${cls} cell-edit" style="text-align:right;padding:3px 8px" onclick="startCellEdit(this,'${r.name}','${m}',${globalWi},${v})" oncontextmenu="event.preventDefault();showFlagMenu(this,'${r.name.replace(/'/g,"\\'")}',${globalWi},'${m}')"><span class="cell-val" style="display:inline-block;min-width:20px;padding:1px 3px;border-radius:3px">${v}</span></td>`;
         }
         return`<td class="${cls}" style="text-align:right">${v}</td>`;
       }).join('');
