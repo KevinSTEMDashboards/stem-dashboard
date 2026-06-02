@@ -2803,38 +2803,6 @@ function delWeek(i){
   populateWkSelects();
 }
 
-async function pushWeekToSheet(i) {
-  const ew = extraWeeks[i];
-  if (!ew) { alert('No week data found at index ' + i); return; }
-  const btn = document.getElementById('push-btn-' + i);
-  if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
-  showLoadingBanner('Saving to Google Sheets…');
-  try {
-    const results = await writeWeekToSheet(ew.data, ew.label);
-    hideLoadingBanner();
-    safeSet('stemLastSync', new Date().toISOString());
-    updateSyncBadge();
-    if (btn) { btn.textContent = '✅ Done'; setTimeout(function(){ btn.textContent='📤 Push to Sheet'; btn.disabled=false; }, 2500); }
-    const failed = (results||[]).filter(function(r){return !r.ok;});
-    if (failed.length) {
-      alert('⚠️ Partially saved. Failed tabs: ' + failed.map(function(r){return r.tab+' ('+r.err+')';}).join(', '));
-    } else {
-      alert('✅ Week data pushed to Google Sheets successfully!');
-    }
-  } catch(e) {
-    hideLoadingBanner();
-    if (btn) { btn.textContent = '📤 Push to Sheet'; btn.disabled = false; }
-    const errMsg = e.message || 'Unknown error';
-    if (errMsg.includes('blocked') || errMsg.includes('popup') || errMsg.includes('Pop-up')) {
-      alert('⚠️ Could not save — browser blocked the sign-in popup.\n\nAllow popups for this site and try again.');
-    } else if (errMsg.includes('cancel')) {
-      alert('⚠️ Sign-in cancelled. Please try again.');
-    } else {
-      alert('⚠️ Could not push to Google Sheets: ' + errMsg);
-    }
-    showSyncError(errMsg);
-  }
-}
 
 // ─── TRENDS & INSIGHTS ENGINE ───
 function getWindow(arr,w){const v=arr.filter(x=>x!==null);if(w==='all')return v;const n=parseInt(w);return v.slice(-n)}
@@ -5175,6 +5143,42 @@ updateSyncBadge();
 loadFromSheets();
 
 } catch(e) { console.error('STEM Dashboard error:', e.message, e.stack); document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;color:#f55656;background:#16181d;min-height:100vh"><h2>Dashboard failed to load</h2><p style="margin-top:12px;color:#9ba3b8">Error: ' + e.message + '</p><p style="margin-top:8px;color:#5c6480;font-size:12px">' + (e.stack||'').replace(/\n/g,'<br>') + '</p></div>'; }
+
+</script>
+<script>
+// pushWeekToSheet outside main try{} so onclick attributes can access it
+async function pushWeekToSheet(i) {
+  var ew = (typeof extraWeeks !== 'undefined') ? extraWeeks[i] : null;
+  if (!ew) { alert('No week data found at index ' + i); return; }
+  var btn = document.getElementById('push-btn-' + i);
+  if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
+  if (typeof showLoadingBanner === 'function') showLoadingBanner('Saving to Google Sheets…');
+  try {
+    var results = await writeWeekToSheet(ew.data, ew.label);
+    if (typeof hideLoadingBanner === 'function') hideLoadingBanner();
+    if (typeof safeSet === 'function') safeSet('stemLastSync', new Date().toISOString());
+    if (typeof updateSyncBadge === 'function') updateSyncBadge();
+    if (btn) { btn.textContent = '✅ Done'; setTimeout(function(){ btn.textContent='📤 Push to Sheet'; btn.disabled=false; }, 2500); }
+    var failed = (results||[]).filter(function(r){return !r.ok;});
+    if (failed.length) {
+      alert('⚠️ Partially saved. Failed tabs: ' + failed.map(function(r){return r.tab+' ('+r.err+')';}).join(', '));
+    } else {
+      alert('✅ Week data pushed to Google Sheets successfully!');
+    }
+  } catch(e) {
+    if (typeof hideLoadingBanner === 'function') hideLoadingBanner();
+    if (btn) { btn.textContent = '📤 Push to Sheet'; btn.disabled = false; }
+    var errMsg = e.message || 'Unknown error';
+    if (errMsg.includes('blocked') || errMsg.includes('popup') || errMsg.includes('Pop-up')) {
+      alert('⚠️ Could not save — browser blocked the sign-in popup.\n\nAllow popups for this site and try again.');
+    } else if (errMsg.includes('cancel')) {
+      alert('⚠️ Sign-in cancelled. Please try again.');
+    } else {
+      alert('⚠️ Could not push to Google Sheets: ' + errMsg);
+    }
+    if (typeof showSyncError === 'function') showSyncError(errMsg);
+  }
+}
 </script>
 </body>
 </html>
