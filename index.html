@@ -2197,6 +2197,24 @@ const ALL_METRICS = ['subs','ivs','placements','starts','leads'];
 function getWeekFlags() { return JSON.parse(safeGet('stemWeekFlags') || '{}'); }
 function saveWeekFlags(d) { safeSet('stemWeekFlags', JSON.stringify(d)); }
 
+// Migrate old flat format { wkIdx: "pto" } to new per-metric format { wkIdx: { subs:"pto", ... } }
+(function migrateFlags(){
+  var flags = getWeekFlags();
+  var changed = false;
+  Object.keys(flags).forEach(function(rec) {
+    Object.keys(flags[rec]).forEach(function(wk) {
+      var val = flags[rec][wk];
+      if (typeof val === 'string') {
+        var newVal = {};
+        ALL_METRICS.forEach(function(m){ newVal[m] = val; });
+        flags[rec][wk] = newVal;
+        changed = true;
+      }
+    });
+  });
+  if (changed) saveWeekFlags(flags);
+})();
+
 // Get flag for a specific metric (or any metric if metric omitted)
 function getFlag(recName, wkIdx, metric) {
   var flags = getWeekFlags();
