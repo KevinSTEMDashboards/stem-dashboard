@@ -5154,197 +5154,132 @@ loadFromSheets();
 
 </script>
 <script>
-// Global functions — defined here so they work outside the main try{} block
-const OAUTH_CLIENT_ID = '449401016766-a464fe1emnm95aaq6h1rlprbsqcskvig.apps.googleusercontent.com';
-const SHEET_ID = '1pfZkfllcnqzKz8of6luC0Qns4EeLpnYdGietH8cPHiQ';
-function getOAuthToken() {
+// ── Standalone push-to-sheet functions ──
+// Uses var to avoid redeclaration errors with block 3 consts
+var _OAUTH_CLIENT_ID = '449401016766-a464fe1emnm95aaq6h1rlprbsqcskvig.apps.googleusercontent.com';
+var _SHEET_ID = '1pfZkfllcnqzKz8of6luC0Qns4EeLpnYdGietH8cPHiQ';
+
+function _safeGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+function _safeSet(k,v) { try { localStorage.setItem(k,v); } catch(e) {} }
+
+function _getOAuthToken() {
   return new Promise(function(resolve, reject) {
-    // Check if we have a valid cached token
-    const cached = safeGet('stemOAuthToken');
-    const expiry = safeGet('stemOAuthExpiry');
-    if (cached && expiry && Date.now() < parseInt(expiry)) {
-      oauthToken = cached;
-      resolve(cached);
-      return;
-    }
-    // Open OAuth popup
-    const w = 500, h = 600;
-    const left = (screen.width - w) / 2, top = (screen.height - h) / 2;
-    const redirectUri = 'https://kevinstemdashboards.github.io/stem-dashboard';
-    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
-      + '?client_id=' + OAUTH_CLIENT_ID
-      + '&redirect_uri=' + encodeURIComponent(redirectUri)
-      + '&response_type=token'
-      + '&scope=' + encodeURIComponent(OAUTH_SCOPE)
-      + '&prompt=select_account';
-    const popup = window.open(authUrl, 'googleAuth', 'width='+w+',height='+h+',left='+left+',top='+top);
-    if (!popup) { reject(new Error('Pop-up blocked — please allow pop-ups for this site')); return; }
-    // Poll for the token in the redirect URL
-    const poll = setInterval(function() {
+    var cached = _safeGet('stemOAuthToken');
+    var expiry = _safeGet('stemOAuthExpiry');
+    if (cached && expiry && Date.now() < parseInt(expiry)) { resolve(cached); return; }
+    var w = window.open(
+      'https://accounts.google.com/o/oauth2/auth' +
+      '?client_id=' + _OAUTH_CLIENT_ID +
+      '&redirect_uri=' + encodeURIComponent('https://kevinstemdashboards.github.io/stem-dashboard') +
+      '&response_type=token' +
+      '&scope=' + encodeURIComponent('https://www.googleapis.com/auth/spreadsheets'),
+      'oauth2', 'width=500,height=600'
+    );
+    if (!w) { reject(new Error('Popup blocked — please allow popups for this site')); return; }
+    var timer = setInterval(function() {
       try {
-        const url = popup.location.href;
-        if (url && url.includes('access_token=')) {
-          clearInterval(poll);
-          popup.close();
-          const params = new URLSearchParams(url.split('#')[1]);
-          const token = params.get('access_token');
-          const expiresIn = parseInt(params.get('expires_in') || '3600');
-          oauthToken = token;
-          safeSet('stemOAuthToken', token);
-          safeSet('stemOAuthExpiry', String(Date.now() + (expiresIn - 60) * 1000));
-          resolve(token);
+        if (w.closed) { clearInterval(timer); reject(new Error('Sign-in cancelled')); return; }
+        var hash = w.location.hash;
+        if (hash && hash.includes('access_token')) {
+          clearInterval(timer);
+          var m = hash.match(/access_token=([^&]+)/);
+          if (m) {
+            var token = m[1];
+            _safeSet('stemOAuthToken', token);
+            _safeSet('stemOAuthExpiry', String(Date.now() + 3500000));
+            w.close();
+            resolve(token);
+          } else {
+            w.close();
+            reject(new Error('Could not extract token'));
+          }
         }
-      } catch(e) {
-        // Cross-origin — still waiting for redirect
-      }
-      if (popup.closed) {
-        clearInterval(poll);
-        reject(new Error('Sign-in cancelled'));
-      }
+      } catch(e) { /* cross-origin, keep waiting */ }
     }, 300);
   });
 }
 
-function colToLetter(n) {
-  let s = '';
-  n = n + 1; // 1-based
-  while (n > 0) {
-    const r = (n - 1) % 26;
-    s = String.fromCharCode(65 + r) + s;
-    n = Math.floor((n - 1) / 26);
-  }
+function _colToLetter(n) {
+  var s = ''; n = n + 1;
+  while (n > 0) { var r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); }
   return s;
 }
 
-async function writeWeekToSheet(weekData, weekLabel) {
-  const results = [];
-  let token;
-  try {
-    token = await getOAuthToken();
-  } catch(e) {
-    showSyncError('Google sign-in required to save to Sheet: ' + e.message);
-    return [{ok: false, err: e.message}];
-  }
-
-  for (const [metric, tabName] of Object.entries(SHEET_TABS)) {
+async function _writeWeekToSheet(weekData, weekLabel) {
+  var token = await _getOAuthToken();
+  var tabs = ['Subs','Interviews','Placements','Starts','Leads'];
+  var metricKeys = ['subs','ivs','placements','starts','leads'];
+  var results = [];
+  for (var t = 0; t < tabs.length; t++) {
+    var tab = tabs[t]; var mk = metricKeys[t];
     try {
-      // Read current tab to find row positions and last column
-      const rows = await readTab(tabName);
-
-      // Find header row
-      let headerRowIdx = 0;
-      for (let ri = 0; ri < Math.min(6, rows.length); ri++) {
-        if ((rows[ri][0]||'').toString().trim().toLowerCase() === 'recruiter') { headerRowIdx = ri; break; }
+      var resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values/'+encodeURIComponent(tab)+'?key=AIzaSyCas-IXPeCDB4op7kp3mnGoFCuBINAEY2g');
+      var d = await resp.json();
+      var rows = d.values || [];
+      // Find header row (has "Recruiter" in col A)
+      var hdrRow = -1;
+      for (var r=0; r<rows.length; r++) { if ((rows[r][0]||'').toLowerCase().includes('recruiter')) { hdrRow=r; break; } }
+      if (hdrRow < 0) { results.push({tab:tab,ok:false,err:'Header not found'}); continue; }
+      // Find last data column
+      var hdr = rows[hdrRow];
+      var lastCol = 1;
+      for (var c2=hdr.length-1; c2>=1; c2--) {
+        if (hdr[c2] && !['total','avg','average'].some(function(x){return String(hdr[c2]).toLowerCase().includes(x);})) { lastCol=c2; break; }
       }
-
-      // Find data start column (skip Total, Avg etc.)
-      const SKIP = ['total','avg','average','ytd','ratio','since','pace','%'];
-      function isSkipW(h) { const lo=(h||'').toLowerCase().trim(); return !lo||SKIP.some(s=>lo.includes(s)); }
-      const headerRow = rows[headerRowIdx] || [];
-      let dataStart = 2;
-      for (let ci = 2; ci < Math.min(headerRow.length, 12); ci++) {
-        if (!isSkipW(headerRow[ci])) { dataStart = ci; break; }
+      var newCol = lastCol + 1;
+      var colLetter = _colToLetter(newCol);
+      // Build batch update
+      var data = [];
+      for (var rx=0; rx<rows.length; rx++) {
+        if (rx === hdrRow) continue;
+        var recName = (rows[rx][0]||'').trim();
+        if (!recName || ['total','avg','average'].some(function(x){return recName.toLowerCase().includes(x);})) continue;
+        var val = weekData[recName] ? (weekData[recName][mk]||0) : 0;
+        data.push({range:tab+'!'+colLetter+(rx+1),values:[[val]]});
       }
-
-      // Find last column with real data to determine where new week goes
-      let lastDataCol = dataStart - 1;
-      for (let ci = dataStart; ci < headerRow.length; ci++) {
-        for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
-          const nm = (rows[ri][0]||'').trim().toLowerCase();
-          if (!nm||nm==='total'||nm==='average') continue;
-          const n = parseInt((rows[ri][ci]||'').toString().trim());
-          if (!isNaN(n) && n > 0) { lastDataCol = ci; break; }
-        }
-      }
-      const newCol = lastDataCol + 1;
-      const newColLetter = colToLetter(newCol - 1); // colToLetter is 0-indexed
-
-      // Write each recruiter's value only — do NOT touch header rows
-      const updates = [];
-      for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
-        const name = (rows[ri][0]||'').trim();
-        const lo = name.toLowerCase();
-        if (!name||!rows[ri][1]||lo==='recruiter'||lo==='total'||lo==='average'||lo==='averages:') continue;
-        const val = (weekData[name]||{})[metric] || 0;
-        updates.push({
-          range: `${tabName}!${newColLetter}${ri + 1}`,
-          values: [[val]]
-        });
-      }
-
-      // Batch write with OAuth token
-      const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchUpdate`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token
-        },
-        body: JSON.stringify({ valueInputOption: 'RAW', data: updates })
-      });
-      if (!res.ok) {
-        const err = await res.text();
-        // Token may have expired mid-session — clear it
-        if (res.status === 401) { safeSet('stemOAuthToken',''); safeSet('stemOAuthExpiry','0'); }
-        throw new Error(`${res.status}: ${err}`);
-      }
-      results.push({ tab: tabName, ok: true });
-    } catch(e) {
-      results.push({ tab: tabName, ok: false, err: e.message });
-      console.warn(`Write failed for ${tabName}:`, e.message);
-    }
+      if (!data.length) { results.push({tab:tab,ok:true}); continue; }
+      var updateResp = await fetch(
+        'https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values:batchUpdate',
+        { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+          body: JSON.stringify({valueInputOption:'RAW',data:data}) }
+      );
+      var upd = await updateResp.json();
+      if (upd.error) { results.push({tab:tab,ok:false,err:upd.error.message}); }
+      else { results.push({tab:tab,ok:true}); }
+    } catch(e) { results.push({tab:tab,ok:false,err:e.message}); }
   }
   return results;
 }
 
-
-
-// pushWeekToSheet outside main try{} so onclick attributes can access it
 async function pushWeekToSheet(i) {
-  // Read extraWeeks via safeGet (same as main app uses)
   var ew;
   try {
-    var rawWeeks = (typeof safeGet === 'function') ? safeGet('stemXW') : localStorage.getItem('stemXW');
-    var weeks = JSON.parse(rawWeeks || '[]');
+    var weeks = JSON.parse(_safeGet('stemXW') || '[]');
     ew = weeks[i];
   } catch(err) { ew = null; }
-  if (!ew) { 
-    // Debug: show what's in storage
-    try {
-      var raw = localStorage.getItem('stemXW');
-      alert('No week data found at index ' + i + '.\n\nStorage contents: ' + (raw ? raw.substring(0,100)+'...' : 'empty'));
-    } catch(e2) {
-      alert('No week data found at index ' + i);
-    }
-    return; 
-  }
+  if (!ew) { alert('No week data found at index ' + i); return; }
   var btn = document.getElementById('push-btn-' + i);
   if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
-  if (window.showLoadingBanner) window.showLoadingBanner('Saving to Google Sheets…');
   try {
-    var results = await window.writeWeekToSheet(ew.data, ew.label);
-    if (window.hideLoadingBanner) window.hideLoadingBanner();
-    if (window.safeSet) window.safeSet('stemLastSync', new Date().toISOString());
-    if (window.updateSyncBadge) window.updateSyncBadge();
+    var results = await _writeWeekToSheet(ew.data, ew.label);
+    _safeSet('stemLastSync', new Date().toISOString());
     if (btn) { btn.textContent = '✅ Done'; setTimeout(function(){ btn.textContent='📤 Push to Sheet'; btn.disabled=false; }, 2500); }
-    var failed = (results||[]).filter(function(r){return !r.ok;});
+    var failed = results.filter(function(r){return !r.ok;});
     if (failed.length) {
-      alert('⚠️ Partially saved. Failed tabs: ' + failed.map(function(r){return r.tab+' ('+r.err+')';}).join(', '));
+      alert('⚠️ Partially saved. Failed: ' + failed.map(function(r){return r.tab+' ('+r.err+')';}).join(', '));
     } else {
-      alert('✅ Week data pushed to Google Sheets successfully!');
+      alert('✅ Week ' + (ew.label||'') + ' pushed to Google Sheets successfully!');
     }
   } catch(e) {
-    if (typeof hideLoadingBanner === 'function') hideLoadingBanner();
     if (btn) { btn.textContent = '📤 Push to Sheet'; btn.disabled = false; }
-    var errMsg = e.message || 'Unknown error';
-    if (errMsg.includes('blocked') || errMsg.includes('popup') || errMsg.includes('Pop-up')) {
-      alert('⚠️ Could not save — browser blocked the sign-in popup.\n\nAllow popups for this site and try again.');
-    } else if (errMsg.includes('cancel')) {
+    var msg = e.message || 'Unknown error';
+    if (msg.toLowerCase().includes('blocked') || msg.toLowerCase().includes('popup')) {
+      alert('⚠️ Browser blocked the sign-in popup.\n\nClick the popup icon in your address bar, select "Always allow", then try again.');
+    } else if (msg.toLowerCase().includes('cancel')) {
       alert('⚠️ Sign-in cancelled. Please try again.');
     } else {
-      alert('⚠️ Could not push to Google Sheets: ' + errMsg);
+      alert('⚠️ Could not push to Google Sheets: ' + msg);
     }
-    if (typeof showSyncError === 'function') showSyncError(errMsg);
   }
 }
 </script>
