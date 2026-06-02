@@ -5136,6 +5136,14 @@ function goToRecruiter(name) {
   renderRecruiter();
 }
 
+// Expose key functions globally so external script blocks can access them
+window.writeWeekToSheet = writeWeekToSheet;
+window.showLoadingBanner = showLoadingBanner;
+window.hideLoadingBanner = hideLoadingBanner;
+window.showSyncError = showSyncError;
+window.updateSyncBadge = updateSyncBadge;
+window.safeSet = safeSet;
+
 // Render immediately with BASE_DATA so the page is never blank,
 // then refresh silently from Google Sheets in the background.
 renderOverview();
@@ -5146,6 +5154,151 @@ loadFromSheets();
 
 </script>
 <script>
+// Global functions — defined here so they work outside the main try{} block
+const OAUTH_CLIENT_ID = '449401016766-a464fe1emnm95aaq6h1rlprbsqcskvig.apps.googleusercontent.com';
+const SHEET_ID = '1pfZkfllcnqzKz8of6luC0Qns4EeLpnYdGietH8cPHiQ';
+function getOAuthToken() {
+  return new Promise(function(resolve, reject) {
+    // Check if we have a valid cached token
+    const cached = safeGet('stemOAuthToken');
+    const expiry = safeGet('stemOAuthExpiry');
+    if (cached && expiry && Date.now() < parseInt(expiry)) {
+      oauthToken = cached;
+      resolve(cached);
+      return;
+    }
+    // Open OAuth popup
+    const w = 500, h = 600;
+    const left = (screen.width - w) / 2, top = (screen.height - h) / 2;
+    const redirectUri = 'https://kevinstemdashboards.github.io/stem-dashboard';
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id=' + OAUTH_CLIENT_ID
+      + '&redirect_uri=' + encodeURIComponent(redirectUri)
+      + '&response_type=token'
+      + '&scope=' + encodeURIComponent(OAUTH_SCOPE)
+      + '&prompt=select_account';
+    const popup = window.open(authUrl, 'googleAuth', 'width='+w+',height='+h+',left='+left+',top='+top);
+    if (!popup) { reject(new Error('Pop-up blocked — please allow pop-ups for this site')); return; }
+    // Poll for the token in the redirect URL
+    const poll = setInterval(function() {
+      try {
+        const url = popup.location.href;
+        if (url && url.includes('access_token=')) {
+          clearInterval(poll);
+          popup.close();
+          const params = new URLSearchParams(url.split('#')[1]);
+          const token = params.get('access_token');
+          const expiresIn = parseInt(params.get('expires_in') || '3600');
+          oauthToken = token;
+          safeSet('stemOAuthToken', token);
+          safeSet('stemOAuthExpiry', String(Date.now() + (expiresIn - 60) * 1000));
+          resolve(token);
+        }
+      } catch(e) {
+        // Cross-origin — still waiting for redirect
+      }
+      if (popup.closed) {
+        clearInterval(poll);
+        reject(new Error('Sign-in cancelled'));
+      }
+    }, 300);
+  });
+}
+
+function colToLetter(n) {
+  let s = '';
+  n = n + 1; // 1-based
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+async function writeWeekToSheet(weekData, weekLabel) {
+  const results = [];
+  let token;
+  try {
+    token = await getOAuthToken();
+  } catch(e) {
+    showSyncError('Google sign-in required to save to Sheet: ' + e.message);
+    return [{ok: false, err: e.message}];
+  }
+
+  for (const [metric, tabName] of Object.entries(SHEET_TABS)) {
+    try {
+      // Read current tab to find row positions and last column
+      const rows = await readTab(tabName);
+
+      // Find header row
+      let headerRowIdx = 0;
+      for (let ri = 0; ri < Math.min(6, rows.length); ri++) {
+        if ((rows[ri][0]||'').toString().trim().toLowerCase() === 'recruiter') { headerRowIdx = ri; break; }
+      }
+
+      // Find data start column (skip Total, Avg etc.)
+      const SKIP = ['total','avg','average','ytd','ratio','since','pace','%'];
+      function isSkipW(h) { const lo=(h||'').toLowerCase().trim(); return !lo||SKIP.some(s=>lo.includes(s)); }
+      const headerRow = rows[headerRowIdx] || [];
+      let dataStart = 2;
+      for (let ci = 2; ci < Math.min(headerRow.length, 12); ci++) {
+        if (!isSkipW(headerRow[ci])) { dataStart = ci; break; }
+      }
+
+      // Find last column with real data to determine where new week goes
+      let lastDataCol = dataStart - 1;
+      for (let ci = dataStart; ci < headerRow.length; ci++) {
+        for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
+          const nm = (rows[ri][0]||'').trim().toLowerCase();
+          if (!nm||nm==='total'||nm==='average') continue;
+          const n = parseInt((rows[ri][ci]||'').toString().trim());
+          if (!isNaN(n) && n > 0) { lastDataCol = ci; break; }
+        }
+      }
+      const newCol = lastDataCol + 1;
+      const newColLetter = colToLetter(newCol - 1); // colToLetter is 0-indexed
+
+      // Write each recruiter's value only — do NOT touch header rows
+      const updates = [];
+      for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
+        const name = (rows[ri][0]||'').trim();
+        const lo = name.toLowerCase();
+        if (!name||!rows[ri][1]||lo==='recruiter'||lo==='total'||lo==='average'||lo==='averages:') continue;
+        const val = (weekData[name]||{})[metric] || 0;
+        updates.push({
+          range: `${tabName}!${newColLetter}${ri + 1}`,
+          values: [[val]]
+        });
+      }
+
+      // Batch write with OAuth token
+      const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchUpdate`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({ valueInputOption: 'RAW', data: updates })
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        // Token may have expired mid-session — clear it
+        if (res.status === 401) { safeSet('stemOAuthToken',''); safeSet('stemOAuthExpiry','0'); }
+        throw new Error(`${res.status}: ${err}`);
+      }
+      results.push({ tab: tabName, ok: true });
+    } catch(e) {
+      results.push({ tab: tabName, ok: false, err: e.message });
+      console.warn(`Write failed for ${tabName}:`, e.message);
+    }
+  }
+  return results;
+}
+
+
+
 // pushWeekToSheet outside main try{} so onclick attributes can access it
 async function pushWeekToSheet(i) {
   // Read extraWeeks via safeGet (same as main app uses)
@@ -5167,12 +5320,12 @@ async function pushWeekToSheet(i) {
   }
   var btn = document.getElementById('push-btn-' + i);
   if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
-  if (typeof showLoadingBanner === 'function') showLoadingBanner('Saving to Google Sheets…');
+  if (window.showLoadingBanner) window.showLoadingBanner('Saving to Google Sheets…');
   try {
-    var results = await writeWeekToSheet(ew.data, ew.label);
-    if (typeof hideLoadingBanner === 'function') hideLoadingBanner();
-    if (typeof safeSet === 'function') safeSet('stemLastSync', new Date().toISOString());
-    if (typeof updateSyncBadge === 'function') updateSyncBadge();
+    var results = await window.writeWeekToSheet(ew.data, ew.label);
+    if (window.hideLoadingBanner) window.hideLoadingBanner();
+    if (window.safeSet) window.safeSet('stemLastSync', new Date().toISOString());
+    if (window.updateSyncBadge) window.updateSyncBadge();
     if (btn) { btn.textContent = '✅ Done'; setTimeout(function(){ btn.textContent='📤 Push to Sheet'; btn.disabled=false; }, 2500); }
     var failed = (results||[]).filter(function(r){return !r.ok;});
     if (failed.length) {
