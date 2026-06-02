@@ -2256,13 +2256,20 @@ function renderWoW(){
   }
   const awl=activeWkLabels();
   const nW=awl.length;
+  const [f,t]=getWeekRange();
   const totals=Array(nW).fill(0);
-  recs.forEach(r=>{for(let i=0;i<nW;i++)totals[i]+=(r[m][i]||0)});
+  const availableHeadcount=Array(nW).fill(0);
+  recs.forEach(r=>{
+    for(let i=0;i<nW;i++){
+      totals[i]+=(r[m][i]||0);
+      if(!getFlag(r.name, f+i)) availableHeadcount[i]++;
+    }
+  });
   document.getElementById('wow-total-title').textContent=`Weekly ${m} — team total`;
   const accent={subs:'#185FA5',ivs:'#1D9E75',placements:'#a855f7',starts:'#D4537E',leads:'#EF9F27'}[m]||'#888';
   if(cWowTotal)cWowTotal.destroy();
-  const wowLabelPlugin={id:'wowLabels',afterDatasetsDraw(chart){const ctx=chart.ctx;chart.data.datasets.forEach((ds,i)=>{const meta=chart.getDatasetMeta(i);meta.data.forEach((bar,j)=>{const v=ds.data[j];if(v>0){ctx.save();ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--text')||'#fff';ctx.font='600 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(v,bar.x,bar.y-2);ctx.restore();}});});}};
-  cWowTotal=new Chart(document.getElementById('wowTotalChart'),{type:'bar',data:{labels:awl,datasets:[{data:totals,backgroundColor:accent+'99',borderColor:accent,borderWidth:1.5,borderRadius:3,borderSkipped:false}]},plugins:[wowLabelPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:18}},plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10}}}}}});
+  const wowLabelPlugin={id:'wowLabels',afterDatasetsDraw(chart){const ctx=chart.ctx;const textCol=getComputedStyle(document.documentElement).getPropertyValue('--text')||'#fff';const subCol=getComputedStyle(document.documentElement).getPropertyValue('--text3')||'#888';chart.data.datasets.forEach((ds,i)=>{const meta=chart.getDatasetMeta(i);meta.data.forEach((bar,j)=>{const v=ds.data[j];if(v>0){const hc=availableHeadcount[j]||1;const avg=(v/hc).toFixed(1);ctx.save();ctx.fillStyle=textCol;ctx.font='600 10px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(v,bar.x,bar.y-12);ctx.fillStyle=subCol;ctx.font='500 9px sans-serif';ctx.fillText(avg+' avg',bar.x,bar.y-2);ctx.restore();}});});}};
+  cWowTotal=new Chart(document.getElementById('wowTotalChart'),{type:'bar',data:{labels:awl,datasets:[{data:totals,backgroundColor:accent+'99',borderColor:accent,borderWidth:1.5,borderRadius:3,borderSkipped:false}]},plugins:[wowLabelPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:28}},plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10}}}}}});
 
   if(view==='table'){
     document.getElementById('wow-tbl-card').style.display='';
