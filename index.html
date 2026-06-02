@@ -5220,13 +5220,25 @@ async function _writeWeekToSheet(weekData, weekLabel) {
       var hdrRow = -1;
       for (var r=0; r<rows.length; r++) { if ((rows[r][0]||'').toLowerCase().includes('recruiter')) { hdrRow=r; break; } }
       if (hdrRow < 0) { results.push({tab:tab,ok:false,err:'Header not found'}); continue; }
-      // Find last data column
+      // Find last column with actual recruiter data (not just a header)
+      // Scan data rows to find rightmost column that has any non-empty value
       var hdr = rows[hdrRow];
-      var lastCol = 1;
-      for (var c2=hdr.length-1; c2>=1; c2--) {
-        if (hdr[c2] && !['total','avg','average'].some(function(x){return String(hdr[c2]).toLowerCase().includes(x);})) { lastCol=c2; break; }
+      var lastDataCol = 1;
+      for (var rx2=hdrRow+1; rx2<rows.length; rx2++) {
+        var row = rows[rx2];
+        if (!row || !(row[0]||'').trim()) continue;
+        var recName2 = row[0].trim().toLowerCase();
+        if (['total','avg','average','ytd'].some(function(x){return recName2.includes(x);})) continue;
+        for (var c2=row.length-1; c2>=1; c2--) {
+          if (row[c2] !== undefined && row[c2] !== null && String(row[c2]).trim() !== '') {
+            if (c2 > lastDataCol) lastDataCol = c2;
+            break;
+          }
+        }
       }
-      var newCol = lastCol + 1;
+      var newCol = lastDataCol + 1;
+      // Safety check
+      if (newCol > 300) { results.push({tab:tab,ok:false,err:'Column out of range: '+newCol}); continue; }
       var colLetter = _colToLetter(newCol);
       // Build batch update
       var data = [];
