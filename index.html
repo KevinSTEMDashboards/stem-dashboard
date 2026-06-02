@@ -2654,7 +2654,16 @@ document.getElementById('save-btn').addEventListener('click', async ()=>{
     updateSyncBadge();
   } catch(e) {
     hideLoadingBanner();
-    showSyncError(e.message);
+    // Show a more visible alert so the failure isn't missed
+    const errMsg = e.message || 'Unknown error';
+    if (errMsg.includes('blocked') || errMsg.includes('popup') || errMsg.includes('Pop-up')) {
+      alert('⚠️ Could not save to Google Sheets — your browser blocked the sign-in popup.\n\nPlease allow popups for this site:\n1. Click the popup blocked icon in your address bar\n2. Select "Always allow"\n3. Try saving again.');
+    } else if (errMsg.includes('cancelled') || errMsg.includes('cancel')) {
+      alert('⚠️ Google sign-in was cancelled. Please try saving again and complete the sign-in.');
+    } else {
+      alert('⚠️ Could not save to Google Sheets: ' + errMsg + '\n\nYour data was saved locally. Try syncing manually or re-entering next time.');
+    }
+    showSyncError(errMsg);
   }
 });
 
