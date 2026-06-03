@@ -3328,6 +3328,7 @@ function openUserModal() {
     resetBtn.textContent = hasMFA ? '🔄 Reset MFA' : '⚙️ Set up MFA';
     resetBtn.onclick = () => {
       safeDel('stemMFASecret');
+      deleteCookieFallback('stemMFASecret');
       closeUserModal();
       // Trigger setup on next admin login — show message
       alert('MFA reset. You will be prompted to set up a new authenticator code on your next sign-in.');
@@ -3678,7 +3679,32 @@ function drawQR(elemId, text) {
   }
 }
 
-let pendingMFAUser = null;
+// Cookie fallback for iOS Safari localStorage issues
+function setCookieFallback(k, v) {
+  try { document.cookie = k+'='+encodeURIComponent(v)+';max-age=31536000;path=/;SameSite=Strict'; } catch(e){}
+}
+function getCookieFallback(k) {
+  try {
+    var m = document.cookie.match('(?:^|; )'+k+'=([^;]*)');
+    return m ? decodeURIComponent(m[1]) : null;
+  } catch(e){ return null; }
+}
+function deleteCookieFallback(k) {
+  try { document.cookie = k+'=;max-age=0;path=/'; } catch(e){}
+}
+
+// Override safeGet/safeSet for stemMFASecret to use cookie fallback
+var _origSafeGet = safeGet;
+var _origSafeSet = safeSet;
+safeGet = function(k) {
+  var v = _origSafeGet(k);
+  if (!v && k === 'stemMFASecret') v = getCookieFallback('stemMFASecret');
+  return v;
+};
+safeSet = function(k, v) {
+  _origSafeSet(k, v);
+  if (k === 'stemMFASecret') setCookieFallback('stemMFASecret', v);
+};
 let pendingMFASecret = null;
 
 function showMfaSetup(user) {
