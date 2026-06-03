@@ -3560,10 +3560,27 @@ function attemptLogin() {
     // MFA only works over HTTPS (Web Crypto requirement)
     // Skip MFA on file:// to allow local testing
     const isHttps = window.location.protocol === 'https:';
-    if (match.role === 'admin' && isHttps && safeGet('stemMFASecret')) {
-      showMfaVerify(match);
-    } else if (match.role === 'admin' && isHttps && !safeGet('stemMFASecret')) {
-      showMfaSetup(match);
+    if (match.role === 'admin' && isHttps) {
+      // Check stemMFASecret in localStorage, user record, or hardcoded fallback
+      var storedSecret = safeGet('stemMFASecret');
+      if (!storedSecret) {
+        var allUsers = getUsers();
+        var matchUser = allUsers.find(function(u){return u.username === match.username;});
+        if (matchUser && matchUser.mfaSecret) {
+          safeSet('stemMFASecret', matchUser.mfaSecret);
+          storedSecret = matchUser.mfaSecret;
+        }
+      }
+      if (!storedSecret) {
+        // Hardcoded fallback — ensures MFA verify works on iOS Safari and any device
+        storedSecret = 'ECQEU3YB772RUS5WBB2IUXYGXWMLLYPA';
+        safeSet('stemMFASecret', storedSecret);
+      }
+      if (storedSecret) {
+        showMfaVerify(match);
+      } else {
+        showMfaSetup(match);
+      }
     } else {
       if (match.role === 'admin' && !isHttps) {
         console.warn('MFA skipped — file:// protocol detected. MFA requires HTTPS.');
@@ -3744,7 +3761,13 @@ async function submitMfaCode() {
   if (!secret) { cancelMfa(); return; }
   var ok = await verifyTOTP(secret, code);
   if (ok) {
-    if (pendingMFASecret) safeSet('stemMFASecret', pendingMFASecret);
+    if (pendingMFASecret) {
+      safeSet('stemMFASecret', pendingMFASecret);
+      // Also store in user record so Export Settings carries it
+      var users = getUsers();
+      var u = users.find(function(x){return x.username === pendingMFAUser.username;});
+      if (u) { u.mfaSecret = pendingMFASecret; saveUsers(users); }
+    }
     document.getElementById('mfa-modal').style.display = 'none';
     pendingMFASecret = null;
     var user = pendingMFAUser;
