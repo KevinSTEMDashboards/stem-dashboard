@@ -5249,9 +5249,12 @@ function renderGP() {
     MGRS.forEach(m => { const o=document.createElement('option'); o.value=m; o.textContent=m; mgrSel.appendChild(o); });
   }
 
+  const archivedNames = archivedRecruiters.map(a=>a.name.trim().toLowerCase());
+
   const recs = GP_DATA.filter(r =>
     (!mgrF || r.manager===mgrF) &&
-    gpSelectedRecs[r.name] !== false
+    gpSelectedRecs[r.name] !== false &&
+    !archivedNames.includes(r.name.trim().toLowerCase())
   ).sort((a,b) => a.name.localeCompare(b.name));
 
   if (!recs.length) {
@@ -5280,7 +5283,7 @@ function renderGP() {
   const mgrsToShow = mgrF ? [mgrF] : mgrsInData;
   const mgrCards = mgrsToShow.map(mgr => {
     const mc = MGR_COLORS[mgr]||'#888';
-    const team = GP_DATA.filter(r=>r.manager===mgr);
+    const team = GP_DATA.filter(r=>r.manager===mgr && !archivedNames.includes(r.name.trim().toLowerCase()));
     if (!team.length) return '';
     const totalYTD  = team.reduce((s,r)=>s+r.ytdGP,0);
     const total2026 = team.reduce((s,r)=>s+r.gp2026,0);
