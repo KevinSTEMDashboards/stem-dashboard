@@ -129,6 +129,10 @@ main{max-width:1500px;margin:0 auto;padding:16px 20px 48px}
 
 /* ── TABLE ── */
 .tbl-wrap{overflow-x:auto}
+.wow-table .sticky-col-1{position:sticky;left:0;z-index:2;background:var(--bg)}
+.wow-table .sticky-col-2{position:sticky;left:130px;z-index:2;background:var(--bg)}
+.wow-table thead .sticky-col-1,.wow-table thead .sticky-col-2{z-index:3;background:var(--bg2)}
+.wow-table .sticky-col-1::after,.wow-table .sticky-col-2::after{content:'';position:absolute;right:0;top:0;bottom:0;width:1px;background:var(--border2)}
 table{width:100%;border-collapse:collapse;font-size:12px}
 thead th{
   font-size:10px;font-weight:700;color:var(--text3);text-align:left;
@@ -2362,7 +2366,7 @@ function renderWoW(){
     // Constrain table width when only showing one week
     const wowTable = document.querySelector('.wow-table');
     if (wowTable) wowTable.style.width = singleWk ? 'auto' : '100%';
-    thead.innerHTML=`<tr><th style="min-width:${singleWk?'150':'130'}px">Recruiter</th><th style="min-width:${singleWk?'80':'60'}px">Mgr</th>${!singleWk?`<th style="text-align:right">Total</th><th style="text-align:right">YTD avg</th><th style="text-align:right">4w avg</th>`:''}${m==='starts'?'<th style="text-align:center;white-space:nowrap" title="Weeks since this recruiter last had a start">Wks since last start</th>':''}${awl.map(w=>`<th style="text-align:right;min-width:70px">${w}</th>`).join('')}${currentUser?'<th style="width:32px"></th>':''}</tr>`;
+    thead.innerHTML=`<tr><th class="sticky-col-1" style="min-width:${singleWk?'150':'130'}px">Recruiter</th><th class="sticky-col-2" style="min-width:${singleWk?'80':'60'}px">Mgr</th>${!singleWk?`<th style="text-align:right">Total</th><th style="text-align:right">YTD avg</th><th style="text-align:right">4w avg</th>`:''}${m==='starts'?'<th style="text-align:center;white-space:nowrap" title="Weeks since this recruiter last had a start">Wks since last start</th>':''}${awl.map(w=>`<th style="text-align:right;min-width:70px">${w}</th>`).join('')}${currentUser?'<th style="width:32px"></th>':''}</tr>`;
     tbody.innerHTML=recs.map(r=>{
       const [f,t]=getWeekRange();
       const w=r[m];const tot=totalArr(w);const a4=avg4w(w);
@@ -2399,7 +2403,7 @@ function renderWoW(){
         wslCell=`<td style="text-align:center;white-space:nowrap"><span style="font-size:11px;font-weight:600;color:${wslColor}">${wslText}</span></td>`;
       }
       const editHint=currentUser?`<td style="text-align:center;padding:2px 4px"><span style="font-size:9px;color:var(--text3)" title="Click any number to edit">✏️</span></td>`:'<td></td>';
-      return`<tr><td style="font-weight:500;white-space:nowrap">${r.name}${rampIcon(r.name)}</td><td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>${!singleWk?`<td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right">${ytdAvg.toFixed(1)}</td><td style="text-align:right">${a4.toFixed(1)}</td>`:''  }${wslCell}${cells}${editHint}</tr>`;
+      return`<tr><td class="sticky-col-1" style="font-weight:500;white-space:nowrap">${r.name}${rampIcon(r.name)}</td><td class="sticky-col-2"><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>${!singleWk?`<td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right">${ytdAvg.toFixed(1)}</td><td style="text-align:right">${a4.toFixed(1)}</td>`:''  }${wslCell}${cells}${editHint}</tr>`;
     }).join('');
   } else {
     document.getElementById('wow-tbl-card').style.display='none';
