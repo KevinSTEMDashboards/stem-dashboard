@@ -808,7 +808,18 @@ td.editing{padding:2px 4px!important}
 <!-- GROSS PROFIT TAB -->
 <div class="tab-panel" id="tab-gp">
   <div class="wctrl" style="flex-wrap:wrap;gap:8px">
-    <select id="gp-mgr" onchange="renderGP()" style="height:32px;font-size:12px"><option value="">All managers</option></select>
+    <div style="position:relative" id="gp-mgr-wrap">
+      <button type="button" id="gp-mgr-btn" onclick="toggleGpMgrMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:140px;justify-content:space-between">
+        <span id="gp-mgr-label">All managers</span><span style="font-size:10px;opacity:.6">&#9662;</span>
+      </button>
+      <div id="gp-mgr-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:500;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.25);padding:8px;min-width:180px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;padding:0 4px">
+          <button onclick="gpMgrSelectAll()" style="font-size:10px;border:none;background:none;color:var(--accent);cursor:pointer;padding:0">All</button>
+          <button onclick="gpMgrClearAll()" style="font-size:10px;border:none;background:none;color:var(--text3);cursor:pointer;padding:0">None</button>
+        </div>
+        <div id="gp-mgr-checks"></div>
+      </div>
+    </div>
     <select id="gp-window" onchange="onGpWindowChange()" style="height:32px;font-size:12px">
       <option value="all">Full YTD</option>
       <option value="4">Last 4 weeks</option>
@@ -820,7 +831,7 @@ td.editing{padding:2px 4px!important}
       <span style="font-size:11px;color:var(--text3)">→</span>
       <select id="gp-wk-to" onchange="renderGP()" style="height:32px;font-size:12px"></select>
     </div>
-    <div style="position:relative" id="gp-rec-wrap">
+    <button type="button" onclick="resetGpFilters()" style="height:32px;padding:0 12px;font-size:12px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">✕ Reset</button>
       <button type="button" id="gp-rec-btn" onclick="toggleGpRecMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:160px;justify-content:space-between">
         <span id="gp-rec-label">All recruiters</span><span style="font-size:10px;opacity:.6">&#9662;</span>
       </button>
@@ -1826,7 +1837,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     // Hide filter bar on leaderboard, show on all other tabs
     document.querySelector('.filter-bar').style.display=t.dataset.tab==='leaderboard'?'none':'';
     // Hide global controls on tabs that have their own built-in filters
-    const hiddenOnTabs = t.dataset.tab==='weekly' || t.dataset.tab==='trends' || t.dataset.tab==='managers';
+    const hiddenOnTabs = t.dataset.tab==='weekly' || t.dataset.tab==='trends' || t.dataset.tab==='managers' || t.dataset.tab==='gp';
     const metricSel = document.getElementById('metric-select');
     const mgrFilter = document.getElementById('mgr-filter');
     const searchBox = document.getElementById('search');
@@ -5216,6 +5227,85 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// ─── GP MANAGER FILTER ───
+var gpSelectedMgrs = {};
+
+function initGpMgrChecks() {
+  var wrap = document.getElementById('gp-mgr-checks');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  var mgrs = [...new Set(GP_DATA.map(r=>r.manager))].sort();
+  mgrs.forEach(function(m) {
+    if (gpSelectedMgrs[m] === undefined) gpSelectedMgrs[m] = true;
+    var mc = MGR_COLORS[m]||'#888';
+    var row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px;cursor:pointer;border-radius:4px;font-size:12px';
+    row.onmouseenter = function(){row.style.background='var(--bg2)';};
+    row.onmouseleave = function(){row.style.background='';};
+    row.innerHTML = '<input type="checkbox" '+(gpSelectedMgrs[m]?'checked':'')+' style="accent-color:'+mc+';width:14px;height:14px">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+mc+';flex-shrink:0"></span>'
+      +'<span style="color:var(--text)">'+m+'</span>';
+    row.querySelector('input').addEventListener('change', function(e) {
+      gpSelectedMgrs[m] = e.target.checked;
+      updateGpMgrLabel();
+      renderGP();
+    });
+    wrap.appendChild(row);
+  });
+  updateGpMgrLabel();
+}
+
+function updateGpMgrLabel() {
+  var mgrs = [...new Set(GP_DATA.map(r=>r.manager))];
+  var sel = mgrs.filter(function(m){return gpSelectedMgrs[m]!==false;});
+  var btn = document.getElementById('gp-mgr-label');
+  if (!btn) return;
+  if (sel.length === mgrs.length) btn.textContent = 'All managers';
+  else if (sel.length === 0) btn.textContent = 'No managers';
+  else if (sel.length === 1) btn.textContent = sel[0];
+  else btn.textContent = sel.length + ' managers';
+}
+
+function toggleGpMgrMenu() {
+  var menu = document.getElementById('gp-mgr-menu');
+  if (!menu) return;
+  if (menu.style.display !== 'none') menu.style.display = 'none';
+  else { initGpMgrChecks(); menu.style.display = 'block'; }
+}
+
+function gpMgrSelectAll() {
+  var mgrs = [...new Set(GP_DATA.map(r=>r.manager))];
+  mgrs.forEach(function(m){gpSelectedMgrs[m]=true;});
+  initGpMgrChecks(); renderGP();
+}
+
+function gpMgrClearAll() {
+  var mgrs = [...new Set(GP_DATA.map(r=>r.manager))];
+  mgrs.forEach(function(m){gpSelectedMgrs[m]=false;});
+  initGpMgrChecks(); renderGP();
+}
+
+function resetGpFilters() {
+  var winSel = document.getElementById('gp-window');
+  var cr = document.getElementById('gp-custom-range');
+  if (winSel) winSel.value = 'all';
+  if (cr) cr.style.display = 'none';
+  var mgrs = [...new Set(GP_DATA.map(r=>r.manager))];
+  mgrs.forEach(function(m){gpSelectedMgrs[m]=true;});
+  GP_DATA.forEach(r=>{ gpSelectedRecs[r.name] = true; });
+  updateGpMgrLabel();
+  updateGpRecLabel();
+  renderGP();
+}
+
+document.addEventListener('click', function(e) {
+  var mgrWrap = document.getElementById('gp-mgr-wrap');
+  if (mgrWrap && !mgrWrap.contains(e.target)) {
+    var m = document.getElementById('gp-mgr-menu');
+    if (m) m.style.display = 'none';
+  }
+});
+
 function onGpWindowChange() {
   var win = document.getElementById('gp-window').value;
   var cr = document.getElementById('gp-custom-range');
@@ -5238,23 +5328,19 @@ function onGpWindowChange() {
 
 function renderGP() {
   if (!document.getElementById('tab-gp').classList.contains('active')) return;
-  const mgrF = (document.getElementById('gp-mgr')||{}).value || '';
   const win  = (document.getElementById('gp-window')||{}).value || 'all';
 
-  // Initialize recruiter filter if needed
+  // Initialize manager and recruiter filters if needed
+  var allGpMgrs = [...new Set(GP_DATA.map(r=>r.manager))];
+  allGpMgrs.forEach(m=>{ if(gpSelectedMgrs[m]===undefined) gpSelectedMgrs[m]=true; });
+  updateGpMgrLabel();
   GP_DATA.forEach(r=>{ if(gpSelectedRecs[r.name]===undefined) gpSelectedRecs[r.name]=true; });
   updateGpRecLabel();
-
-  // Populate mgr filter
-  const mgrSel = document.getElementById('gp-mgr');
-  if (mgrSel && mgrSel.options.length <= 1) {
-    MGRS.forEach(m => { const o=document.createElement('option'); o.value=m; o.textContent=m; mgrSel.appendChild(o); });
-  }
 
   const archivedNames = archivedRecruiters.map(a=>a.name.trim().toLowerCase());
 
   const recs = GP_DATA.filter(r =>
-    (!mgrF || r.manager===mgrF) &&
+    gpSelectedMgrs[r.manager] !== false &&
     gpSelectedRecs[r.name] !== false &&
     !archivedNames.includes(r.name.trim().toLowerCase())
   ).sort((a,b) => a.name.localeCompare(b.name));
@@ -5282,7 +5368,7 @@ function renderGP() {
 
   // Manager cards — use all GP_DATA managers, not filtered recs
   const mgrsInData = [...new Set(GP_DATA.map(r=>r.manager))].sort();
-  const mgrsToShow = mgrF ? [mgrF] : mgrsInData;
+  const mgrsToShow = mgrsInData.filter(m => gpSelectedMgrs[m] !== false);
   const mgrCards = mgrsToShow.map(mgr => {
     const mc = MGR_COLORS[mgr]||'#888';
     const team = GP_DATA.filter(r=>r.manager===mgr && !archivedNames.includes(r.name.trim().toLowerCase()));
