@@ -809,15 +809,33 @@ td.editing{padding:2px 4px!important}
 <div class="tab-panel" id="tab-gp">
   <div class="wctrl" style="flex-wrap:wrap;gap:8px">
     <select id="gp-mgr" onchange="renderGP()" style="height:32px;font-size:12px"><option value="">All managers</option></select>
-    <select id="gp-window" onchange="renderGP()" style="height:32px;font-size:12px">
+    <select id="gp-window" onchange="onGpWindowChange()" style="height:32px;font-size:12px">
       <option value="all">Full YTD</option>
       <option value="4">Last 4 weeks</option>
       <option value="8">Last 8 weeks</option>
+      <option value="custom">Custom range…</option>
     </select>
-    <input type="text" id="gp-search" placeholder="Search recruiter…" oninput="renderGP()" style="height:32px;font-size:12px;padding:0 10px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);width:180px">
+    <div id="gp-custom-range" style="display:none;align-items:center;gap:6px">
+      <select id="gp-wk-from" onchange="renderGP()" style="height:32px;font-size:12px"></select>
+      <span style="font-size:11px;color:var(--text3)">→</span>
+      <select id="gp-wk-to" onchange="renderGP()" style="height:32px;font-size:12px"></select>
+    </div>
+    <div style="position:relative" id="gp-rec-wrap">
+      <button type="button" id="gp-rec-btn" onclick="toggleGpRecMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:160px;justify-content:space-between">
+        <span id="gp-rec-label">All recruiters</span><span style="font-size:10px;opacity:.6">&#9662;</span>
+      </button>
+      <div id="gp-rec-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:500;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.25);padding:8px;min-width:200px;max-height:320px;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;padding:0 4px;position:sticky;top:0;background:var(--bg);padding-top:2px">
+          <button onclick="gpRecSelectAll()" style="font-size:10px;border:none;background:none;color:var(--accent);cursor:pointer;padding:0">All</button>
+          <input id="gp-rec-search" type="text" placeholder="Search…" oninput="filterGpRecList(this.value)" style="height:22px;font-size:11px;width:110px;padding:0 6px;border-radius:4px;border:1px solid var(--border2);background:var(--bg2);color:var(--text)">
+          <button onclick="gpRecClearAll()" style="font-size:10px;border:none;background:none;color:var(--text3);cursor:pointer;padding:0">None</button>
+        </div>
+        <div id="gp-rec-checks"></div>
+      </div>
+    </div>
   </div>
   <!-- Manager KPI cards -->
-  <div id="gp-mgr-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:20px"></div>
+  <div id="gp-mgr-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:20px"></div>
   <!-- Recruiter table -->
   <div class="tbl-wrap">
     <table class="wow-table">
@@ -5128,11 +5146,102 @@ function formatGP(v) {
   return v < 0 ? '-'+s : s;
 }
 
+// ─── GP RECRUITER FILTER ───
+var gpSelectedRecs = {};
+
+function initGpRecChecks(query) {
+  var wrap = document.getElementById('gp-rec-checks');
+  if (!wrap) return;
+  var q = (query||'').toLowerCase();
+  var names = [...GP_DATA].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>r.name);
+  wrap.innerHTML = '';
+  names.forEach(function(name) {
+    if (gpSelectedRecs[name] === undefined) gpSelectedRecs[name] = true;
+    if (q && !name.toLowerCase().includes(q)) return;
+    var mc = MGR_COLORS[GP_DATA.find(r=>r.name===name)?.manager]||'#888';
+    var row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px;cursor:pointer;border-radius:4px;font-size:12px';
+    row.onmouseenter = function(){row.style.background='var(--bg2)';};
+    row.onmouseleave = function(){row.style.background='';};
+    row.innerHTML = '<input type="checkbox" '+(gpSelectedRecs[name]?'checked':'')+' style="width:14px;height:14px">'
+      +'<span style="flex:1;color:var(--text)">'+name+'</span>';
+    row.querySelector('input').addEventListener('change', function(e) {
+      gpSelectedRecs[name] = e.target.checked;
+      updateGpRecLabel();
+      renderGP();
+    });
+    wrap.appendChild(row);
+  });
+  updateGpRecLabel();
+}
+
+function filterGpRecList(q) { initGpRecChecks(q); }
+
+function updateGpRecLabel() {
+  var total = GP_DATA.length;
+  var excluded = Object.values(gpSelectedRecs).filter(function(v){return v===false;}).length;
+  var btn = document.getElementById('gp-rec-label');
+  if (!btn) return;
+  if (excluded === 0) btn.textContent = 'All recruiters';
+  else if (excluded === total) btn.textContent = 'No recruiters';
+  else btn.textContent = (total-excluded)+' / '+total+' recruiters';
+}
+
+function toggleGpRecMenu() {
+  var menu = document.getElementById('gp-rec-menu');
+  if (!menu) return;
+  if (menu.style.display !== 'none') menu.style.display = 'none';
+  else { initGpRecChecks(''); menu.style.display = 'block'; }
+}
+
+function gpRecSelectAll() {
+  GP_DATA.forEach(function(r){ gpSelectedRecs[r.name] = true; });
+  initGpRecChecks(document.getElementById('gp-rec-search')?.value||'');
+  renderGP();
+}
+
+function gpRecClearAll() {
+  GP_DATA.forEach(function(r){ gpSelectedRecs[r.name] = false; });
+  initGpRecChecks(document.getElementById('gp-rec-search')?.value||'');
+  renderGP();
+}
+
+document.addEventListener('click', function(e) {
+  var wrap = document.getElementById('gp-rec-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    var menu = document.getElementById('gp-rec-menu');
+    if (menu) menu.style.display = 'none';
+  }
+});
+
+function onGpWindowChange() {
+  var win = document.getElementById('gp-window').value;
+  var cr = document.getElementById('gp-custom-range');
+  if (cr) cr.style.display = win==='custom' ? 'flex' : 'none';
+  if (win==='custom') {
+    var fromSel = document.getElementById('gp-wk-from');
+    var toSel = document.getElementById('gp-wk-to');
+    if (fromSel && fromSel.options.length === 0) {
+      const nW = Math.max(...GP_DATA.map(r=>r.weekly.length),0);
+      for (let i=0;i<nW;i++) {
+        const lbl = wkLabels[i]||'Wk '+(i+1);
+        var oF=document.createElement('option');oF.value=i;oF.textContent='From: '+lbl;fromSel.appendChild(oF);
+        var oT=document.createElement('option');oT.value=i;oT.textContent='To: '+lbl;toSel.appendChild(oT);
+      }
+      if (toSel) toSel.selectedIndex = toSel.options.length-1;
+    }
+  }
+  renderGP();
+}
+
 function renderGP() {
   if (!document.getElementById('tab-gp').classList.contains('active')) return;
-  const mgrF  = (document.getElementById('gp-mgr')||{}).value || '';
-  const win   = (document.getElementById('gp-window')||{}).value || 'all';
-  const q     = ((document.getElementById('gp-search')||{}).value||'').toLowerCase();
+  const mgrF = (document.getElementById('gp-mgr')||{}).value || '';
+  const win  = (document.getElementById('gp-window')||{}).value || 'all';
+
+  // Initialize recruiter filter if needed
+  GP_DATA.forEach(r=>{ if(gpSelectedRecs[r.name]===undefined) gpSelectedRecs[r.name]=true; });
+  updateGpRecLabel();
 
   // Populate mgr filter
   const mgrSel = document.getElementById('gp-mgr');
@@ -5142,7 +5251,7 @@ function renderGP() {
 
   const recs = GP_DATA.filter(r =>
     (!mgrF || r.manager===mgrF) &&
-    (!q || r.name.toLowerCase().includes(q))
+    gpSelectedRecs[r.name] !== false
   ).sort((a,b) => a.name.localeCompare(b.name));
 
   if (!recs.length) {
@@ -5152,44 +5261,52 @@ function renderGP() {
     return;
   }
 
-  // Get weekly window
-  const nW = Math.max(...recs.map(r => r.weekly.length), 0);
+  const nW = Math.max(...GP_DATA.map(r => r.weekly.length), 0);
   let wkSlice;
-  if (win==='all') wkSlice = {f:0, t:nW-1};
-  else { const n=parseInt(win); wkSlice={f:Math.max(0,nW-n), t:nW-1}; }
+  if (win==='custom') {
+    const f = parseInt((document.getElementById('gp-wk-from')||{}).value)||0;
+    const t = parseInt((document.getElementById('gp-wk-to')||{}).value)||(nW-1);
+    wkSlice = {f, t:Math.max(f,t)};
+  } else if (win==='all') {
+    wkSlice = {f:0, t:nW-1};
+  } else {
+    const n=parseInt(win); wkSlice={f:Math.max(0,nW-n), t:nW-1};
+  }
 
   const sliceSum = (arr,f,t) => { let s=0; for(let i=f;i<=t&&i<arr.length;i++) s+=(arr[i]||0); return s; };
 
-  // ── Manager KPI cards ──
-  const mgrsToShow = mgrF ? [mgrF] : MGRS.filter(m=>m!=='Kevin');
+  // Manager cards — use all GP_DATA managers, not filtered recs
+  const mgrsInData = [...new Set(GP_DATA.map(r=>r.manager))].sort();
+  const mgrsToShow = mgrF ? [mgrF] : mgrsInData;
   const mgrCards = mgrsToShow.map(mgr => {
-    const team = recs.filter(r=>r.manager===mgr);
-    if (!team.length) return '';
     const mc = MGR_COLORS[mgr]||'#888';
+    const team = GP_DATA.filter(r=>r.manager===mgr);
+    if (!team.length) return '';
     const totalYTD  = team.reduce((s,r)=>s+r.ytdGP,0);
     const total2026 = team.reduce((s,r)=>s+r.gp2026,0);
     const wkTotal   = team.reduce((s,r)=>s+sliceSum(r.weekly,wkSlice.f,wkSlice.t),0);
-    const prevF = Math.max(0,wkSlice.f-(wkSlice.t-wkSlice.f+1));
+    const wLen = wkSlice.t-wkSlice.f+1;
+    const prevF = Math.max(0,wkSlice.f-wLen);
     const prevT = wkSlice.f-1;
     const prevTotal = prevT>=prevF ? team.reduce((s,r)=>s+sliceSum(r.weekly,prevF,prevT),0) : 0;
     const wowPct = prevTotal ? Math.round((wkTotal-prevTotal)/Math.abs(prevTotal)*100) : null;
     const trendCol = wowPct===null?'var(--text3)':wowPct>0?'#3B6D11':'#A32D2D';
-    return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:14px;font-weight:700;color:${mc}">${mgr}</span>
-        <span style="font-size:11px;color:var(--text3)">${team.length} recruiters</span>
+    return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:13px;font-weight:700;color:${mc}">${mgr}</span>
+        <span style="font-size:10px;color:var(--text3)">${team.length} recruiters</span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-        <div style="font-size:11px;color:var(--text3)">YTD GP</div><div style="font-size:12px;font-weight:600;color:var(--text);text-align:right">${formatGP(totalYTD)}</div>
-        <div style="font-size:11px;color:var(--text3)">2026 GP</div><div style="font-size:12px;font-weight:600;color:var(--c-starts);text-align:right">${formatGP(total2026)}</div>
-        <div style="font-size:11px;color:var(--text3)">Period GP</div><div style="font-size:12px;font-weight:600;color:var(--accent);text-align:right">${formatGP(wkTotal)}</div>
-        ${wowPct!==null?`<div style="font-size:11px;color:var(--text3)">vs prior</div><div style="font-size:12px;font-weight:700;text-align:right;color:${trendCol}">${wowPct>0?'+':''}${wowPct}%</div>`:''}
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 8px;align-items:center">
+        <span style="font-size:10px;color:var(--text3)">YTD GP</span><span style="font-size:12px;font-weight:600;color:var(--text);text-align:right">${formatGP(totalYTD)}</span>
+        <span style="font-size:10px;color:var(--text3)">2026 GP</span><span style="font-size:12px;font-weight:600;color:var(--c-starts);text-align:right">${formatGP(total2026)}</span>
+        <span style="font-size:10px;color:var(--text3)">Period GP</span><span style="font-size:12px;font-weight:600;color:var(--accent);text-align:right">${formatGP(wkTotal)}</span>
+        ${wowPct!==null?`<span style="font-size:10px;color:var(--text3)">vs prior</span><span style="font-size:12px;font-weight:700;text-align:right;color:${trendCol}">${wowPct>0?'+':''}${wowPct}%</span>`:''}
       </div>
     </div>`;
   }).join('');
   document.getElementById('gp-mgr-cards').innerHTML = mgrCards;
 
-  // ── Recruiter table ──
+  // Table
   const wkHeaders = [];
   for (let i=wkSlice.f; i<=wkSlice.t && i<nW; i++) wkHeaders.push(wkLabels[i]||`Wk ${i+1}`);
 
@@ -5206,8 +5323,7 @@ function renderGP() {
 
   document.getElementById('gp-tbody').innerHTML = recs.map(r => {
     const mc = MGR_COLORS[r.manager]||'#888';
-    const periodGP = sliceSum(r.weekly, wkSlice.f, wkSlice.t);
-    const curWk = r.weekly.length>0 ? (r.weekly[r.weekly.length-1]||0) : 0;
+    const curWk  = r.weekly.length>0 ? (r.weekly[r.weekly.length-1]||0) : 0;
     const prevWk = r.weekly.length>1 ? (r.weekly[r.weekly.length-2]||0) : 0;
     const wowChg = curWk - prevWk;
     const wowPct = prevWk ? Math.round(wowChg/Math.abs(prevWk)*100) : null;
@@ -5215,7 +5331,7 @@ function renderGP() {
     const wkCells = wkHeaders.map((_,i) => {
       const wi = wkSlice.f+i;
       const v = wi<r.weekly.length ? r.weekly[wi] : 0;
-      const prev = wi>0&&wi-1<r.weekly.length ? r.weekly[wi-1] : null;
+      const prev = wi>0&&(wi-1)<r.weekly.length ? r.weekly[wi-1] : null;
       const cls = prev!==null?(v>prev?'cu':v<prev?'cd':'c0'):'';
       return `<td class="${cls}" style="text-align:right;font-size:11px">${v?formatGP(v):'—'}</td>`;
     }).join('');
@@ -5231,6 +5347,7 @@ function renderGP() {
     </tr>`;
   }).join('');
 }
+
 
 function renderGPIfActive() {
   if (document.getElementById('tab-gp').classList.contains('active')) renderGP();
