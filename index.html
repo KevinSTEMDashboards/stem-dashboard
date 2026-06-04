@@ -499,6 +499,7 @@ td.editing{padding:2px 4px!important}
   <div class="tab" data-tab="recruiter">Recruiter Detail</div>
   <div class="tab" data-tab="trends">Trends &amp; Insights</div>
   <div class="tab" data-tab="leaderboard">🏆 Leaderboard</div>
+  <div class="tab" data-tab="gp">💰 Gross Profit</div>
   <div class="tab" data-tab="roster" id="roster-tab" style="display:none">Roster</div>
   <div class="tab" data-tab="orgchart" id="orgchart-tab" style="display:none">🗂 Org Chart</div>
   <div class="tab" data-tab="entry">Add Weekly Data</div>
@@ -803,6 +804,29 @@ td.editing{padding:2px 4px!important}
 </div>
 
 
+
+<!-- GROSS PROFIT TAB -->
+<div class="tab-panel" id="tab-gp">
+  <div class="wctrl" style="flex-wrap:wrap;gap:8px">
+    <select id="gp-mgr" onchange="renderGP()" style="height:32px;font-size:12px"><option value="">All managers</option></select>
+    <select id="gp-window" onchange="renderGP()" style="height:32px;font-size:12px">
+      <option value="all">Full YTD</option>
+      <option value="4">Last 4 weeks</option>
+      <option value="8">Last 8 weeks</option>
+    </select>
+    <input type="text" id="gp-search" placeholder="Search recruiter…" oninput="renderGP()" style="height:32px;font-size:12px;padding:0 10px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);width:180px">
+  </div>
+  <!-- Manager KPI cards -->
+  <div id="gp-mgr-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:20px"></div>
+  <!-- Recruiter table -->
+  <div class="tbl-wrap">
+    <table class="wow-table">
+      <thead id="gp-thead"></thead>
+      <tbody id="gp-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- LEADERBOARD -->
 <div class="tab-panel" id="tab-leaderboard">
   <div class="wctrl">
@@ -1022,7 +1046,8 @@ const SHEET_TABS = {
   ivs:        'Interviews',
   placements: 'Placements',
   starts:     'Starts',
-  leads:      'Leads'
+  leads:      'Leads',
+  gp:         'Gross Profit'
 };
 
 // ── Read a single tab → returns 2-D array of values ──
@@ -1114,18 +1139,51 @@ function parseTab(rows, tabName) {
 async function loadFromSheets() {
   showLoadingBanner('Loading data from Google Sheets…');
   try {
-    const [subsRows, ivsRows, plRows, stRows, ldRows] = await Promise.all([
+    const [subsRows, ivsRows, plRows, stRows, ldRows, gpRows] = await Promise.all([
       readTab(SHEET_TABS.subs),
       readTab(SHEET_TABS.ivs),
       readTab(SHEET_TABS.placements),
       readTab(SHEET_TABS.starts),
-      readTab(SHEET_TABS.leads)
+      readTab(SHEET_TABS.leads),
+      readTab(SHEET_TABS.gp).catch(() => [])
     ]);
     const subs  = parseTab(subsRows,  SHEET_TABS.subs);
     const ivs   = parseTab(ivsRows,   SHEET_TABS.ivs);
     const pls   = parseTab(plRows,    SHEET_TABS.placements);
     const sts   = parseTab(stRows,    SHEET_TABS.starts);
     const lds   = parseTab(ldRows,    SHEET_TABS.leads);
+
+    // Parse GP tab — col A=name, B=manager, C=YTD GP, D=Prior2026, E=blank, F+=weekly
+    GP_DATA.length = 0;
+    if (gpRows && gpRows.length) {
+      let gpHdrRow = 0;
+      for (let ri=0; ri<Math.min(6,gpRows.length); ri++) {
+        if ((gpRows[ri][0]||'').toString().trim().toLowerCase()==='recruiter') { gpHdrRow=ri; break; }
+      }
+      for (let ri=gpHdrRow+1; ri<gpRows.length; ri++) {
+        const row = gpRows[ri];
+        const name = (row[0]||'').trim();
+        const mgr  = (row[1]||'').trim();
+        if (!name || !mgr) continue;
+        const lo = name.toLowerCase();
+        if (lo==='recruiter'||lo==='total'||lo==='average'||!isNaN(name)) continue;
+        const parseCurrency = v => {
+          if (!v) return 0;
+          const s = String(v).replace(/[$,\s]/g,'').trim();
+          if (!s||s==='-'||s.startsWith('#')) return 0;
+          const n = parseFloat(s);
+          return isNaN(n) ? 0 : n;
+        };
+        const ytdGP     = parseCurrency(row[2]);
+        const prior2026 = parseCurrency(row[3]);
+        const gp2026    = ytdGP - prior2026;
+        const weekly = [];
+        for (let ci=5; ci<row.length; ci++) weekly.push(parseCurrency(row[ci]));
+        let last=-1;
+        for (let i=0;i<weekly.length;i++) if(weekly[i]!==0) last=i;
+        GP_DATA.push({ name, manager:mgr, ytdGP, prior2026, gp2026, weekly: last>=0?weekly.slice(0,last+1):[] });
+      }
+    }
 
     // ── Merge Sheet data into RECRUITERS using fuzzy name matching ──
     // This prevents recruiters from disappearing if their name in the Sheet
@@ -1222,6 +1280,7 @@ async function loadFromSheets() {
     hideLoadingBanner();
     safeSet('stemLastSync', new Date().toISOString());
     renderOverview();
+    renderGPIfActive();
     populateWkSelects();
     populateTiSelects();
     populateMgrWkSelects();
@@ -1761,6 +1820,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     if(t.dataset.tab==='leaderboard')renderLeaderboard();
     if(t.dataset.tab==='roster')renderRoster();
     if(t.dataset.tab==='orgchart')renderOrgChart();
+    if(t.dataset.tab==='gp')renderGP();
   });
 });
 
@@ -5056,6 +5116,128 @@ document.getElementById('lb-to').addEventListener('change',renderLeaderboard);
 
 
 // ─── ORG CHART ───
+// ─── GROSS PROFIT ───
+const GP_DATA = []; // [{name, manager, ytdGP, prior2026, gp2026, weekly:[]}]
+
+function formatGP(v) {
+  if (!v && v!==0) return '—';
+  const abs = Math.abs(v);
+  const s = abs >= 1000000 ? '$'+(abs/1000000).toFixed(2)+'M'
+           : abs >= 1000   ? '$'+(abs/1000).toFixed(1)+'K'
+           : '$'+abs.toFixed(0);
+  return v < 0 ? '-'+s : s;
+}
+
+function renderGP() {
+  if (!document.getElementById('tab-gp').classList.contains('active')) return;
+  const mgrF  = (document.getElementById('gp-mgr')||{}).value || '';
+  const win   = (document.getElementById('gp-window')||{}).value || 'all';
+  const q     = ((document.getElementById('gp-search')||{}).value||'').toLowerCase();
+
+  // Populate mgr filter
+  const mgrSel = document.getElementById('gp-mgr');
+  if (mgrSel && mgrSel.options.length <= 1) {
+    MGRS.forEach(m => { const o=document.createElement('option'); o.value=m; o.textContent=m; mgrSel.appendChild(o); });
+  }
+
+  const recs = GP_DATA.filter(r =>
+    (!mgrF || r.manager===mgrF) &&
+    (!q || r.name.toLowerCase().includes(q))
+  ).sort((a,b) => a.name.localeCompare(b.name));
+
+  if (!recs.length) {
+    document.getElementById('gp-mgr-cards').innerHTML = '<div style="color:var(--text3);font-size:13px;padding:20px">No GP data — make sure the "Gross Profit" tab exists in your Sheet and sync.</div>';
+    document.getElementById('gp-thead').innerHTML = '';
+    document.getElementById('gp-tbody').innerHTML = '';
+    return;
+  }
+
+  // Get weekly window
+  const nW = Math.max(...recs.map(r => r.weekly.length), 0);
+  let wkSlice;
+  if (win==='all') wkSlice = {f:0, t:nW-1};
+  else { const n=parseInt(win); wkSlice={f:Math.max(0,nW-n), t:nW-1}; }
+
+  const sliceSum = (arr,f,t) => { let s=0; for(let i=f;i<=t&&i<arr.length;i++) s+=(arr[i]||0); return s; };
+
+  // ── Manager KPI cards ──
+  const mgrsToShow = mgrF ? [mgrF] : MGRS.filter(m=>m!=='Kevin');
+  const mgrCards = mgrsToShow.map(mgr => {
+    const team = recs.filter(r=>r.manager===mgr);
+    if (!team.length) return '';
+    const mc = MGR_COLORS[mgr]||'#888';
+    const totalYTD  = team.reduce((s,r)=>s+r.ytdGP,0);
+    const total2026 = team.reduce((s,r)=>s+r.gp2026,0);
+    const wkTotal   = team.reduce((s,r)=>s+sliceSum(r.weekly,wkSlice.f,wkSlice.t),0);
+    const prevF = Math.max(0,wkSlice.f-(wkSlice.t-wkSlice.f+1));
+    const prevT = wkSlice.f-1;
+    const prevTotal = prevT>=prevF ? team.reduce((s,r)=>s+sliceSum(r.weekly,prevF,prevT),0) : 0;
+    const wowPct = prevTotal ? Math.round((wkTotal-prevTotal)/Math.abs(prevTotal)*100) : null;
+    const trendCol = wowPct===null?'var(--text3)':wowPct>0?'#3B6D11':'#A32D2D';
+    return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:14px;font-weight:700;color:${mc}">${mgr}</span>
+        <span style="font-size:11px;color:var(--text3)">${team.length} recruiters</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+        <div style="font-size:11px;color:var(--text3)">YTD GP</div><div style="font-size:12px;font-weight:600;color:var(--text);text-align:right">${formatGP(totalYTD)}</div>
+        <div style="font-size:11px;color:var(--text3)">2026 GP</div><div style="font-size:12px;font-weight:600;color:var(--c-starts);text-align:right">${formatGP(total2026)}</div>
+        <div style="font-size:11px;color:var(--text3)">Period GP</div><div style="font-size:12px;font-weight:600;color:var(--accent);text-align:right">${formatGP(wkTotal)}</div>
+        ${wowPct!==null?`<div style="font-size:11px;color:var(--text3)">vs prior</div><div style="font-size:12px;font-weight:700;text-align:right;color:${trendCol}">${wowPct>0?'+':''}${wowPct}%</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('gp-mgr-cards').innerHTML = mgrCards;
+
+  // ── Recruiter table ──
+  const wkHeaders = [];
+  for (let i=wkSlice.f; i<=wkSlice.t && i<nW; i++) wkHeaders.push(wkLabels[i]||`Wk ${i+1}`);
+
+  document.getElementById('gp-thead').innerHTML = `<tr>
+    <th class="sticky-col-1" style="min-width:140px">Recruiter</th>
+    <th class="sticky-col-2">Mgr</th>
+    <th style="text-align:right">YTD GP</th>
+    <th style="text-align:right">Prior 2026</th>
+    <th style="text-align:right">2026 GP</th>
+    <th style="text-align:right">WoW Chg</th>
+    <th style="text-align:right">WoW %</th>
+    ${wkHeaders.map(w=>`<th style="text-align:right;min-width:90px">${w}</th>`).join('')}
+  </tr>`;
+
+  document.getElementById('gp-tbody').innerHTML = recs.map(r => {
+    const mc = MGR_COLORS[r.manager]||'#888';
+    const periodGP = sliceSum(r.weekly, wkSlice.f, wkSlice.t);
+    const curWk = r.weekly.length>0 ? (r.weekly[r.weekly.length-1]||0) : 0;
+    const prevWk = r.weekly.length>1 ? (r.weekly[r.weekly.length-2]||0) : 0;
+    const wowChg = curWk - prevWk;
+    const wowPct = prevWk ? Math.round(wowChg/Math.abs(prevWk)*100) : null;
+    const wowCol = wowChg>0?'#3B6D11':wowChg<0?'#A32D2D':'var(--text3)';
+    const wkCells = wkHeaders.map((_,i) => {
+      const wi = wkSlice.f+i;
+      const v = wi<r.weekly.length ? r.weekly[wi] : 0;
+      const prev = wi>0&&wi-1<r.weekly.length ? r.weekly[wi-1] : null;
+      const cls = prev!==null?(v>prev?'cu':v<prev?'cd':'c0'):'';
+      return `<td class="${cls}" style="text-align:right;font-size:11px">${v?formatGP(v):'—'}</td>`;
+    }).join('');
+    return `<tr>
+      <td class="sticky-col-1" style="font-weight:500;white-space:nowrap">${r.name}${rampIcon(r.name)}</td>
+      <td class="sticky-col-2"><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
+      <td style="text-align:right;font-size:11px">${formatGP(r.ytdGP)}</td>
+      <td style="text-align:right;font-size:11px;color:var(--text3)">${formatGP(r.prior2026)}</td>
+      <td style="text-align:right;font-size:11px;color:var(--c-starts);font-weight:600">${formatGP(r.gp2026)}</td>
+      <td style="text-align:right;font-size:11px;color:${wowCol};font-weight:600">${wowChg?formatGP(wowChg):'—'}</td>
+      <td style="text-align:right;font-size:11px;color:${wowCol};font-weight:600">${wowPct!==null?(wowPct>0?'+':'')+wowPct+'%':'—'}</td>
+      ${wkCells}
+    </tr>`;
+  }).join('');
+}
+
+function renderGPIfActive() {
+  if (document.getElementById('tab-gp').classList.contains('active')) renderGP();
+}
+
+// ─── END GROSS PROFIT ───
+
 function renderOrgChart() {
   var wrap = document.getElementById('orgchart-wrap');
   if (!wrap) return;
