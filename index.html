@@ -827,9 +827,9 @@ td.editing{padding:2px 4px!important}
       <option value="custom">Custom range…</option>
     </select>
     <div id="gp-custom-range" style="display:none;align-items:center;gap:6px">
-      <select id="gp-wk-from" onchange="renderGP()" style="height:32px;font-size:12px"></select>
+      <select id="gp-wk-from" onchange="renderGP();if(gpActiveSection==='sparklines')renderGpSparklines();" style="height:32px;font-size:12px"></select>
       <span style="font-size:11px;color:var(--text3)">→</span>
-      <select id="gp-wk-to" onchange="renderGP()" style="height:32px;font-size:12px"></select>
+      <select id="gp-wk-to" onchange="renderGP();if(gpActiveSection==='sparklines')renderGpSparklines();" style="height:32px;font-size:12px"></select>
     </div>
     <button type="button" onclick="resetGpFilters()" style="height:32px;padding:0 12px;font-size:12px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">✕ Reset</button>
       <button type="button" id="gp-rec-btn" onclick="toggleGpRecMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:160px;justify-content:space-between">
@@ -5225,6 +5225,7 @@ function initGpRecChecks(query) {
       gpSelectedRecs[name] = e.target.checked;
       updateGpRecLabel();
       renderGP();
+      if (gpActiveSection==='sparklines') renderGpSparklines();
     });
     wrap.appendChild(row);
   });
@@ -5292,6 +5293,7 @@ function initGpMgrChecks() {
       gpSelectedMgrs[m] = e.target.checked;
       updateGpMgrLabel();
       renderGP();
+      if (gpActiveSection==='sparklines') renderGpSparklines();
     });
     wrap.appendChild(row);
   });
@@ -5367,6 +5369,7 @@ function onGpWindowChange() {
     }
   }
   renderGP();
+  if (gpActiveSection==='sparklines') renderGpSparklines();
 }
 
 function renderGP() {
@@ -5557,7 +5560,20 @@ function renderGpSparklines() {
 
   if (!recs.length) { wrap.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:13px">No GP data to display.</div>'; return; }
 
-  const nW = Math.max(...recs.map(r=>r.weekly.length));
+  // Get current week slice from filters
+  const win = (document.getElementById('gp-window')||{}).value || 'all';
+  const nW = Math.max(...GP_DATA.map(r=>r.weekly.length), 0);
+  let f=0, t=nW-1;
+  if (win==='custom') {
+    f = parseInt((document.getElementById('gp-wk-from')||{}).value)||0;
+    t = parseInt((document.getElementById('gp-wk-to')||{}).value)||(nW-1);
+    t = Math.max(f, t);
+  } else if (win!=='all') {
+    const n = parseInt(win);
+    f = Math.max(0, nW-n);
+    t = nW-1;
+  }
+
   var canvasIds = [];
   var sparkDataMap = {};
   var sparkColorMap = {};
@@ -5569,12 +5585,16 @@ function renderGpSparklines() {
   recs.forEach(function(r, idx) {
     var cid = 'gpsp_'+idx;
     canvasIds.push(cid);
-    var data = r.weekly.slice();
+    // Slice data to selected range
+    var data = [];
+    for (var i=f; i<=t; i++) data.push(i<r.weekly.length ? (r.weekly[i]||0) : 0);
     sparkDataMap[cid] = data;
+
+    // Trend based on first vs second half of sliced data
     var mid = Math.floor(data.length/2);
-    var first = data.slice(0,mid).reduce(function(s,v){return s+v;},0);
-    var last  = data.slice(mid).reduce(function(s,v){return s+v;},0);
-    var trendPct = first ? Math.round((last-first)/Math.abs(first)*100) : null;
+    var firstHalf = data.slice(0,mid).reduce(function(s,v){return s+v;},0);
+    var lastHalf  = data.slice(mid).reduce(function(s,v){return s+v;},0);
+    var trendPct = firstHalf ? Math.round((lastHalf-firstHalf)/Math.abs(firstHalf)*100) : null;
     var trendStr = trendPct===null?'—':trendPct>0?'+'+trendPct+'%':trendPct+'%';
     var trendCol = trendPct===null?'var(--text3)':trendPct>0?'#3B6D11':trendPct<0?'#A32D2D':'var(--text3)';
     sparkColorMap[cid] = trendPct>0?'#639922':trendPct<0?'#E24B4A':'#60A5FA';
@@ -5598,7 +5618,7 @@ function renderGpSparklines() {
       if (!canvas) return;
       var data = sparkDataMap[cid];
       var color = sparkColorMap[cid]||'#60A5FA';
-      var labels = data.map(function(_,i){ return wkLabels[i]||'Wk'+(i+1); });
+      var labels = data.map(function(_,i){ return wkLabels[f+i]||'Wk'+(f+i+1); });
       if (canvas._chartInst) canvas._chartInst.destroy();
       canvas._chartInst = new Chart(canvas, {
         type:'line',
@@ -5623,10 +5643,10 @@ function renderGpSparklines() {
           plugins:{
             legend:{ display:false },
             tooltip:{
-              backgroundColor:'var(--bg)',
-              titleColor:'var(--text3)',
-              bodyColor:'var(--text)',
-              borderColor:'var(--border2)',
+              backgroundColor:'rgba(22,24,29,0.95)',
+              titleColor:'#9ba3b8',
+              bodyColor:'#e2e8f0',
+              borderColor:'rgba(255,255,255,0.1)',
               borderWidth:1,
               padding:8,
               callbacks:{
@@ -5638,18 +5658,18 @@ function renderGpSparklines() {
           scales:{
             x:{
               display:true,
-              ticks:{ font:{size:9}, maxRotation:45, color:'var(--text3)' },
+              ticks:{ font:{size:9}, maxRotation:45, color:'#9ba3b8' },
               grid:{ display:false }
             },
-            y:{
-              display:false
-            }
+            y:{ display:false }
           }
         }
       });
     });
   });
 }
+
+
 
 function renderGPIfActive() {
   if (document.getElementById('tab-gp').classList.contains('active')) {
