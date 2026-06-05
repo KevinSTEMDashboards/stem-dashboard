@@ -844,7 +844,6 @@ td.editing{padding:2px 4px!important}
         <div id="gp-rec-checks"></div>
       </div>
     </div>
-  </div>
   <!-- Team summary KPIs -->
   <div id="gp-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px"></div>
   <!-- Section tabs -->
@@ -5536,6 +5535,9 @@ function renderGP() {
 var gpActiveSection = 'table';
 
 function showGpSection(name) {
+  // Only act if GP tab is active
+  const gpTab = document.getElementById('tab-gp');
+  if (!gpTab || !gpTab.classList.contains('active')) return;
   gpActiveSection = name;
   document.getElementById('gp-section-table').style.display = name==='table' ? '' : 'none';
   document.getElementById('gp-section-sparklines').style.display = name==='sparklines' ? '' : 'none';
