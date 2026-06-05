@@ -847,14 +847,26 @@ td.editing{padding:2px 4px!important}
   </div>
   <!-- Team summary KPIs -->
   <div id="gp-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px"></div>
-  <!-- Manager KPI cards -->
-  <div id="gp-mgr-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:20px"></div>
-  <!-- Recruiter table -->
-  <div class="tbl-wrap">
-    <table class="wow-table">
-      <thead id="gp-thead"></thead>
-      <tbody id="gp-tbody"></tbody>
-    </table>
+  <!-- Section tabs -->
+  <div style="display:flex;gap:2px;margin:14px 0 16px;border-bottom:1px solid var(--border2)">
+    <button class="gp-sec-btn active" onclick="showGpSection('table')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px">Table View</button>
+    <button class="gp-sec-btn" onclick="showGpSection('sparklines')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">Sparkline Grid</button>
+  </div>
+
+  <div id="gp-section-table">
+    <!-- Manager KPI cards -->
+    <div id="gp-mgr-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:20px"></div>
+    <!-- Recruiter table -->
+    <div class="tbl-wrap">
+      <table class="wow-table">
+        <thead id="gp-thead"></thead>
+        <tbody id="gp-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="gp-section-sparklines" style="display:none">
+    <div id="gp-sparklines-wrap" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden"></div>
   </div>
 </div>
 
@@ -1834,8 +1846,8 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById('tab-'+t.dataset.tab).classList.add('active');
-    // Hide filter bar on leaderboard, show on all other tabs
-    document.querySelector('.filter-bar').style.display=t.dataset.tab==='leaderboard'?'none':'';
+    // Hide filter bar on leaderboard and GP tab, show on all other tabs
+    document.querySelector('.filter-bar').style.display=(t.dataset.tab==='leaderboard'||t.dataset.tab==='gp')?'none':'';
     // Hide global controls on tabs that have their own built-in filters
     const hiddenOnTabs = t.dataset.tab==='weekly' || t.dataset.tab==='trends' || t.dataset.tab==='managers' || t.dataset.tab==='gp';
     const metricSel = document.getElementById('metric-select');
@@ -5486,8 +5498,96 @@ function renderGP() {
 }
 
 
+var gpActiveSection = 'table';
+
+function showGpSection(name) {
+  gpActiveSection = name;
+  document.getElementById('gp-section-table').style.display = name==='table' ? '' : 'none';
+  document.getElementById('gp-section-sparklines').style.display = name==='sparklines' ? '' : 'none';
+  document.querySelectorAll('.gp-sec-btn').forEach(function(btn) {
+    var isActive = (name==='table' && btn.textContent.includes('Table')) ||
+                   (name==='sparklines' && btn.textContent.includes('Sparkline'));
+    btn.style.color = isActive ? 'var(--accent)' : 'var(--text3)';
+    btn.style.borderBottomColor = isActive ? 'var(--accent)' : 'transparent';
+  });
+  if (name==='sparklines') renderGpSparklines();
+}
+
+function renderGpSparklines() {
+  var wrap = document.getElementById('gp-sparklines-wrap');
+  if (!wrap) return;
+  const archivedNames = archivedRecruiters.map(a=>a.name.trim().toLowerCase());
+  const recs = GP_DATA.filter(r =>
+    gpSelectedMgrs[r.manager] !== false &&
+    gpSelectedRecs[r.name] !== false &&
+    !archivedNames.includes(r.name.trim().toLowerCase()) &&
+    r.weekly.length > 0
+  ).sort((a,b) => a.name.localeCompare(b.name));
+
+  if (!recs.length) { wrap.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:13px">No GP data to display.</div>'; return; }
+
+  const nW = Math.max(...recs.map(r=>r.weekly.length));
+  var canvasIds = [];
+  var sparkDataMap = {};
+  var sparkColorMap = {};
+
+  var html = '<div style="display:grid;grid-template-columns:160px 1fr 80px 80px;gap:8px;padding:8px 14px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text3)">'
+    +'<div>Recruiter</div><div>Weekly GP trend</div><div style="text-align:right">2026 GP</div><div style="text-align:right">Trend</div>'
+    +'</div>';
+
+  recs.forEach(function(r, idx) {
+    var cid = 'gpsp_'+idx;
+    canvasIds.push(cid);
+    var data = r.weekly.slice();
+    sparkDataMap[cid] = data;
+    var mid = Math.floor(data.length/2);
+    var first = data.slice(0,mid).reduce(function(s,v){return s+v;},0);
+    var last  = data.slice(mid).reduce(function(s,v){return s+v;},0);
+    var trendPct = first ? Math.round((last-first)/Math.abs(first)*100) : null;
+    var trendStr = trendPct===null?'—':trendPct>0?'+'+trendPct+'%':trendPct+'%';
+    var trendCol = trendPct===null?'var(--text3)':trendPct>0?'#3B6D11':trendPct<0?'#A32D2D':'var(--text3)';
+    sparkColorMap[cid] = trendPct>0?'#639922':trendPct<0?'#E24B4A':'#888780';
+    var mc = MGR_COLORS[r.manager]||'#888';
+
+    html += '<div style="display:grid;grid-template-columns:160px 1fr 80px 80px;gap:8px;align-items:center;padding:6px 14px;border-bottom:0.5px solid var(--border)">'
+      +'<div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+        +r.name+'<span style="font-size:10px;color:'+mc+';margin-left:6px">'+r.manager+'</span>'
+      +'</div>'
+      +'<div style="height:36px;position:relative"><canvas id="'+cid+'" style="position:absolute;inset:0;width:100%;height:100%"></canvas></div>'
+      +'<div style="font-size:12px;font-weight:600;text-align:right;color:var(--c-starts)">'+formatGP(r.gp2026)+'</div>'
+      +'<div style="font-size:12px;font-weight:600;text-align:right;color:'+trendCol+'">'+trendStr+'</div>'
+    +'</div>';
+  });
+
+  wrap.innerHTML = html;
+
+  requestAnimationFrame(function() {
+    canvasIds.forEach(function(cid) {
+      var canvas = document.getElementById(cid);
+      if (!canvas) return;
+      var data = sparkDataMap[cid];
+      var color = sparkColorMap[cid]||'#888780';
+      var labels = data.map(function(_,i){ return wkLabels[i]||'Wk'+(i+1); });
+      if (canvas._chartInst) canvas._chartInst.destroy();
+      canvas._chartInst = new Chart(canvas, {
+        type:'line',
+        data:{ labels:labels, datasets:[{ data:data, borderColor:color, borderWidth:1.5, pointRadius:0, fill:false, tension:.3 }] },
+        options:{ responsive:false, maintainAspectRatio:false,
+          plugins:{ legend:{display:false}, tooltip:{
+            callbacks:{ label: ctx => formatGP(ctx.parsed.y) }
+          }},
+          scales:{ x:{display:false}, y:{display:false} }
+        }
+      });
+    });
+  });
+}
+
 function renderGPIfActive() {
-  if (document.getElementById('tab-gp').classList.contains('active')) renderGP();
+  if (document.getElementById('tab-gp').classList.contains('active')) {
+    renderGP();
+    if (gpActiveSection === 'sparklines') renderGpSparklines();
+  }
 }
 
 // ─── END GROSS PROFIT ───
