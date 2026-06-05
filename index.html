@@ -5373,7 +5373,8 @@ function onGpWindowChange() {
 }
 
 function renderGP() {
-  if (!document.getElementById('tab-gp').classList.contains('active')) return;
+  const gpTab = document.getElementById('tab-gp');
+  if (!gpTab || !gpTab.classList.contains('active')) return;
   const win  = (document.getElementById('gp-window')||{}).value || 'all';
 
   // Initialize manager and recruiter filters if needed
@@ -5590,11 +5591,10 @@ function renderGpSparklines() {
     for (var i=f; i<=t; i++) data.push(i<r.weekly.length ? (r.weekly[i]||0) : 0);
     sparkDataMap[cid] = data;
 
-    // Trend based on first vs second half of sliced data
-    var mid = Math.floor(data.length/2);
-    var firstHalf = data.slice(0,mid).reduce(function(s,v){return s+v;},0);
-    var lastHalf  = data.slice(mid).reduce(function(s,v){return s+v;},0);
-    var trendPct = firstHalf ? Math.round((lastHalf-firstHalf)/Math.abs(firstHalf)*100) : null;
+    // Trend: first week in range vs last week in range
+    var firstVal = data.length > 0 ? data[0] : 0;
+    var lastVal  = data.length > 0 ? data[data.length-1] : 0;
+    var trendPct = firstVal ? Math.round((lastVal-firstVal)/Math.abs(firstVal)*100) : null;
     var trendStr = trendPct===null?'—':trendPct>0?'+'+trendPct+'%':trendPct+'%';
     var trendCol = trendPct===null?'var(--text3)':trendPct>0?'#3B6D11':trendPct<0?'#A32D2D':'var(--text3)';
     sparkColorMap[cid] = trendPct>0?'#639922':trendPct<0?'#E24B4A':'#60A5FA';
