@@ -2649,6 +2649,22 @@ function buildBackupPayload() {
 
 // ─── FULL SETTINGS EXPORT / IMPORT ───
 // Exports everything needed to fully restore the dashboard on a new browser/device
+function exportArchivedForEmbed() {
+  const json = JSON.stringify(archivedRecruiters, null, 2);
+  navigator.clipboard.writeText(json).then(function() {
+    alert('✅ Archived list copied to clipboard!\n\nPaste this into the PRESET_ARCHIVED = [] line in your next dashboard update.');
+  }).catch(function() {
+    // Fallback: show in a prompt
+    const ta = document.createElement('textarea');
+    ta.value = json;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('✅ Archived list copied!\n\nPaste this into PRESET_ARCHIVED = [] in your next update.');
+  });
+}
+
 function exportSettings() {
   const payload = {
     version: 2,
@@ -3607,6 +3623,7 @@ function updateAuthUI() {
         <button class="btn" onclick="generatePDFReport()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Download weekly PDF report">📄 PDF Report</button>
         <button class="btn" onclick="promptEmailDigest()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Send weekly email digest">✉️ Email Digest</button>
         <button class="btn" onclick="exportSettings()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Export all settings to a backup file">💾 Export Settings</button>
+        <button class="btn" onclick="exportArchivedForEmbed()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Copy archived list JSON to embed in dashboard file">📋 Copy Archived JSON</button>
         <button class="btn" onclick="importSettings()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Restore settings from a backup file">📂 Import Settings</button>
         ${isAdmin ? `<button class="btn" onclick="openUserModal()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap">Manage editors</button>` : ''}
         <button class="btn" onclick="signOut()" style="font-size:11px;height:26px;padding:0 8px">Sign out</button>
@@ -3996,7 +4013,21 @@ function saveEditModal() {
 
 // archivedRecruiters: [{name, manager, archivedOn, subs:[], ivs:[], starts:[], leads:[]}]
 // newRecruiters: [{name, manager, addedOn, startWeekIndex}] — added after BASE_DATA, stored in localStorage
-let archivedRecruiters = JSON.parse(safeGet('stemArchived') || '[]');
+// PRESET_ARCHIVED — baked in so archived list survives dashboard updates
+// To update: export your current archived list and paste the JSON here
+const PRESET_ARCHIVED = [];
+
+let archivedRecruiters = (function() {
+  const stored = JSON.parse(safeGet('stemArchived') || '[]');
+  // Merge preset with stored — stored wins (has latest end dates etc.)
+  const merged = [...PRESET_ARCHIVED];
+  stored.forEach(function(s) {
+    const idx = merged.findIndex(function(p){ return p.name === s.name; });
+    if (idx >= 0) merged[idx] = s; // stored version wins
+    else merged.push(s);
+  });
+  return merged;
+})();
 let newRecruiters = JSON.parse(safeGet('stemNewRecs') || '[]');
 
 function saveArchived() { safeSet('stemArchived', JSON.stringify(archivedRecruiters)); }
@@ -5532,7 +5563,7 @@ function renderGpSparklines() {
   var sparkColorMap = {};
 
   var html = '<div style="display:grid;grid-template-columns:160px 1fr 80px 80px;gap:8px;padding:8px 14px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text3)">'
-    +'<div>Recruiter</div><div>Weekly GP trend</div><div style="text-align:right">2026 GP</div><div style="text-align:right">Trend</div>'
+    +'<div>Recruiter</div><div>Weekly GP</div><div style="text-align:right">2026 GP</div><div style="text-align:right">Trend</div>'
     +'</div>';
 
   recs.forEach(function(r, idx) {
@@ -5546,14 +5577,14 @@ function renderGpSparklines() {
     var trendPct = first ? Math.round((last-first)/Math.abs(first)*100) : null;
     var trendStr = trendPct===null?'—':trendPct>0?'+'+trendPct+'%':trendPct+'%';
     var trendCol = trendPct===null?'var(--text3)':trendPct>0?'#3B6D11':trendPct<0?'#A32D2D':'var(--text3)';
-    sparkColorMap[cid] = trendPct>0?'#639922':trendPct<0?'#E24B4A':'#888780';
+    sparkColorMap[cid] = trendPct>0?'#639922':trendPct<0?'#E24B4A':'#60A5FA';
     var mc = MGR_COLORS[r.manager]||'#888';
 
     html += '<div style="display:grid;grid-template-columns:160px 1fr 80px 80px;gap:8px;align-items:center;padding:6px 14px;border-bottom:0.5px solid var(--border)">'
       +'<div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-        +r.name+'<span style="font-size:10px;color:'+mc+';margin-left:6px">'+r.manager+'</span>'
+        +r.name+'<br><span style="font-size:10px;color:'+mc+'">'+r.manager+'</span>'
       +'</div>'
-      +'<div style="height:36px;position:relative"><canvas id="'+cid+'" style="position:absolute;inset:0;width:100%;height:100%"></canvas></div>'
+      +'<div style="height:60px;position:relative"><canvas id="'+cid+'" style="position:absolute;inset:0;width:100%;height:100%"></canvas></div>'
       +'<div style="font-size:12px;font-weight:600;text-align:right;color:var(--c-starts)">'+formatGP(r.gp2026)+'</div>'
       +'<div style="font-size:12px;font-weight:600;text-align:right;color:'+trendCol+'">'+trendStr+'</div>'
     +'</div>';
@@ -5566,17 +5597,54 @@ function renderGpSparklines() {
       var canvas = document.getElementById(cid);
       if (!canvas) return;
       var data = sparkDataMap[cid];
-      var color = sparkColorMap[cid]||'#888780';
+      var color = sparkColorMap[cid]||'#60A5FA';
       var labels = data.map(function(_,i){ return wkLabels[i]||'Wk'+(i+1); });
       if (canvas._chartInst) canvas._chartInst.destroy();
       canvas._chartInst = new Chart(canvas, {
         type:'line',
-        data:{ labels:labels, datasets:[{ data:data, borderColor:color, borderWidth:1.5, pointRadius:0, fill:false, tension:.3 }] },
-        options:{ responsive:false, maintainAspectRatio:false,
-          plugins:{ legend:{display:false}, tooltip:{
-            callbacks:{ label: ctx => formatGP(ctx.parsed.y) }
-          }},
-          scales:{ x:{display:false}, y:{display:false} }
+        data:{
+          labels:labels,
+          datasets:[{
+            data:data,
+            borderColor:color,
+            borderWidth:2,
+            pointRadius:3,
+            pointHoverRadius:6,
+            pointBackgroundColor:color,
+            pointBorderColor:color,
+            fill:false,
+            tension:.3
+          }]
+        },
+        options:{
+          responsive:false,
+          maintainAspectRatio:false,
+          interaction:{ mode:'index', intersect:false },
+          plugins:{
+            legend:{ display:false },
+            tooltip:{
+              backgroundColor:'var(--bg)',
+              titleColor:'var(--text3)',
+              bodyColor:'var(--text)',
+              borderColor:'var(--border2)',
+              borderWidth:1,
+              padding:8,
+              callbacks:{
+                title: ctx => ctx[0].label,
+                label: ctx => ' '+formatGP(ctx.parsed.y)
+              }
+            }
+          },
+          scales:{
+            x:{
+              display:true,
+              ticks:{ font:{size:9}, maxRotation:45, color:'var(--text3)' },
+              grid:{ display:false }
+            },
+            y:{
+              display:false
+            }
+          }
         }
       });
     });
