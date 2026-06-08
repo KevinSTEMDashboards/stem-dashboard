@@ -4517,6 +4517,16 @@ function getBirthdays() { return JSON.parse(safeGet('stemBirthdays') || '{}'); }
 function saveBirthdays(d) { safeSet('stemBirthdays', JSON.stringify(d)); }
 function getBirthday(name) { return getBirthdays()[name] || ''; }
 
+// Seed PRESET_BIRTHDAYS immediately after functions are declared
+(function() {
+  var birthdays = getBirthdays();
+  var changed = false;
+  Object.keys(PRESET_BIRTHDAYS).forEach(function(name) {
+    if (!birthdays[name]) { birthdays[name] = PRESET_BIRTHDAYS[name]; changed = true; }
+  });
+  if (changed) saveBirthdays(birthdays);
+})();
+
 function editBirthday(name, td) {
   if (!currentUser) return;
   if (td.querySelector('.bday-dropdown')) return;
@@ -5942,16 +5952,6 @@ window.hideLoadingBanner = hideLoadingBanner;
 window.showSyncError = showSyncError;
 window.updateSyncBadge = updateSyncBadge;
 window.safeSet = safeSet;
-
-// Seed PRESET_BIRTHDAYS into localStorage on every load
-(function seedBirthdays() {
-  var birthdays = getBirthdays();
-  var changed = false;
-  Object.keys(PRESET_BIRTHDAYS).forEach(function(name) {
-    if (!birthdays[name]) { birthdays[name] = PRESET_BIRTHDAYS[name]; changed = true; }
-  });
-  if (changed) saveBirthdays(birthdays);
-})();
 
 // Render immediately with BASE_DATA so the page is never blank,
 // then refresh silently from Google Sheets in the background.
