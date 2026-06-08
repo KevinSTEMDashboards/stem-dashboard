@@ -4547,16 +4547,19 @@ function editBirthday(name, td) {
     mSel.value = parts[0]; dSel.value = parts[1];
   }
   const save = () => {
-    const val = mSel.value && dSel.value ? mSel.value+'/'+dSel.value : '';
+    if (!mSel.value || !dSel.value) return; // wait until both are set
+    const val = mSel.value+'/'+dSel.value;
     const bdays = getBirthdays();
-    if (val) bdays[name] = val; else delete bdays[name];
+    bdays[name] = val;
     saveBirthdays(bdays);
-    td.innerHTML = val ? `<span style="font-size:11px;color:var(--text)">${val}</span>` : `<span style="font-size:11px;color:var(--text3);font-style:italic">Click to set</span>`;
+    td.innerHTML = `<span style="font-size:11px;color:var(--text)">${val}</span>`;
     renderAnniversaryBanner();
     renderBirthdayBanner();
   };
   mSel.addEventListener('change', save);
   dSel.addEventListener('change', save);
+  mSel.addEventListener('click', function(e){ e.stopPropagation(); });
+  dSel.addEventListener('click', function(e){ e.stopPropagation(); });
   wrap.appendChild(mSel); wrap.appendChild(dSel);
   td.innerHTML = ''; td.appendChild(wrap);
   mSel.focus();
