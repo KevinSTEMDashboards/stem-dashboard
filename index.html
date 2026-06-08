@@ -509,7 +509,8 @@ td.editing{padding:2px 4px!important}
 
 <!-- OVERVIEW -->
 <div class="tab-panel active" id="tab-overview">
-  <div id="anniversary-banner" style="display:none;margin-bottom:14px"></div>
+  <div id="anniversary-banner" style="display:none;margin-bottom:8px"></div>
+  <div id="birthday-banner" style="display:none;margin-bottom:14px"></div>
   <div class="kpis" id="kpis"></div>
   <div class="charts-row">
     <div class="card card-accent-blue">
@@ -978,7 +979,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Total Subs</th><th>Total Interviews</th><th>Total Placements</th><th>Total Starts</th><th>Total Leads</th><th>Vertical</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
+            <th>Name</th><th>Manager</th><th>Total Subs</th><th>Total Interviews</th><th>Total Placements</th><th>Total Starts</th><th>Total Leads</th><th>Vertical</th><th>Birthday</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
           </tr></thead>
           <tbody id="roster-active-body"></tbody>
         </table>
@@ -2228,8 +2229,46 @@ function renderAnniversaryBanner() {
     +'</div>';
 }
 
+
+function renderBirthdayBanner() {
+  var banner = document.getElementById('birthday-banner');
+  if (!banner) return;
+  var now = new Date();
+  var upcoming = [];
+  RECRUITERS.forEach(function(r) {
+    var bd = getBirthday(r.name);
+    if (!bd || !bd.includes('/')) return;
+    var parts = bd.split('/');
+    var month = parseInt(parts[0])-1;
+    var day = parseInt(parts[1]);
+    var nextBday = new Date(now.getFullYear(), month, day);
+    if (nextBday < now) nextBday = new Date(now.getFullYear()+1, month, day);
+    var diffDays = Math.ceil((nextBday - now) / (1000*60*60*24));
+    if (diffDays <= 30) {
+      upcoming.push({ name: r.name, manager: r.manager, diffDays: diffDays, date: bd });
+    }
+  });
+  if (!upcoming.length) { banner.style.display='none'; return; }
+  upcoming.sort(function(a,b){return a.diffDays-b.diffDays;});
+  var items = upcoming.map(function(b) {
+    var mc = MGR_COLORS[b.manager]||'#888';
+    var isToday = b.diffDays === 0;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border-radius:6px;border:1px solid var(--border)">'
+      +(isToday?'🎂':'🎈')
+      +'<span style="font-size:12px;font-weight:600;color:var(--text)">'+b.name+'</span>'
+      +'<span style="font-size:11px;color:'+mc+'">'+b.manager+'</span>'
+      +'<span style="font-size:11px;color:var(--text3)">'+(isToday?'Birthday — Today!':'Birthday in '+b.diffDays+'d ('+b.date+')')+'</span>'
+    +'</div>';
+  }).join('');
+  banner.style.display = '';
+  banner.innerHTML = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border)">'
+    +'<span style="font-size:11px;font-weight:700;color:var(--text3);white-space:nowrap;margin-right:4px">🎂 UPCOMING BIRTHDAYS</span>'
+    +items
+    +'</div>';
+}
+
 function renderOverview(){
-  const d=filtered();renderKPIs(d);renderTopChart(d);renderRatioChart(d);renderOvTable(d);renderAnniversaryBanner();
+  const d=filtered();renderKPIs(d);renderTopChart(d);renderRatioChart(d);renderOvTable(d);renderAnniversaryBanner();renderBirthdayBanner();
   const awl=activeWkLabels();
   const full=isFullRange();
   document.getElementById('wk-ct').textContent=full?`${wkLabels.length} weeks tracked`:`${awl.length} of ${wkLabels.length} wks`;
@@ -2649,18 +2688,26 @@ function buildBackupPayload() {
 // ─── FULL SETTINGS EXPORT / IMPORT ───
 // Exports everything needed to fully restore the dashboard on a new browser/device
 function exportArchivedForEmbed() {
-  const json = JSON.stringify(archivedRecruiters, null, 2);
+  // Include hire dates and birthdays so they survive rebuilds
+  const hireDates = getHireDates();
+  const birthdays = getBirthdays();
+  const enriched = archivedRecruiters.map(function(a) {
+    return Object.assign({}, a, {
+      hireDate: hireDates[a.name] || a.hireDate || '',
+      birthday: birthdays[a.name] || a.birthday || ''
+    });
+  });
+  const json = JSON.stringify(enriched, null, 2);
   navigator.clipboard.writeText(json).then(function() {
-    alert('✅ Archived list copied to clipboard!\n\nPaste this into the PRESET_ARCHIVED = [] line in your next dashboard update.');
+    alert('✅ Archived list copied to clipboard!\n\nIncludes hire dates and birthdays.\nPaste into PRESET_ARCHIVED = [] in your next dashboard update.');
   }).catch(function() {
-    // Fallback: show in a prompt
     const ta = document.createElement('textarea');
     ta.value = json;
     document.body.appendChild(ta);
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    alert('✅ Archived list copied!\n\nPaste this into PRESET_ARCHIVED = [] in your next update.');
+    alert('✅ Archived list copied!\n\nIncludes hire dates and birthdays.\nPaste into PRESET_ARCHIVED = [] in your next update.');
   });
 }
 
@@ -2677,6 +2724,7 @@ function exportSettings() {
     stemNewRecs:   safeGet('stemNewRecs')   || '[]',
     stemHireDates: safeGet('stemHireDates') || '{}',
     stemVerticals:  safeGet('stemVerticals')  || '{}',
+    stemBirthdays:  safeGet('stemBirthdays')  || '{}',
     stemWeekFlags:  safeGet('stemWeekFlags')  || '{}',
     // Auth
     stemUsers:     safeGet('stemUsers')     || '[]',
@@ -4016,6 +4064,10 @@ function saveEditModal() {
 // To update: export your current archived list and paste the JSON here
 const PRESET_ARCHIVED = [];
 
+// PRESET_BIRTHDAYS — baked in to survive dashboard updates
+const PRESET_BIRTHDAYS = {"Aidan (AJ) Smith": "01/31", "Amanda Panizzut": "07/04", "Amy Orndorff": "03/26", "Andraea Hagadorn": "05/19", "Andy Dalmau": "11/13", "Anthony Ginnis": "08/18", "Barry Andis": "11/16", "Benjamin Grover": "07/13", "Brett Schuber": "03/22", "Briana Moglia": "04/22", "Briana Siler": "03/10", "Brittany Youlden": "03/19", "Drew Barker": "05/01", "Erin Cadden": "11/08", "Felipe Parra": "09/17", "Gary Prestipino": "05/14", "Heather Stevens": "12/22", "Helen Phillips": "06/30", "Henry Schibli": "11/11", "Jared Pliskow": "08/12", "Jessica Mema": "06/21", "Jessica Paden": "06/30", "Jillian Dunn": "02/18", "Joseph Paolozzi": "01/15", "Justin LaSorsa": "01/08", "Kaitlyn Moreschi": "08/24", "Kyle McMahon": "04/17", "Lazaro Calderin": "03/26", "Logan Rayburn": "10/06", "Madison Garra": "06/10", "Megan Curtis": "09/11", "Michael Brennan": "08/25", "Michael Sheahan": "01/11", "Noah Simon": "05/05", "Paige Atkinson": "05/18", "Peter Costello": "02/20", "Rachel Hewitt": "02/05", "Rebecca Schopfer": "07/13", "Sam Royall": "11/01", "Samuel Simon": "04/18", "Sitara Ramessar": "12/07", "Stephen Pemberton": "07/20", "Taylor Durrill": "01/18", "Tiffany Silgas": "03/01", "Tyler Rostad": "03/01", "William Payton": "06/13", "Zachary Jacobson": "11/20", "Corey Phillips": "04/13", "Dan Van Gemert": "12/06", "Molly Burton": "09/06", "Matt Grimes": "04/16", "Jonathan Robertson": "04/15", "Sean McDivitt": "11/09", "Caitlin Choy": "07/10", "Hannah Murphy": "06/05", "Courtney Ricci": "09/05"};
+
+
 let archivedRecruiters = (function() {
   const stored = JSON.parse(safeGet('stemArchived') || '[]');
   // Merge preset with stored — stored wins (has latest end dates etc.)
@@ -4025,6 +4077,22 @@ let archivedRecruiters = (function() {
     if (idx >= 0) merged[idx] = s; // stored version wins
     else merged.push(s);
   });
+  // Restore hire dates and birthdays baked into preset if not already in localStorage
+  setTimeout(function() {
+    const hireDates = getHireDates();
+    const birthdays = getBirthdays();
+    // Seed from PRESET_BIRTHDAYS
+    Object.keys(PRESET_BIRTHDAYS).forEach(function(name){
+      if (!birthdays[name]) { birthdays[name] = PRESET_BIRTHDAYS[name]; bdChanged = true; }
+    });
+    let hdChanged = false, bdChanged = false;
+    merged.forEach(function(a) {
+      if (a.hireDate && !hireDates[a.name]) { hireDates[a.name] = a.hireDate; hdChanged = true; }
+      if (a.birthday && !birthdays[a.name]) { birthdays[a.name] = a.birthday; bdChanged = true; }
+    });
+    if (hdChanged) saveHireDates(hireDates);
+    if (bdChanged) saveBirthdays(birthdays);
+  }, 500);
   return merged;
 })();
 let newRecruiters = JSON.parse(safeGet('stemNewRecs') || '[]');
@@ -4444,6 +4512,46 @@ function saveVertical(name, value, td) {
     : '<span style="font-size:11px;color:var(--text3);font-style:italic">Click to set</span>';
 }
 
+// ─── BIRTHDAY MANAGEMENT ───
+function getBirthdays() { return JSON.parse(safeGet('stemBirthdays') || '{}'); }
+function saveBirthdays(d) { safeSet('stemBirthdays', JSON.stringify(d)); }
+function getBirthday(name) { return getBirthdays()[name] || ''; }
+
+function editBirthday(name, td) {
+  if (!currentUser) return;
+  if (td.querySelector('.bday-dropdown')) return;
+  const current = getBirthday(name);
+  // Build month/day picker
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const wrap = document.createElement('div');
+  wrap.className = 'bday-dropdown';
+  wrap.style.cssText = 'display:flex;gap:4px;align-items:center';
+  const mSel = document.createElement('select');
+  mSel.style.cssText = 'height:26px;font-size:11px;width:60px';
+  mSel.innerHTML = '<option value="">MM</option>'+months.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}">${m}</option>`).join('');
+  const dSel = document.createElement('select');
+  dSel.style.cssText = 'height:26px;font-size:11px;width:50px';
+  dSel.innerHTML = '<option value="">DD</option>'+Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,'0')}">${String(i+1).padStart(2,'0')}</option>`).join('');
+  if (current && current.includes('/')) {
+    const parts = current.split('/');
+    mSel.value = parts[0]; dSel.value = parts[1];
+  }
+  const save = () => {
+    const val = mSel.value && dSel.value ? mSel.value+'/'+dSel.value : '';
+    const bdays = getBirthdays();
+    if (val) bdays[name] = val; else delete bdays[name];
+    saveBirthdays(bdays);
+    td.innerHTML = val ? `<span style="font-size:11px;color:var(--text)">${val}</span>` : `<span style="font-size:11px;color:var(--text3);font-style:italic">Click to set</span>`;
+    renderAnniversaryBanner();
+    renderBirthdayBanner();
+  };
+  mSel.addEventListener('change', save);
+  dSel.addEventListener('change', save);
+  wrap.appendChild(mSel); wrap.appendChild(dSel);
+  td.innerHTML = ''; td.appendChild(wrap);
+  mSel.focus();
+}
+
 function renderRoster() {
   const isEditor = !!currentUser;
   document.getElementById('roster-auth-gate').style.display = isEditor ? 'none' : 'block';
@@ -4528,6 +4636,7 @@ function renderRoster() {
       <td><strong>${r.totalStarts}</strong></td>
       <td>${r.totalLeads}</td>
       <td id="vert_${safeId}" data-name="${r.name.replace(/"/g,'&quot;')}" onclick="editVertical(this.dataset.name, this)" style="cursor:pointer;min-width:140px;font-size:11px" title="Click to set vertical"><span style="color:${getVertical(r.name)?'var(--text)':'var(--text3)'};font-style:${getVertical(r.name)?'normal':'italic'}">${getVertical(r.name)||'Click to set'}</span></td>
+      <td id="bday_${safeId}" data-name="${r.name.replace(/"/g,'&quot;')}" onclick="editBirthday(this.dataset.name, this)" style="cursor:pointer;min-width:80px;font-size:11px" title="Click to set birthday (MM/DD)"><span style="color:${getBirthday(r.name)?'var(--text)':'var(--text3)'};font-style:${getBirthday(r.name)?'normal':'italic'}">${getBirthday(r.name)||'Click to set'}</span></td>
       <td id="dh_${safeId}" onclick="editHireDate('${r.name.replace(/'/g,"\\'")}', this)" style="cursor:pointer;min-width:110px;color:${hireDate?'var(--text)':'var(--text3)'}" title="Click to edit date hired">${hireDateDisplay}</td>
       <td style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">${tenureDisplay}</td>
       <td style="font-size:12px;font-weight:600;color:${annivColor};white-space:nowrap">${annivDisplay}</td>
@@ -5477,7 +5586,7 @@ function renderGP() {
     kpiCard('Prior 2026 GP', formatGP(teamPrior), 'var(--text3)', 'Carried in from prior year') +
     kpiCard('2026 GP', formatGP(team2026), 'var(--c-starts)', `${formatGP(avg2026)}/head`) +
     kpiCard('Period GP', formatGP(teamPeriod), 'var(--accent)', `${formatGP(avgPeriod)}/head avg`) +
-    (periodPct!==null ? kpiCard('vs Prior Period', `<span style="color:${pCol}">${periodPct>0?'+':''}${periodPct}%</span>`, 'var(--text)', `${formatGP(teamPeriod-prevPeriod)} change`) : '');
+    (periodPct!==null ? kpiCard(`vs ${prevF2>=0&&wkLabels[prevF2]?wkLabels[prevF2]:'Wk'+(prevF2+1)}${prevT2!==prevF2&&wkLabels[prevT2]?' – '+wkLabels[prevT2]:''}`, `<span style="color:${pCol}">${periodPct>0?'+':''}${periodPct}%</span>`, 'var(--text)', `${formatGP(teamPeriod-prevPeriod)} change`) : '');
 
   // Table
   const wkHeaders = [];
