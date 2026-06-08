@@ -2656,11 +2656,11 @@ function renderEntry(){
     <div class="entry-row-item">
       <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.name}">${r.name}</div>
       <span style="font-size:11px;color:${MGR_COLORS[r.manager]||'#888'};font-weight:600">${r.manager}</span>
-      <input type="number" min="0" value="0" data-rec="${r.name}" data-m="subs">
-      <input type="number" min="0" value="0" data-rec="${r.name}" data-m="ivs">
-      <input type="number" min="0" value="0" data-rec="${r.name}" data-m="placements">
-      <input type="number" min="0" value="0" data-rec="${r.name}" data-m="starts">
-      <input type="number" min="0" value="0" data-rec="${r.name}" data-m="leads">
+      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="subs">
+      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="ivs">
+      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="placements">
+      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="starts">
+      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="leads">
     </div>`).join('');
   renderSavedList();
 }
@@ -6057,6 +6057,12 @@ async function _writeWeekToSheet(weekData, weekLabel) {
       var newCol = lastDataCol + 1;
       if (newCol > 300) { results.push({tab:tab,ok:false,err:'Column out of range: '+newCol}); continue; }
       var colLetter = _colToLetter(newCol);
+      // Build case-insensitive weekData lookup
+      var weekDataLower = {};
+      Object.keys(weekData).forEach(function(k) {
+        weekDataLower[k.trim().toLowerCase()] = weekData[k];
+      });
+
       // Build list of archived recruiter names to skip
       var archivedNames = [];
       try {
@@ -6067,13 +6073,15 @@ async function _writeWeekToSheet(weekData, weekLabel) {
       // Build batch update
       var data = [];
       for (var rx=0; rx<rows.length; rx++) {
-        if (rx === hdrRow || rx === hdrRow+1) continue;
+        if (rx === hdrRow) continue;
         var recName = (rows[rx][0]||'').trim();
         if (!recName || ['total','avg','average'].some(function(x){return recName.toLowerCase().includes(x);})) continue;
         // Skip archived recruiters
         if (archivedNames.indexOf(recName.toLowerCase()) >= 0) continue;
-        var val = weekData[recName] ? (weekData[recName][mk]||0) : null;
-        if (val === null) continue; // skip if not in this week's data at all
+        // Look up by normalized name
+        var recData = weekDataLower[recName.trim().toLowerCase()];
+        var val = recData ? (recData[mk]||0) : null;
+        if (val === null) continue;
         data.push({range:tab+'!'+colLetter+(rx+1),values:[[val]]});
       }
       if (!data.length) { results.push({tab:tab,ok:true}); continue; }
