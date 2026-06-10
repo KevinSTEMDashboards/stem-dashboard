@@ -2208,13 +2208,17 @@ function renderAnniversaryBanner() {
     var hd = getHireDate(r.name);
     if (!hd) return;
     var hired = new Date(hd + 'T00:00:00');
+    var todayMidnightA = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     var nextAnn = new Date(now.getFullYear(), hired.getMonth(), hired.getDate());
-    if (nextAnn <= now) nextAnn = new Date(now.getFullYear()+1, hired.getMonth(), hired.getDate());
-    var diffDays = Math.ceil((nextAnn - now) / (1000*60*60*24));
+    if (nextAnn < todayMidnightA) nextAnn = new Date(now.getFullYear()+1, hired.getMonth(), hired.getDate());
+    var diffDays = Math.round((nextAnn - todayMidnightA) / (1000*60*60*24));
     if (diffDays <= 30) {
       var years = nextAnn.getFullYear() - hired.getFullYear();
       var suffix = years===1?'1st':years===2?'2nd':years===3?'3rd':years+'th';
-      upcoming.push({ name: r.name, manager: r.manager, diffDays: diffDays, years: years, suffix: suffix });
+      var hd = getHireDate(r.name);
+      var hired2 = new Date(hd + 'T00:00:00');
+      var annivDate = String(hired2.getMonth()+1).padStart(2,'0')+'/'+String(hired2.getDate()).padStart(2,'0');
+      upcoming.push({ name: r.name, manager: r.manager, diffDays: diffDays, years: years, suffix: suffix, date: annivDate });
     }
   });
   if (!upcoming.length) { banner.style.display='none'; return; }
@@ -2226,7 +2230,7 @@ function renderAnniversaryBanner() {
       +(isToday?'🎉':'📅')
       +'<span style="font-size:12px;font-weight:600;color:var(--text)">'+a.name+'</span>'
       +'<span style="font-size:11px;color:'+mc+'">'+a.manager+'</span>'
-      +'<span style="font-size:11px;color:var(--text3)">'+a.suffix+' anniversary'+(isToday?' — Today!':' in '+a.diffDays+'d')+'</span>'
+      +'<span style="font-size:11px;color:var(--text3)">'+a.suffix+' anniversary'+(isToday?' — Today! ('+a.date+')':' in '+a.diffDays+'d ('+a.date+')')+'</span>'
     +'</div>';
   }).join('');
   banner.style.display = '';
@@ -2249,9 +2253,11 @@ function renderBirthdayBanner() {
     var parts = bd.split('/');
     var month = parseInt(parts[0])-1;
     var day = parseInt(parts[1]);
+    var now = new Date();
+    var todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     var nextBday = new Date(now.getFullYear(), month, day);
-    if (nextBday < now) nextBday = new Date(now.getFullYear()+1, month, day);
-    var diffDays = Math.ceil((nextBday - now) / (1000*60*60*24));
+    if (nextBday < todayMidnight) nextBday = new Date(now.getFullYear()+1, month, day);
+    var diffDays = Math.round((nextBday - todayMidnight) / (1000*60*60*24));
     if (diffDays <= 30) {
       upcoming.push({ name: r.name, manager: r.manager, diffDays: diffDays, date: bd });
     }
@@ -4712,9 +4718,10 @@ function renderRoster() {
       if (!bd || !bd.includes('/')) return false;
       const parts = bd.split('/');
       const now = new Date();
+      const todayMidnightB = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       let nextBday = new Date(now.getFullYear(), parseInt(parts[0])-1, parseInt(parts[1]));
-      if (nextBday < now) nextBday = new Date(now.getFullYear()+1, parseInt(parts[0])-1, parseInt(parts[1]));
-      const diffDays = Math.ceil((nextBday - now) / (1000*60*60*24));
+      if (nextBday < todayMidnightB) nextBday = new Date(now.getFullYear()+1, parseInt(parts[0])-1, parseInt(parts[1]));
+      const diffDays = Math.round((nextBday - todayMidnightB) / (1000*60*60*24));
       if (bdayFilter === 'today') return diffDays === 0;
       return diffDays <= parseInt(bdayFilter);
     });
