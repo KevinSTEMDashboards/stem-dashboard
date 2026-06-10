@@ -781,7 +781,7 @@ td.editing{padding:2px 4px!important}
     <!-- This Week controls -->
     <div id="snap-thisweek-ctrl" style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
       <span style="font-size:11px;font-weight:600;color:var(--text3)">WEEK</span>
-      <select id="snap-wk" onchange="renderTiSnapshot()" style="height:30px;font-size:12px"></select>
+      <select id="snap-wk" onchange="syncSnapWkToFilter();renderTiSnapshot();" style="height:30px;font-size:12px"></select>
     </div>
     <!-- Period Comparison controls -->
     <div id="snap-compare-ctrl" style="display:none;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
@@ -971,6 +971,13 @@ td.editing{padding:2px 4px!important}
         <option value="60">Anniversary in 60 days</option>
         <option value="90">Anniversary in 90 days</option>
         <option value="today">Anniversary today 🎉</option>
+      </select>
+      <select id="roster-bday-filter" onchange="renderRoster()" style="height:32px;font-size:12px">
+        <option value="">All birthdays</option>
+        <option value="30">Birthday in 30 days</option>
+        <option value="60">Birthday in 60 days</option>
+        <option value="90">Birthday in 90 days</option>
+        <option value="today">Birthday today 🎂</option>
       </select>
     </div>
 
@@ -2223,8 +2230,9 @@ function renderAnniversaryBanner() {
     +'</div>';
   }).join('');
   banner.style.display = '';
+  var hasToday = upcoming.some(function(a){ return a.diffDays === 0; });
   banner.innerHTML = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border)">'
-    +'<span style="font-size:11px;font-weight:700;color:var(--text3);white-space:nowrap;margin-right:4px">🗓 UPCOMING ANNIVERSARIES</span>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--text3);white-space:nowrap;margin-right:4px">'+(hasToday?'🎉':'🗓')+' '+(hasToday?'ANNIVERSARIES TODAY & UPCOMING':'UPCOMING ANNIVERSARIES')+'</span>'
     +items
     +'</div>';
 }
@@ -2261,8 +2269,9 @@ function renderBirthdayBanner() {
     +'</div>';
   }).join('');
   banner.style.display = '';
+  var hasBdayToday = upcoming.some(function(b){ return b.diffDays === 0; });
   banner.innerHTML = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--bg2);border-radius:10px;border:1px solid var(--border)">'
-    +'<span style="font-size:11px;font-weight:700;color:var(--text3);white-space:nowrap;margin-right:4px">🎂 UPCOMING BIRTHDAYS</span>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--text3);white-space:nowrap;margin-right:4px">'+(hasBdayToday?'🎂':'🎈')+' '+(hasBdayToday?'BIRTHDAYS TODAY & UPCOMING':'UPCOMING BIRTHDAYS')+'</span>'
     +items
     +'</div>';
 }
@@ -3008,6 +3017,9 @@ function populateTiSelects() {
 }
 
 function showTiSection(name) {
+  // Hide week range filter when on snapshot (it has its own controls)
+  var weekRange = document.querySelector('#tab-trends .wctrl');
+  if (weekRange) weekRange.style.display = name === 'snapshot' ? 'none' : '';
   ['health','snapshot','sparklines'].forEach(function(s) {
     document.getElementById('ti-'+s).style.display = s===name ? '' : 'none';
   });
@@ -3022,12 +3034,38 @@ function showTiSection(name) {
   renderTrends();
 }
 
+function syncSnapWkToFilter() {
+  var snapSel = document.getElementById('snap-wk');
+  var toSel = document.getElementById('ti-wk-to');
+  if (!snapSel || !toSel) return;
+  var snapVal = parseInt(snapSel.value);
+  for (var oi = 0; oi < toSel.options.length; oi++) {
+    if (parseInt(toSel.options[oi].value) === snapVal) {
+      toSel.selectedIndex = oi;
+      break;
+    }
+  }
+}
+
 function renderTrends() {
   populateTiSelects();
   var f = parseInt(document.getElementById('ti-wk-from').value) || 0;
   var t = parseInt(document.getElementById('ti-wk-to').value);
   if (isNaN(t)) t = wkLabels.length - 1;
   if (t < f) t = f;
+
+  // Sync snap-wk to the "To" week so Weekly Snapshot stays in sync with top filter
+  var snapSel = document.getElementById('snap-wk');
+  if (snapSel && snapSel.options.length > 0) {
+    // Find the option matching index t
+    for (var oi = 0; oi < snapSel.options.length; oi++) {
+      if (parseInt(snapSel.options[oi].value) === t) {
+        snapSel.selectedIndex = oi;
+        break;
+      }
+    }
+  }
+
   var mgrF = document.getElementById('ti-mgr').value;
 
   // Get data sliced to selected range
@@ -4647,6 +4685,7 @@ function renderRoster() {
   const q = document.getElementById('roster-search').value.toLowerCase();
   const sortBy = document.getElementById('roster-sort') ? document.getElementById('roster-sort').value : 'name';
   const annivFilter = document.getElementById('roster-anniv-filter') ? document.getElementById('roster-anniv-filter').value : '';
+  const bdayFilter = document.getElementById('roster-bday-filter') ? document.getElementById('roster-bday-filter').value : '';
 
   // Base filter
   let all = computedAll().filter(r => (!mgrF || r.manager === mgrF) && (!q || r.name.toLowerCase().includes(q))).sort((a,b)=>a.name.localeCompare(b.name));
@@ -4663,6 +4702,21 @@ function renderRoster() {
       const diffDays = Math.ceil((nextAnn - now) / (1000*60*60*24));
       if (annivFilter === 'today') return diffDays === 0;
       return diffDays <= parseInt(annivFilter);
+    });
+  }
+
+  // Birthday filter
+  if (bdayFilter) {
+    all = all.filter(r => {
+      const bd = getBirthday(r.name);
+      if (!bd || !bd.includes('/')) return false;
+      const parts = bd.split('/');
+      const now = new Date();
+      let nextBday = new Date(now.getFullYear(), parseInt(parts[0])-1, parseInt(parts[1]));
+      if (nextBday < now) nextBday = new Date(now.getFullYear()+1, parseInt(parts[0])-1, parseInt(parts[1]));
+      const diffDays = Math.ceil((nextBday - now) / (1000*60*60*24));
+      if (bdayFilter === 'today') return diffDays === 0;
+      return diffDays <= parseInt(bdayFilter);
     });
   }
 
