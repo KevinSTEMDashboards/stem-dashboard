@@ -2415,20 +2415,53 @@ function showFlagMenu(td, recName, wkIdx, metric) {
   var currentMetricFlag = getFlagForMetric(recName, wkIdx, metric);
   var menu = document.createElement('div');
   menu.className = 'flag-menu';
-  menu.style.cssText = 'position:absolute;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.3);padding:4px;min-width:200px';
+  menu.style.cssText = 'position:absolute;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.3);padding:4px;min-width:220px';
 
   // Section header
   var hdr = document.createElement('div');
   hdr.style.cssText = 'padding:4px 12px 6px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border2);margin-bottom:4px';
-  hdr.textContent = 'Flag this week for ' + recName.split(' ')[0];
+  hdr.textContent = 'Flag week for ' + recName.split(' ')[0];
   menu.appendChild(hdr);
 
-  // Flag ALL metrics at once
+  // Flag THIS metric only
+  var subHdr1 = document.createElement('div');
+  subHdr1.style.cssText = 'padding:4px 12px 2px;font-size:10px;color:var(--text3);font-style:italic';
+  subHdr1.textContent = 'This metric only (' + metric + ')';
+  menu.appendChild(subHdr1);
+
   Object.keys(FLAG_TYPES).forEach(function(type) {
     var ft = FLAG_TYPES[type];
     var opt = document.createElement('div');
-    opt.innerHTML = ft.icon + ' &nbsp;<strong>'+ft.label+'</strong> — all metrics';
-    opt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;border-radius:4px;color:var(--text)';
+    var isActive = currentMetricFlag === type;
+    opt.innerHTML = ft.icon + ' &nbsp;<strong>'+ft.label+'</strong>'+(isActive?' ✓':'');
+    opt.style.cssText = 'padding:5px 12px;cursor:pointer;font-size:12px;border-radius:4px;color:'+(isActive?'var(--accent)':'var(--text)');
+    opt.onmouseenter = function(){opt.style.background='var(--bg2)';};
+    opt.onmouseleave = function(){opt.style.background='';};
+    opt.onmousedown = function(e){
+      e.preventDefault();
+      setFlag(recName, wkIdx, type, [metric]);
+      menu.remove();
+      renderWoW();
+    };
+    menu.appendChild(opt);
+  });
+
+  // Divider
+  var div1 = document.createElement('div');
+  div1.style.cssText = 'border-top:1px solid var(--border2);margin:4px 0';
+  menu.appendChild(div1);
+
+  // Flag ALL metrics at once
+  var subHdr2 = document.createElement('div');
+  subHdr2.style.cssText = 'padding:4px 12px 2px;font-size:10px;color:var(--text3);font-style:italic';
+  subHdr2.textContent = 'All metrics this week';
+  menu.appendChild(subHdr2);
+
+  Object.keys(FLAG_TYPES).forEach(function(type) {
+    var ft = FLAG_TYPES[type];
+    var opt = document.createElement('div');
+    opt.innerHTML = ft.icon + ' &nbsp;<strong>'+ft.label+'</strong> — all';
+    opt.style.cssText = 'padding:5px 12px;cursor:pointer;font-size:12px;border-radius:4px;color:var(--text)';
     opt.onmouseenter = function(){opt.style.background='var(--bg2)';};
     opt.onmouseleave = function(){opt.style.background='';};
     opt.onmousedown = function(e){
@@ -2441,9 +2474,9 @@ function showFlagMenu(td, recName, wkIdx, metric) {
   });
 
   // Divider
-  var div = document.createElement('div');
-  div.style.cssText = 'border-top:1px solid var(--border2);margin:4px 0';
-  menu.appendChild(div);
+  var div2 = document.createElement('div');
+  div2.style.cssText = 'border-top:1px solid var(--border2);margin:4px 0';
+  menu.appendChild(div2);
 
   // Clear THIS metric only
   if (currentMetricFlag) {
