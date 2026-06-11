@@ -129,7 +129,7 @@ main{max-width:1500px;margin:0 auto;padding:16px 20px 48px}
 
 /* ── TABLE ── */
 .tbl-wrap{overflow-x:auto}
-.wow-table{border-collapse:separate !important;border-spacing:0}
+.cal-event-tip{position:fixed;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--text);pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:220px;word-break:break-word}
 .wow-table .sticky-col-1{position:sticky;left:0;z-index:2;background:var(--bg)}
 .wow-table .sticky-col-2{position:sticky;left:130px;z-index:2;background:var(--bg)}
 .wow-table thead tr th{position:sticky;top:0;z-index:3;background:var(--bg2)}
@@ -502,6 +502,7 @@ td.editing{padding:2px 4px!important}
   <div class="tab" data-tab="gp">💰 Gross Profit</div>
   <div class="tab" data-tab="roster" id="roster-tab" style="display:none">Roster</div>
   <div class="tab" data-tab="orgchart" id="orgchart-tab" style="display:none">🗂 Org Chart</div>
+  <div class="tab" data-tab="calendar" id="calendar-tab" style="display:none">🗓 Calendar</div>
   <div class="tab" data-tab="entry">Add Weekly Data</div>
 </div>
 
@@ -805,6 +806,33 @@ td.editing{padding:2px 4px!important}
 </div>
 
 
+
+
+<!-- CALENDAR TAB -->
+<div class="tab-panel" id="tab-calendar">
+  <div class="wctrl" style="flex-wrap:wrap;gap:8px;margin-bottom:16px">
+    <button onclick="calNavMonth(-1)" style="height:32px;width:32px;font-size:16px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer">‹</button>
+    <div id="cal-month-label" style="font-size:15px;font-weight:700;color:var(--text);min-width:140px;text-align:center;line-height:32px"></div>
+    <button onclick="calNavMonth(1)" style="height:32px;width:32px;font-size:16px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer">›</button>
+    <button onclick="calGoToday()" style="height:32px;padding:0 12px;font-size:12px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">Today</button>
+    <div style="display:flex;gap:4px;margin-left:8px">
+      <button id="cal-filter-all" onclick="setCalFilter('all')" style="height:32px;padding:0 12px;font-size:12px;border-radius:var(--radius);border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer">All</button>
+      <button id="cal-filter-bday" onclick="setCalFilter('bday')" style="height:32px;padding:0 12px;font-size:12px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">🎂 Birthdays</button>
+      <button id="cal-filter-anniv" onclick="setCalFilter('anniv')" style="height:32px;padding:0 12px;font-size:12px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">📅 Anniversaries</button>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center;margin-left:8px;font-size:11px">
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#60A5FA;display:inline-block"></span> Birthday</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#F59E0B;display:inline-block"></span> Anniversary</span>
+    </div>
+  </div>
+  <!-- Day headers -->
+  <div id="cal-grid-wrap">
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px">
+      <div style="text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:4px">Sun</div><div style="text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:4px">Mon</div><div style="text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:4px">Tue</div><div style="text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:4px">Wed</div><div style="text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:4px">Thu</div><div style="text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:4px">Fri</div><div style="text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:4px">Sat</div>
+    </div>
+    <div id="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px"></div>
+  </div>
+</div>
 
 <!-- GROSS PROFIT TAB -->
 <div class="tab-panel" id="tab-gp">
@@ -1871,6 +1899,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     if(t.dataset.tab==='roster')renderRoster();
     if(t.dataset.tab==='orgchart')renderOrgChart();
     if(t.dataset.tab==='gp')renderGP();
+    if(t.dataset.tab==='calendar')renderCalendar();
   });
 });
 
@@ -3756,11 +3785,13 @@ function updateAuthUI() {
     ac.innerHTML = `<button class="btn btn-primary" onclick="showLogin()" style="font-size:12px;height:30px;padding:0 12px;white-space:nowrap">🔓 Sign in</button>`;
   }
 
-  // Show roster and org chart tabs only when logged in
+  // Show roster, org chart and calendar tabs only when logged in
   const rosterTab = document.getElementById('roster-tab');
   const orgTab = document.getElementById('orgchart-tab');
+  const calTab = document.getElementById('calendar-tab');
   if (rosterTab) rosterTab.style.display = isEditor ? '' : 'none';
   if (orgTab) orgTab.style.display = isEditor ? '' : 'none';
+  if (calTab) calTab.style.display = isEditor ? '' : 'none';
 
   // Show/hide entry gate
   const gate = document.getElementById('entry-auth-gate');
@@ -5973,6 +6004,152 @@ function renderGPIfActive() {
 }
 
 // ─── END GROSS PROFIT ───
+
+// ─── CALENDAR ───
+var calYear = new Date().getFullYear();
+var calMonth = new Date().getMonth(); // 0-indexed
+var calFilter = 'all'; // 'all', 'bday', 'anniv'
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const BDAY_COLOR = '#60A5FA';
+const ANNIV_COLOR = '#F59E0B';
+
+function setCalFilter(f) {
+  calFilter = f;
+  ['all','bday','anniv'].forEach(function(k) {
+    var btn = document.getElementById('cal-filter-'+k);
+    if (!btn) return;
+    var active = k === f;
+    btn.style.background = active ? 'var(--accent)' : 'var(--bg2)';
+    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border2)';
+    btn.style.color = active ? '#fff' : 'var(--text3)';
+  });
+  renderCalendar();
+}
+
+function calNavMonth(dir) {
+  calMonth += dir;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0)  { calMonth = 11; calYear--; }
+  renderCalendar();
+}
+
+function calGoToday() {
+  var now = new Date();
+  calYear = now.getFullYear(); calMonth = now.getMonth();
+  renderCalendar();
+}
+
+function getCalEvents() {
+  var events = {}; // key = "MM-DD", value = [{name, type, label}]
+  var now = new Date();
+  var todayStr = (now.getMonth()+1)+'-'+now.getDate();
+
+  // Birthdays
+  if (calFilter !== 'anniv') {
+    var bdays = getBirthdays();
+    var allRecs = RECRUITERS.concat(archivedRecruiters);
+    allRecs.forEach(function(r) {
+      var bd = bdays[r.name] || r.birthday || '';
+      if (!bd || !bd.includes('/')) return;
+      var parts = bd.split('/');
+      var key = parseInt(parts[0])+'-'+parseInt(parts[1]);
+      if (!events[key]) events[key] = [];
+      events[key].push({ name: r.name, type: 'bday', label: '🎂 '+r.name });
+    });
+  }
+
+  // Anniversaries
+  if (calFilter !== 'bday') {
+    var hireDates = getHireDates();
+    var allRecs2 = RECRUITERS.concat(archivedRecruiters);
+    allRecs2.forEach(function(r) {
+      var hd = hireDates[r.name] || r.hireDate || '';
+      if (!hd) return;
+      var hired = new Date(hd + 'T00:00:00');
+      var key = (hired.getMonth()+1)+'-'+hired.getDate();
+      var years = calYear - hired.getFullYear();
+      if (years <= 0) return;
+      var suffix = years===1?'1st':years===2?'2nd':years===3?'3rd':years+'th';
+      if (!events[key]) events[key] = [];
+      events[key].push({ name: r.name, type: 'anniv', label: '📅 '+r.name+' ('+suffix+')' });
+    });
+  }
+
+  return events;
+}
+
+function renderCalendar() {
+  if (!document.getElementById('tab-calendar').classList.contains('active')) return;
+  var lbl = document.getElementById('cal-month-label');
+  if (lbl) lbl.textContent = MONTHS[calMonth] + ' ' + calYear;
+
+  var grid = document.getElementById('cal-grid');
+  if (!grid) return;
+
+  var events = getCalEvents();
+  var firstDay = new Date(calYear, calMonth, 1).getDay(); // 0=Sun
+  var daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  var today = new Date();
+  var isCurrentMonth = today.getFullYear()===calYear && today.getMonth()===calMonth;
+
+  var cells = '';
+  // Empty cells before first day
+  for (var i=0; i<firstDay; i++) {
+    cells += '<div style="min-height:90px;background:var(--bg2);border-radius:6px;opacity:0.3"></div>';
+  }
+
+  for (var d=1; d<=daysInMonth; d++) {
+    var key = (calMonth+1)+'-'+d;
+    var dayEvents = events[key] || [];
+    var isToday = isCurrentMonth && d===today.getDate();
+    var bdayEvents = dayEvents.filter(function(e){return e.type==='bday';});
+    var annivEvents = dayEvents.filter(function(e){return e.type==='anniv';});
+
+    var eventHtml = '';
+    bdayEvents.forEach(function(e) {
+      eventHtml += '<div class="cal-evt" data-tip="'+e.label+'" style="background:'+BDAY_COLOR+'22;border-left:2px solid '+BDAY_COLOR+';border-radius:3px;padding:2px 4px;margin:1px 0;font-size:10px;color:'+BDAY_COLOR+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default">'+e.label+'</div>';
+    });
+    annivEvents.forEach(function(e) {
+      eventHtml += '<div class="cal-evt" data-tip="'+e.label+'" style="background:'+ANNIV_COLOR+'22;border-left:2px solid '+ANNIV_COLOR+';border-radius:3px;padding:2px 4px;margin:1px 0;font-size:10px;color:'+ANNIV_COLOR+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default">'+e.label+'</div>';
+    });
+
+    cells += '<div style="min-height:90px;background:'+(isToday?'var(--bg2)':'var(--bg)')+';border-radius:6px;border:1px solid '+(isToday?'var(--accent)':'var(--border)')+';padding:4px;overflow:hidden">'
+      +'<div style="font-size:12px;font-weight:'+(isToday?'700':'500')+';color:'+(isToday?'var(--accent)':'var(--text3)')+';margin-bottom:3px">'+d+'</div>'
+      +eventHtml
+    +'</div>';
+  }
+
+  // Trailing empty cells to fill last row
+  var total = firstDay + daysInMonth;
+  var trailing = total % 7 === 0 ? 0 : 7 - (total % 7);
+  for (var j=0; j<trailing; j++) {
+    cells += '<div style="min-height:90px;background:var(--bg2);border-radius:6px;opacity:0.3"></div>';
+  }
+
+  grid.innerHTML = cells;
+}
+// ─── END CALENDAR ───
+
+// Calendar event tooltips
+document.addEventListener('mouseover', function(e) {
+  var el = e.target.closest('.cal-evt');
+  if (!el) return;
+  var tip = document.createElement('div');
+  tip.className = 'cal-event-tip';
+  tip.id = 'cal-tip';
+  tip.textContent = el.dataset.tip;
+  document.body.appendChild(tip);
+  var rect = el.getBoundingClientRect();
+  tip.style.left = Math.min(rect.left, window.innerWidth - 230) + 'px';
+  tip.style.top = (rect.bottom + 4) + 'px';
+});
+document.addEventListener('mouseout', function(e) {
+  if (e.target.closest('.cal-evt')) {
+    var tip = document.getElementById('cal-tip');
+    if (tip) tip.remove();
+  }
+});
 
 function renderOrgChart() {
   var wrap = document.getElementById('orgchart-wrap');
