@@ -823,9 +823,6 @@ td.editing{padding:2px 4px!important}
       <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#F59E0B;display:inline-block"></span> Anniversary</span>
     </div>
   </div>
-  <!-- Upcoming banners -->
-  <div id="anniversary-banner" style="display:none;margin-bottom:8px"></div>
-  <div id="birthday-banner" style="display:none;margin-bottom:14px"></div>
   <!-- Day headers -->
   <div id="cal-grid-wrap">
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px">
@@ -6049,8 +6046,7 @@ function getCalEvents() {
   // Birthdays
   if (calFilter !== 'anniv') {
     var bdays = getBirthdays();
-    var allRecs = RECRUITERS.concat(archivedRecruiters);
-    allRecs.forEach(function(r) {
+    RECRUITERS.forEach(function(r) {
       var bd = bdays[r.name] || r.birthday || '';
       if (!bd || !bd.includes('/')) return;
       var parts = bd.split('/');
@@ -6063,8 +6059,7 @@ function getCalEvents() {
   // Anniversaries
   if (calFilter !== 'bday') {
     var hireDates = getHireDates();
-    var allRecs2 = RECRUITERS.concat(archivedRecruiters);
-    allRecs2.forEach(function(r) {
+    RECRUITERS.forEach(function(r) {
       var hd = hireDates[r.name] || r.hireDate || '';
       if (!hd) return;
       var hired = new Date(hd + 'T00:00:00');
@@ -6082,8 +6077,6 @@ function getCalEvents() {
 
 function renderCalendar() {
   if (!document.getElementById('tab-calendar').classList.contains('active')) return;
-  renderAnniversaryBanner();
-  renderBirthdayBanner();
   var lbl = document.getElementById('cal-month-label');
   if (lbl) lbl.textContent = MONTHS[calMonth] + ' ' + calYear;
 
