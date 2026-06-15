@@ -510,8 +510,6 @@ td.editing{padding:2px 4px!important}
 
 <!-- OVERVIEW -->
 <div class="tab-panel active" id="tab-overview">
-  <div id="anniversary-banner" style="display:none;margin-bottom:8px"></div>
-  <div id="birthday-banner" style="display:none;margin-bottom:14px"></div>
   <div class="kpis" id="kpis"></div>
   <div class="charts-row">
     <div class="card card-accent-blue">
@@ -825,6 +823,9 @@ td.editing{padding:2px 4px!important}
       <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#F59E0B;display:inline-block"></span> Anniversary</span>
     </div>
   </div>
+  <!-- Upcoming banners -->
+  <div id="anniversary-banner" style="display:none;margin-bottom:8px"></div>
+  <div id="birthday-banner" style="display:none;margin-bottom:14px"></div>
   <!-- Day headers -->
   <div id="cal-grid-wrap">
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px">
@@ -2312,7 +2313,7 @@ function renderBirthdayBanner() {
 }
 
 function renderOverview(){
-  const d=filtered();renderKPIs(d);renderTopChart(d);renderRatioChart(d);renderOvTable(d);renderAnniversaryBanner();renderBirthdayBanner();
+  const d=filtered();renderKPIs(d);renderTopChart(d);renderRatioChart(d);renderOvTable(d);
   const awl=activeWkLabels();
   const full=isFullRange();
   document.getElementById('wk-ct').textContent=full?`${wkLabels.length} weeks tracked`:`${awl.length} of ${wkLabels.length} wks`;
@@ -6081,6 +6082,8 @@ function getCalEvents() {
 
 function renderCalendar() {
   if (!document.getElementById('tab-calendar').classList.contains('active')) return;
+  renderAnniversaryBanner();
+  renderBirthdayBanner();
   var lbl = document.getElementById('cal-month-label');
   if (lbl) lbl.textContent = MONTHS[calMonth] + ' ' + calYear;
 
