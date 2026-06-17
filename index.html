@@ -660,6 +660,7 @@ td.editing{padding:2px 4px!important}
     <select id="wow-metric"><option value="subs">Submittals</option><option value="ivs">Interviews</option><option value="placements">Placements</option><option value="starts">Starts</option><option value="leads">Leads</option></select>
     <select id="wow-mgr"><option value="">All managers</option></select>
       <button id="wow-mgrs-only-btn" onclick="toggleWowMgrsOnly()" style="height:32px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;white-space:nowrap">👥 Managers only</button>
+    <select id="wow-grain" onchange="renderWoW()"><option value="week">By Week</option><option value="period">By Period/Month</option><option value="quarter">By Quarter</option></select>
     <select id="wow-view"><option value="table">Table view</option><option value="chart">Line chart view</option></select>
   </div>
   <div class="card" style="margin-bottom:12px">
@@ -2544,10 +2545,128 @@ function showFlagMenu(td, recName, wkIdx, metric) {
 }
 
 
+// ─── PERIOD / QUARTER MAPPING (5/4/4 model) ───
+// Each period = set of week indices (0-based). 5/4/4 per quarter.
+const PERIOD_DEFS = [
+  { label:'P1 / Jan', quarter:'Q1', weeks:[0,1,2,3,4] },
+  { label:'P2 / Feb', quarter:'Q1', weeks:[5,6,7,8] },
+  { label:'P3 / Mar', quarter:'Q1', weeks:[9,10,11,12] },
+  { label:'P4 / Apr', quarter:'Q2', weeks:[13,14,15,16,17] },
+  { label:'P5 / May', quarter:'Q2', weeks:[18,19,20,21] },
+  { label:'P6 / Jun', quarter:'Q2', weeks:[22,23,24,25] },
+  { label:'P7 / Jul', quarter:'Q3', weeks:[26,27,28,29,30] },
+  { label:'P8 / Aug', quarter:'Q3', weeks:[31,32,33,34] },
+  { label:'P9 / Sep', quarter:'Q3', weeks:[35,36,37,38] },
+  { label:'P10 / Oct', quarter:'Q4', weeks:[39,40,41,42,43] },
+  { label:'P11 / Nov', quarter:'Q4', weeks:[44,45,46,47] },
+  { label:'P12 / Dec', quarter:'Q4', weeks:[48,49,50,51] }
+];
+const QUARTER_DEFS = [
+  { label:'Q1', weeks:[0,1,2,3,4,5,6,7,8,9,10,11,12] },
+  { label:'Q2', weeks:[13,14,15,16,17,18,19,20,21,22,23,24,25] },
+  { label:'Q3', weeks:[26,27,28,29,30,31,32,33,34,35,36,37,38] },
+  { label:'Q4', weeks:[39,40,41,42,43,44,45,46,47,48,49,50,51] }
+];
+
+// Aggregate a weekly array into period or quarter buckets, limited to available weeks
+function aggregateByGrain(weeklyArr, grain, nWeeksAvailable) {
+  if (grain === 'week') return weeklyArr.slice();
+  const defs = grain === 'quarter' ? QUARTER_DEFS : PERIOD_DEFS;
+  return defs.map(function(def) {
+    let sum = 0, hasData = false;
+    def.weeks.forEach(function(wi) {
+      if (wi < nWeeksAvailable) { sum += (weeklyArr[wi]||0); hasData = true; }
+    });
+    return hasData ? sum : null;
+  });
+}
+
+// Get grain labels limited to periods/quarters that have at least one available week
+function grainLabels(grain, nWeeksAvailable) {
+  if (grain === 'week') return null;
+  const defs = grain === 'quarter' ? QUARTER_DEFS : PERIOD_DEFS;
+  return defs.filter(function(def) {
+    return def.weeks.some(function(wi){ return wi < nWeeksAvailable; });
+  }).map(function(def){ return def.label; });
+}
+
+function renderWoWAggregated(m, mgr, view, grain){
+  let recs=computedAll().filter(r=>!mgr||r.manager===mgr).sort((a,b)=>a.name.localeCompare(b.name));
+  if (wowMgrsOnly) {
+    const mgrFirstNames=MGRS.map(function(x){return x.toLowerCase();});
+    recs=recs.filter(function(r){
+      const fn=r.name.split(' ')[0].toLowerCase();
+      return mgrFirstNames.some(function(mn){return fn===mn||fn.startsWith(mn)||mn.startsWith(fn);});
+    });
+  }
+  const nW=activeWkLabels().length;
+  const labels=grainLabels(grain, nW);
+  const nG=labels.length;
+  const grainName = grain==='quarter'?'quarter':'period';
+
+  // Team totals per bucket
+  const totals=Array(nG).fill(0);
+  recs.forEach(r=>{
+    const agg=aggregateByGrain(r[m], grain, nW);
+    for(let i=0;i<nG;i++) totals[i]+=(agg[i]||0);
+  });
+
+  document.getElementById('wow-total-title').textContent=`${grain==='quarter'?'Quarterly':'Period'} ${m} — team total`;
+  const accent={subs:'#185FA5',ivs:'#1D9E75',placements:'#a855f7',starts:'#D4537E',leads:'#EF9F27'}[m]||'#888';
+  if(cWowTotal)cWowTotal.destroy();
+  const aggLabelPlugin={id:'aggLabels',afterDatasetsDraw(chart){const ctx=chart.ctx;const textCol=getComputedStyle(document.documentElement).getPropertyValue('--text')||'#fff';chart.data.datasets.forEach((ds,i)=>{const meta=chart.getDatasetMeta(i);meta.data.forEach((bar,j)=>{const v=ds.data[j];if(v>0){ctx.save();ctx.fillStyle=textCol;ctx.font='600 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(v,bar.x,bar.y-4);ctx.restore();}});});}};
+  cWowTotal=new Chart(document.getElementById('wowTotalChart'),{type:'bar',data:{labels:labels,datasets:[{data:totals,backgroundColor:accent+'99',borderColor:accent,borderWidth:1.5,borderRadius:3,borderSkipped:false}]},plugins:[aggLabelPlugin],options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:24}},plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:45},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10}}}}}});
+
+  if(view==='table'){
+    document.getElementById('wow-tbl-card').style.display='';
+    document.getElementById('wow-ln-card').style.display='none';
+    document.getElementById('wow-tbl-title').textContent=`Recruiter ${grainName} ${m}`;
+    const thead=document.getElementById('wow-thead'),tbody=document.getElementById('wow-tbody');
+    const wowTable=document.querySelector('.wow-table');
+    if(wowTable) wowTable.style.width='100%';
+    thead.innerHTML=`<tr><th class="sticky-col-1" style="min-width:130px">Recruiter</th><th class="sticky-col-2" style="min-width:60px">Mgr</th><th style="text-align:right">Total</th><th style="text-align:right">Avg</th>${labels.map(l=>`<th style="text-align:right;min-width:80px">${l}</th>`).join('')}</tr>`;
+    tbody.innerHTML=recs.map(r=>{
+      const agg=aggregateByGrain(r[m], grain, nW);
+      const vals=agg.slice(0,nG);
+      const tot=vals.reduce((s,x)=>s+(x||0),0);
+      const nonNull=vals.filter(x=>x!=null);
+      const avg=nonNull.length?(tot/nonNull.length).toFixed(1):'0';
+      const cells=vals.map((v,i)=>{
+        const val=(v!=null?v:0);
+        const p=i>0?(vals[i-1]!=null?vals[i-1]:0):null;
+        const cls=p!=null?(val>p?'cu':val<p?'cd':'c0'):'';
+        return`<td class="${cls}" style="text-align:right">${val}</td>`;
+      }).join('');
+      const mc=MGR_COLORS[r.manager]||'#888';
+      return`<tr><td class="sticky-col-1" style="font-weight:500;white-space:nowrap">${r.name}${rampIcon(r.name)}</td><td class="sticky-col-2"><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td><td style="text-align:right;font-weight:600">${tot}</td><td style="text-align:right;color:var(--text3)">${avg}</td>${cells}</tr>`;
+    }).join('')+
+    `<tr style="border-top:2px solid var(--border);font-weight:700;background:var(--bg2)"><td class="sticky-col-1" style="font-weight:700">TEAM TOTAL</td><td class="sticky-col-2"></td><td style="text-align:right">${totals.reduce((s,x)=>s+x,0)}</td><td style="text-align:right;color:var(--text3)">${(totals.reduce((s,x)=>s+x,0)/Math.max(1,nG)).toFixed(1)}</td>${totals.map(v=>`<td style="text-align:right;color:var(--accent)">${v}</td>`).join('')}</tr>`;
+  } else {
+    // Line chart view
+    document.getElementById('wow-tbl-card').style.display='none';
+    document.getElementById('wow-ln-card').style.display='';
+    document.getElementById('wow-ln-title').textContent=`Individual ${grainName} trends — ${m}`;
+    if(cWowLine)cWowLine.destroy();
+    const datasets=recs.map(r=>{
+      const agg=aggregateByGrain(r[m], grain, nW).slice(0,nG);
+      const mc=MGR_COLORS[r.manager]||'#888';
+      return{label:r.name,data:agg,borderColor:mc,backgroundColor:mc,borderWidth:1.5,pointRadius:2,fill:false,tension:.3};
+    });
+    cWowLine=new Chart(document.getElementById('wowLineChart'),{type:'line',data:{labels:labels,datasets:datasets},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{font:{size:9},boxWidth:8,padding:6}}},scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10}}}}}});
+  }
+}
+
 function renderWoW(){
   const m=document.getElementById('wow-metric').value;
   const mgr=document.getElementById('wow-mgr').value;
   const view=document.getElementById('wow-view').value;
+  const grain=(document.getElementById('wow-grain')||{}).value||'week';
+
+  // ── Aggregated view (period/quarter) ──
+  if (grain !== 'week') {
+    renderWoWAggregated(m, mgr, view, grain);
+    return;
+  }
   let recs=computedAll().filter(r=>!mgr||r.manager===mgr).sort((a,b)=>a.name.localeCompare(b.name));
   // Managers only: filter to recruiters whose first name matches a manager name
   if (wowMgrsOnly) {
