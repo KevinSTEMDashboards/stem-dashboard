@@ -6477,7 +6477,7 @@ async function _writeWeekToSheet(weekData, weekLabel) {
   for (var t = 0; t < tabs.length; t++) {
     var tab = tabs[t]; var mk = metricKeys[t];
     try {
-      var resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values/'+encodeURIComponent(tab)+'?key=AIzaSyCas-IXPeCDB4op7kp3mnGoFCuBINAEY2g');
+      var resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values/'+encodeURIComponent(tab)+'?key=AIzaSyCas-IXPeCDB4op7kp3mnGoFCuBINAEY2g&_cb='+Date.now(), {cache:'no-store'});
       var d = await resp.json();
       var rows = d.values || [];
       // Find header row (has "Recruiter" in col A)
@@ -6508,6 +6508,23 @@ async function _writeWeekToSheet(weekData, weekLabel) {
       
       var newCol = lastDataCol + 1;
       if (newCol > 300) { results.push({tab:tab,ok:false,err:'Column out of range: '+newCol}); continue; }
+
+      // SAFETY: verify target column is actually empty across all recruiter rows.
+      // If it already has data, the detection was stale — abort to avoid overwriting.
+      var targetHasData = false;
+      for (var sc=hdrRow+1; sc<rows.length; sc++) {
+        var srow = rows[sc];
+        if (!srow || !(srow[0]||'').trim()) continue;
+        var srecN = srow[0].trim().toLowerCase();
+        if (['total','avg','average'].some(function(x){return srecN.includes(x);})) continue;
+        var sv = String(srow[newCol]||'').trim();
+        if (sv !== '' && sv !== '0') { targetHasData = true; break; }
+      }
+      if (targetHasData) {
+        results.push({tab:tab,ok:false,err:'Target column already has data (stale read?) — push aborted to prevent overwrite. Please retry.'});
+        continue;
+      }
+
       var colLetter = _colToLetter(newCol);
       // Build case-insensitive weekData lookup
       var weekDataLower = {};
