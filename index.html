@@ -1073,6 +1073,23 @@ td.editing{padding:2px 4px!important}
         </select>
         <div style="font-size:11px;color:var(--text3);margin-top:4px">Prior weeks will be flagged 🚫 Not started so they're excluded from averages.</div>
       </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Vertical (optional)</label>
+        <select id="new-rec-vertical" style="width:100%;height:34px;font-size:13px">
+          <option value="">Select vertical…</option>
+          <option value="BFSI, Tech, Retail & FMCG/Business Services">BFSI, Tech, Retail & FMCG/Business Services</option>
+          <option value="Life Sciences">Life Sciences</option>
+          <option value="Telecom">Telecom</option>
+          <option value="Energy, Oil, Gas & Utilities">Energy, Oil, Gas & Utilities</option>
+          <option value="T&M: Airline & Heavy Equipment">T&M: Airline & Heavy Equipment</option>
+          <option value="T&M: Auto">T&M: Auto</option>
+          <option value="Data Centers & InfraOps">Data Centers & InfraOps</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Date hired (optional)</label>
+        <input type="date" id="new-rec-hiredate" style="width:100%;height:34px;font-size:13px">
+      </div>
       <div id="add-rec-err" style="font-size:12px;color:var(--red);display:none;padding:7px 10px;background:var(--red-bg);border-radius:var(--radius)"></div>
       <div style="display:flex;gap:8px;margin-top:4px">
         <button class="btn btn-primary" onclick="saveNewRecruiter()" style="height:34px;font-size:13px;flex:1">Add recruiter</button>
@@ -4608,6 +4625,10 @@ function openAddRecModal() {
 }
 function closeAddRecModal() {
   document.getElementById('add-rec-modal').style.display = 'none';
+  var nm=document.getElementById('new-rec-name'); if(nm) nm.value='';
+  var vt=document.getElementById('new-rec-vertical'); if(vt) vt.value='';
+  var hd=document.getElementById('new-rec-hiredate'); if(hd) hd.value='';
+  var er=document.getElementById('add-rec-err'); if(er) er.style.display='none';
 }
 
 function saveNewRecruiter() {
@@ -4654,6 +4675,22 @@ function saveNewRecruiter() {
   // Persist
   newRecruiters.push({ name, manager: mgr, addedOn: newRec.addedOn, startWeekIndex: startWkIdx });
   saveNewRecs();
+
+  // Save vertical if provided
+  const vertVal = (document.getElementById('new-rec-vertical')||{}).value || '';
+  if (vertVal) {
+    const verts = getVerticals();
+    verts[name] = vertVal;
+    saveVerticals(verts);
+  }
+
+  // Save hire date if provided
+  const hireVal = (document.getElementById('new-rec-hiredate')||{}).value || '';
+  if (hireVal) {
+    const hd = getHireDates();
+    hd[name] = hireVal;
+    saveHireDates(hd);
+  }
 
   // Rebuild rec-select sorted alphabetically
   const recSelEl = document.getElementById('rec-select');
@@ -6492,11 +6529,17 @@ function renderOrgChart() {
       avgTenureStr = avgYr > 0 ? avgYr + '.' + String(avgMoRem).padStart(2,'0') + ' yrs avg' : avgMo + ' mo avg';
     }
 
+    // Calculate total starts for the team (sum of all recruiters' starts)
+    var teamStarts = team.reduce(function(s, r){
+      return s + (r.starts||[]).reduce(function(a,v){return a+(v||0);}, 0);
+    }, 0);
+
     return '<div class="org-manager-col">'
       +'<div class="org-line-v"></div>'
       +'<div class="org-mgr-card" style="background:'+mc+'18;border-color:'+mc+';color:'+mc+'">'
         +'<div class="org-mgr-name">'+mgr+(mgrTenure?' <span style="font-size:10px;opacity:.75;font-weight:400">('+mgrTenure+')</span>':'')+'</div>'
         +'<div class="org-mgr-sub">'+team.length+' recruiter'+(team.length!==1?'s':'')+(avgTenureStr?' &nbsp;·&nbsp; '+avgTenureStr:'')+'</div>'
+        +'<div class="org-mgr-sub" style="margin-top:2px;font-weight:600">'+teamStarts+' total start'+(teamStarts!==1?'s':'')+'</div>'
       +'</div>'
       +'<div class="org-recruiter-list">'+team.map(recCard).join('')+'</div>'
     +'</div>';
