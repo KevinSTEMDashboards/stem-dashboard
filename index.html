@@ -1474,7 +1474,7 @@ async function writeWeekToSheet(weekData, weekLabel) {
     try {
       // Cache-busted read to avoid stale Sheet data
       const readUrl = `${SHEETS_BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}?key=${API_KEY}&_cb=${Date.now()}`;
-      const readRes = await fetch(readUrl, {cache:'no-store'});
+      const readRes = await fetch(readUrl);
       if (!readRes.ok) { results.push({tab:tabName,ok:false,err:'read failed '+readRes.status}); continue; }
       const rows = (await readRes.json()).values || [];
 
@@ -6511,7 +6511,7 @@ async function _writeWeekToSheet(weekData, weekLabel) {
   for (var t = 0; t < tabs.length; t++) {
     var tab = tabs[t]; var mk = metricKeys[t];
     try {
-      var resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values/'+encodeURIComponent(tab)+'?key=AIzaSyCas-IXPeCDB4op7kp3mnGoFCuBINAEY2g&_cb='+Date.now(), {cache:'no-store'});
+      var resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values/'+encodeURIComponent(tab)+'?key=AIzaSyCas-IXPeCDB4op7kp3mnGoFCuBINAEY2g&_cb='+Date.now());
       var d = await resp.json();
       var rows = d.values || [];
       // Find header row (has "Recruiter" in col A)
