@@ -3234,7 +3234,7 @@ document.getElementById('import-file').addEventListener('change', function() {
       // Apply new recruiters first
       newRecs.forEach(nr => {
         if (!RECRUITERS.find(r => r.name === nr.name)) {
-          const pad = Array(nr.startWeekIndex||0).fill(null);
+          const pad = Array(Math.max(0, Math.min(nr.startWeekIndex||0, BASE_WEEKS))).fill(null);
           const active = Array(Math.max(0, BASE_WEEKS - (nr.startWeekIndex||0))).fill(0);
           RECRUITERS.push({name:nr.name,manager:nr.manager,subs:[...pad,...active],ivs:[...pad,...active],starts:[...pad,...active],leads:[...pad,...active],isNew:true,addedOn:nr.addedOn,startWeekIndex:nr.startWeekIndex||0});
         }
@@ -4556,11 +4556,11 @@ function applyNewRecruiters() {
   newRecruiters.forEach(nr => {
     // Check if already in RECRUITERS (avoid duplicates on re-render)
     if (RECRUITERS.find(r => r.name === nr.name)) return;
-    const startIdx = nr.startWeekIndex || 0;
+    const startIdx = Math.min(nr.startWeekIndex || 0, totalWks);
     const zeros = Array(totalWks).fill(0);
     // Pad with nulls before start week, zeros from start week on
-    const pad = Array(startIdx).fill(null);
-    const active = Array(totalWks - startIdx).fill(0);
+    const pad = Array(Math.max(0, startIdx)).fill(null);
+    const active = Array(Math.max(0, totalWks - startIdx)).fill(0);
     RECRUITERS.push({
       name: nr.name,
       manager: nr.manager,
@@ -4647,7 +4647,7 @@ function saveNewRecruiter() {
   }
 
   const totalWks = wkLabels.length;
-  const pad = Array(startWkIdx).fill(null);
+  const pad = Array(Math.max(0, Math.min(startWkIdx, totalWks))).fill(null);
   const active = Array(Math.max(0, totalWks - startWkIdx)).fill(0);
   const newRec = {
     name, manager: mgr,
