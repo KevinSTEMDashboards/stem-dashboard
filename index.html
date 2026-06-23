@@ -1467,53 +1467,87 @@ async function writeWeekToSheet(weekData, weekLabel) {
     return [{ok: false, err: e.message}];
   }
 
-  for (const [metric, tabName] of Object.entries(SHEET_TABS)) {
+  // Only write to the 5 activity tabs — never the Gross Profit tab
+  const ACTIVITY_TABS = { subs:'Subs', ivs:'Interviews', placements:'Placements', starts:'Starts', leads:'Leads' };
+
+  for (const [metric, tabName] of Object.entries(ACTIVITY_TABS)) {
     try {
-      // Read current tab to find row positions and last column
-      const rows = await readTab(tabName);
+      // Cache-busted read to avoid stale Sheet data
+      const readUrl = `${SHEETS_BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}?key=${API_KEY}&_cb=${Date.now()}`;
+      const readRes = await fetch(readUrl, {cache:'no-store'});
+      if (!readRes.ok) { results.push({tab:tabName,ok:false,err:'read failed '+readRes.status}); continue; }
+      const rows = (await readRes.json()).values || [];
 
-      // Find header row
-      let headerRowIdx = 0;
-      for (let ri = 0; ri < Math.min(6, rows.length); ri++) {
-        if ((rows[ri][0]||'').toString().trim().toLowerCase() === 'recruiter') { headerRowIdx = ri; break; }
+      // Find header row (has "recruiter" in col A)
+      let headerRowIdx = -1;
+      for (let ri = 0; ri < rows.length; ri++) {
+        if ((rows[ri][0]||'').toString().toLowerCase().includes('recruiter')) { headerRowIdx = ri; break; }
       }
+      if (headerRowIdx < 0) { results.push({tab:tabName,ok:false,err:'header not found'}); continue; }
 
-      // Find data start column (skip Total, Avg etc.)
-      const SKIP = ['total','avg','average','ytd','ratio','since','pace','%'];
-      function isSkipW(h) { const lo=(h||'').toLowerCase().trim(); return !lo||SKIP.some(s=>lo.includes(s)); }
-      const headerRow = rows[headerRowIdx] || [];
-      let dataStart = 2;
-      for (let ci = 2; ci < Math.min(headerRow.length, 12); ci++) {
-        if (!isSkipW(headerRow[ci])) { dataStart = ci; break; }
-      }
+      const hdr = rows[headerRowIdx];
 
-      // Find last column with real data to determine where new week goes
-      let lastDataCol = dataStart - 1;
-      for (let ci = dataStart; ci < headerRow.length; ci++) {
-        for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
-          const nm = (rows[ri][0]||'').trim().toLowerCase();
-          if (!nm||nm==='total'||nm==='average') continue;
-          const n = parseInt((rows[ri][ci]||'').toString().trim());
-          if (!isNaN(n) && n > 0) { lastDataCol = ci; break; }
+      // Find last column with real (non-zero) recruiter data
+      let lastDataCol = 1;
+      for (let ci = 1; ci < hdr.length; ci++) {
+        const h = String(hdr[ci]||'').toLowerCase().trim();
+        if (!h) continue;
+        if (['total','avg','average','ytd','sum','ratio','since','pace','%'].some(s=>h.includes(s))) continue;
+        let hasReal = false;
+        for (let ri = headerRowIdx+1; ri < rows.length; ri++) {
+          const row = rows[ri];
+          if (!row || !(row[0]||'').trim()) continue;
+          const nm = row[0].trim().toLowerCase();
+          if (['total','avg','average'].some(x=>nm.includes(x))) continue;
+          const v = String(row[ci]||'').trim();
+          if (v !== '' && v !== '0') { hasReal = true; break; }
         }
+        if (hasReal) lastDataCol = ci;
       }
+
       const newCol = lastDataCol + 1;
-      const newColLetter = colToLetter(newCol - 1); // colToLetter is 0-indexed
+      if (newCol > 300) { results.push({tab:tabName,ok:false,err:'column out of range'}); continue; }
 
-      // Write each recruiter's value only — do NOT touch header rows
-      const updates = [];
-      for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
-        const name = (rows[ri][0]||'').trim();
-        const lo = name.toLowerCase();
-        if (!name||!rows[ri][1]||lo==='recruiter'||lo==='total'||lo==='average'||lo==='averages:') continue;
-        const val = (weekData[name]||{})[metric] || 0;
-        updates.push({
-          range: `${tabName}!${newColLetter}${ri + 1}`,
-          values: [[val]]
-        });
+      // SAFETY: abort if target column already has data (stale read protection)
+      let targetHasData = false;
+      for (let ri = headerRowIdx+1; ri < rows.length; ri++) {
+        const row = rows[ri];
+        if (!row || !(row[0]||'').trim()) continue;
+        const nm = row[0].trim().toLowerCase();
+        if (['total','avg','average'].some(x=>nm.includes(x))) continue;
+        const v = String(row[newCol]||'').trim();
+        if (v !== '' && v !== '0') { targetHasData = true; break; }
+      }
+      if (targetHasData) {
+        results.push({tab:tabName,ok:false,err:'target column already has data — aborted to prevent overwrite'});
+        continue;
       }
 
-      // Batch write with OAuth token
+      const colLetter = colToLetter(newCol);
+
+      // Case-insensitive weekData lookup
+      const wdLower = {};
+      Object.keys(weekData).forEach(k => { wdLower[k.trim().toLowerCase()] = weekData[k]; });
+
+      // Archived names to skip
+      let archivedNm = [];
+      try { archivedNm = JSON.parse(safeGet('stemArchived')||'[]').map(a=>(a.name||'').trim().toLowerCase()); } catch(e){}
+
+      const updates = [];
+      for (let ri = headerRowIdx+1; ri < rows.length; ri++) {
+        const name = (rows[ri][0]||'').trim();
+        if (!name) continue;
+        const lo = name.toLowerCase();
+        if (['total','avg','average','recruiter'].some(x=>lo===x||lo.includes(x))) continue;
+        if (archivedNm.indexOf(lo) >= 0) continue;
+        const rd = wdLower[lo];
+        if (!rd) continue;
+        const val = rd[metric] || 0;
+        updates.push({ range: `${tabName}!${colLetter}${ri+1}`, values: [[val]] });
+      }
+
+      if (!updates.length) { results.push({tab:tabName,ok:true}); continue; }
+
       const url = `${SHEETS_BASE}/${SHEET_ID}/values:batchUpdate`;
       const res = await fetch(url, {
         method: 'POST',
