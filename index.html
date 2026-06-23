@@ -661,9 +661,15 @@ td.editing{padding:2px 4px!important}
     <select id="wow-mgr"><option value="">All managers</option></select>
       <button id="wow-mgrs-only-btn" onclick="toggleWowMgrsOnly()" style="height:32px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;white-space:nowrap">👥 Managers only</button>
     <select id="wow-grain" onchange="renderWoW()"><option value="week">By Week</option><option value="period">By Period/Month</option><option value="quarter">By Quarter</option></select>
-    <select id="wow-view"><option value="table">Table view</option><option value="chart">Line chart view</option></select>
+    <select id="wow-view" onchange="onWowViewChange()"><option value="table">Table view</option><option value="chart">Line chart view</option><option value="snapshot">Week snapshot (all metrics)</option></select>
+    <select id="wow-snap-wk" onchange="renderWoW()" style="display:none"></select>
   </div>
-  <div class="card" style="margin-bottom:12px">
+  <!-- Week Snapshot view -->
+  <div class="card" id="wow-snap-card" style="display:none">
+    <div class="card-hdr"><span class="card-title" id="wow-snap-title">Week snapshot — all metrics</span></div>
+    <div class="tbl-wrap" style="max-height:75vh;overflow-y:auto"><table class="wow-table"><thead id="wow-snap-thead"></thead><tbody id="wow-snap-tbody"></tbody></table></div>
+  </div>
+  <div class="card" id="wow-total-card" style="margin-bottom:12px">
     <div class="card-hdr"><span class="card-title" id="wow-total-title">Weekly submittals — team total</span></div>
     <div class="chart-wrap" style="height:170px"><canvas id="wowTotalChart" role="img" aria-label="Weekly team total"></canvas></div>
   </div>
@@ -1934,6 +1940,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     if(t.dataset.tab==='orgchart')renderOrgChart();
     if(t.dataset.tab==='gp')renderGP();
     if(t.dataset.tab==='calendar')renderCalendar();
+    if(t.dataset.tab==='entry')renderEntry();
   });
 });
 
@@ -2625,7 +2632,98 @@ function grainLabels(grain, nWeeksAvailable) {
   }).map(function(def){ return def.label; });
 }
 
+function onWowViewChange() {
+  var view = document.getElementById('wow-view').value;
+  var snapWk = document.getElementById('wow-snap-wk');
+  var grainSel = document.getElementById('wow-grain');
+  var metricSel = document.getElementById('wow-metric');
+  if (view === 'snapshot') {
+    // Populate week selector if empty
+    if (snapWk && snapWk.options.length === 0) {
+      var labels = activeWkLabels();
+      for (var i=0;i<labels.length;i++) {
+        var o=document.createElement('option');o.value=i;o.textContent=labels[i];snapWk.appendChild(o);
+      }
+      if (snapWk.options.length) snapWk.selectedIndex = snapWk.options.length-1;
+    }
+    snapWk.style.display='';
+    if (grainSel) grainSel.style.display='none';
+    if (metricSel) metricSel.style.display='none';
+  } else {
+    if (snapWk) snapWk.style.display='none';
+    if (grainSel) grainSel.style.display='';
+    if (metricSel) metricSel.style.display='';
+  }
+  renderWoW();
+}
+
+function renderWoWSnapshot(mgr) {
+  // Hide other view cards
+  document.getElementById('wow-tbl-card').style.display='none';
+  document.getElementById('wow-ln-card').style.display='none';
+  var totalCard = document.getElementById('wow-total-card');
+  if (totalCard) totalCard.style.display='none';
+  document.getElementById('wow-snap-card').style.display='';
+
+  var snapWk = document.getElementById('wow-snap-wk');
+  var wkIdx = parseInt(snapWk.value);
+  if (isNaN(wkIdx)) wkIdx = activeWkLabels().length-1;
+  var wkLabel = activeWkLabels()[wkIdx] || ('Wk '+(wkIdx+1));
+
+  document.getElementById('wow-snap-title').textContent = 'Week snapshot — '+wkLabel+' (all metrics)';
+
+  let recs=computedAll().filter(r=>!mgr||r.manager===mgr).sort((a,b)=>a.name.localeCompare(b.name));
+  if (wowMgrsOnly) {
+    const mgrFirstNames=MGRS.map(function(x){return x.toLowerCase();});
+    recs=recs.filter(function(r){
+      const fn=r.name.split(' ')[0].toLowerCase();
+      return mgrFirstNames.some(function(mn){return fn===mn||fn.startsWith(mn)||mn.startsWith(fn);});
+    });
+  }
+
+  var metrics=[['subs','Subs','#378ADD'],['ivs','IVs','#1D9E75'],['placements','Placements','#a855f7'],['starts','Starts','#D4537E'],['leads','Leads','#EF9F27']];
+
+  document.getElementById('wow-snap-thead').innerHTML =
+    '<tr><th class="sticky-col-1" style="min-width:140px">Recruiter</th><th class="sticky-col-2">Mgr</th>'
+    + metrics.map(function(m){return '<th style="text-align:right;color:'+m[2]+'">'+m[1]+'</th>';}).join('')
+    + '<th style="text-align:right">Total</th></tr>';
+
+  var teamTotals={subs:0,ivs:0,placements:0,starts:0,leads:0};
+
+  var bodyRows = recs.map(function(r){
+    var mc=MGR_COLORS[r.manager]||'#888';
+    var rowTotal=0;
+    var cells=metrics.map(function(m){
+      var mk=m[0];
+      var flag=getFlagForMetric(r.name, wkIdx, mk);
+      var val=(r[mk]&&r[mk][wkIdx]!=null)?r[mk][wkIdx]:0;
+      if (flag) {
+        var ic=FLAG_TYPES[flag]?FLAG_TYPES[flag].icon:'🚫';
+        return '<td style="text-align:right;color:var(--text3)" title="'+(FLAG_TYPES[flag]?FLAG_TYPES[flag].label:'')+'">'+ic+'</td>';
+      }
+      teamTotals[mk]+=val;
+      rowTotal+=val;
+      var cls=val===0?'color:var(--text3);font-weight:400':'color:'+m[2]+';font-weight:600';
+      return '<td style="text-align:right;'+cls+'">'+(val===0?'0':val)+'</td>';
+    }).join('');
+    return '<tr><td class="sticky-col-1" style="font-weight:500;white-space:nowrap">'+r.name+rampIcon(r.name)+'</td>'
+      +'<td class="sticky-col-2"><span class="mgr" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span></td>'
+      +cells
+      +'<td style="text-align:right;font-weight:700">'+rowTotal+'</td></tr>';
+  }).join('');
+
+  var grandTotal=teamTotals.subs+teamTotals.ivs+teamTotals.placements+teamTotals.starts+teamTotals.leads;
+  var totalRow='<tr style="border-top:2px solid var(--border);font-weight:700;background:var(--bg2)">'
+    +'<td class="sticky-col-1" style="font-weight:700">TEAM TOTAL</td><td class="sticky-col-2"></td>'
+    +metrics.map(function(m){return '<td style="text-align:right;color:'+m[2]+'">'+teamTotals[m[0]]+'</td>';}).join('')
+    +'<td style="text-align:right;color:var(--accent)">'+grandTotal+'</td></tr>';
+
+  document.getElementById('wow-snap-tbody').innerHTML = bodyRows + totalRow;
+}
+
 function renderWoWAggregated(m, mgr, view, grain){
+  var snapCard=document.getElementById('wow-snap-card'); if(snapCard) snapCard.style.display='none';
+  var totCard=document.getElementById('wow-total-card'); if(totCard) totCard.style.display='';
   let recs=computedAll().filter(r=>!mgr||r.manager===mgr).sort((a,b)=>a.name.localeCompare(b.name));
   if (wowMgrsOnly) {
     const mgrFirstNames=MGRS.map(function(x){return x.toLowerCase();});
@@ -2697,11 +2795,20 @@ function renderWoW(){
   const view=document.getElementById('wow-view').value;
   const grain=(document.getElementById('wow-grain')||{}).value||'week';
 
+  // ── Week Snapshot view (all metrics for one week) ──
+  if (view === 'snapshot') {
+    renderWoWSnapshot(mgr);
+    return;
+  }
+
   // ── Aggregated view (period/quarter) ──
   if (grain !== 'week') {
     renderWoWAggregated(m, mgr, view, grain);
     return;
   }
+  // Restore standard cards, hide snapshot
+  var snapCard=document.getElementById('wow-snap-card'); if(snapCard) snapCard.style.display='none';
+  var totCard=document.getElementById('wow-total-card'); if(totCard) totCard.style.display='';
   let recs=computedAll().filter(r=>!mgr||r.manager===mgr).sort((a,b)=>a.name.localeCompare(b.name));
   // Managers only: filter to recruiters whose first name matches a manager name
   if (wowMgrsOnly) {
@@ -2784,7 +2891,7 @@ function renderWoW(){
     cWowLine=new Chart(document.getElementById('wowLineChart'),{type:'line',data:{labels:awl,datasets:recs.slice(0,12).map((r,i)=>({label:r.name.split(' ')[0],data:r[m].map(v=>(v!=null?v:0)),borderColor:pal[i%pal.length],borderWidth:1.5,pointRadius:2,tension:.3,fill:false}))},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,labels:{font:{size:10},boxWidth:10,padding:7}}},scales:{x:{ticks:{font:{size:10},maxRotation:45},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10}}}}}});
   }
 }
-['wow-metric','wow-mgr','wow-view'].forEach(id=>document.getElementById(id).addEventListener('change',renderWoW));
+['wow-metric','wow-mgr'].forEach(id=>document.getElementById(id).addEventListener('change',renderWoW));
 
 // ─── RECRUITER DETAIL ───
 let rCharts={};
