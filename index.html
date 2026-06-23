@@ -1473,10 +1473,11 @@ async function writeWeekToSheet(weekData, weekLabel) {
   for (const [metric, tabName] of Object.entries(ACTIVITY_TABS)) {
     try {
       // Cache-busted read to avoid stale Sheet data
-      const readUrl = `${SHEETS_BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}?key=${API_KEY}&_cb=${Date.now()}`;
+      const readUrl = `${SHEETS_BASE}/${SHEET_ID}/values/${encodeURIComponent(tabName)}?key=${API_KEY}`;
       const readRes = await fetch(readUrl);
-      if (!readRes.ok) { results.push({tab:tabName,ok:false,err:'read failed '+readRes.status}); continue; }
+      if (!readRes.ok) { results.push({tab:tabName,ok:false,err:'read HTTP '+readRes.status}); continue; }
       const rows = (await readRes.json()).values || [];
+      if (!rows.length) { results.push({tab:tabName,ok:false,err:'empty sheet response'}); continue; }
 
       // Find header row (has "recruiter" in col A)
       let headerRowIdx = -1;
@@ -6511,9 +6512,11 @@ async function _writeWeekToSheet(weekData, weekLabel) {
   for (var t = 0; t < tabs.length; t++) {
     var tab = tabs[t]; var mk = metricKeys[t];
     try {
-      var resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values/'+encodeURIComponent(tab)+'?key=AIzaSyCas-IXPeCDB4op7kp3mnGoFCuBINAEY2g&_cb='+Date.now());
+      var resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values/'+encodeURIComponent(tab)+'?key=AIzaSyCas-IXPeCDB4op7kp3mnGoFCuBINAEY2g');
+      if (!resp.ok) { results.push({tab:tab,ok:false,err:'read HTTP '+resp.status}); continue; }
       var d = await resp.json();
       var rows = d.values || [];
+      if (!rows.length) { results.push({tab:tab,ok:false,err:'empty sheet response'}); continue; }
       // Find header row (has "Recruiter" in col A)
       var hdrRow = -1;
       for (var r=0; r<rows.length; r++) { if ((rows[r][0]||'').toLowerCase().includes('recruiter')) { hdrRow=r; break; } }
