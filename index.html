@@ -1071,7 +1071,7 @@ td.editing{padding:2px 4px!important}
         <select id="new-rec-startweek" style="width:100%;height:34px;font-size:13px">
           <option value="next">Next week (Week <span id="next-wk-num"></span>)</option>
         </select>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px">Prior weeks will be filled with 0s so YTD totals are accurate.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Prior weeks will be flagged 🚫 Not started so they're excluded from averages.</div>
       </div>
       <div id="add-rec-err" style="font-size:12px;color:var(--red);display:none;padding:7px 10px;background:var(--red-bg);border-radius:var(--radius)"></div>
       <div style="display:flex;gap:8px;margin-top:4px">
@@ -4639,6 +4639,17 @@ function saveNewRecruiter() {
     startWeekIndex: startWkIdx
   };
   RECRUITERS.push(newRec);
+
+  // Flag all weeks before the start week as "Not started" so they're
+  // excluded from averages and show the 🚫 icon instead of counting as 0
+  if (startWkIdx > 0) {
+    const flags = getWeekFlags();
+    if (!flags[name]) flags[name] = {};
+    for (let wi = 0; wi < startWkIdx; wi++) {
+      flags[name][wi] = { subs:'new', ivs:'new', placements:'new', starts:'new', leads:'new' };
+    }
+    saveWeekFlags(flags);
+  }
 
   // Persist
   newRecruiters.push({ name, manager: mgr, addedOn: newRec.addedOn, startWeekIndex: startWkIdx });
