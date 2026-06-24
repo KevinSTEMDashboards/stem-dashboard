@@ -4446,73 +4446,7 @@ function saveEditModal() {
 // newRecruiters: [{name, manager, addedOn, startWeekIndex}] — added after BASE_DATA, stored in localStorage
 // PRESET_ARCHIVED — baked in so archived list survives dashboard updates
 // To update: export your current archived list and paste the JSON here
-const PRESET_ARCHIVED = [
-  {
-    "name": "Heather McRae",
-    "manager": "Noah",
-    "archivedOn": "6/4/2026",
-    "endedOn": "05/08/2026",
-    "subs": [6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],
-    "ivs": [1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],
-    "placements": [0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],
-    "starts": [1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],
-    "leads": [0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],
-    "hireDate": "2014-07-07",
-    "birthday": ""
-  },
-  {
-    "name": "Helen Phillips",
-    "manager": "Joe",
-    "archivedOn": "6/4/2026",
-    "endedOn": "05/19/2026",
-    "subs": [2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],
-    "ivs": [1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],
-    "placements": [0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],
-    "starts": [1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],
-    "leads": [0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],
-    "hireDate": "2003-02-07",
-    "birthday": "06/30"
-  },
-  {
-    "name": "John Gorsuch",
-    "manager": "Joe",
-    "archivedOn": "6/4/2026",
-    "endedOn": "05/10/2026",
-    "subs": [5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],
-    "ivs": [1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],
-    "placements": [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],
-    "starts": [0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
-    "leads": [0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],
-    "hireDate": "2022-09-12",
-    "birthday": ""
-  },
-  {
-    "name": "Jason Beir",
-    "manager": "Kevin",
-    "archivedOn": "6/8/2026",
-    "endedOn": "06/05/2026",
-    "subs": [4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],
-    "ivs": [3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],
-    "placements": [0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],
-    "starts": [1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],
-    "leads": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-    "hireDate": "2020-10-01",
-    "birthday": ""
-  },
-  {
-    "name": "Jessica Paden",
-    "manager": "Brett",
-    "archivedOn": "6/9/2026",
-    "endedOn": "06/08/2026",
-    "subs": [6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],
-    "ivs": [2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],
-    "placements": [2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],
-    "starts": [0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],
-    "leads": [0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],
-    "hireDate": "2024-01-29",
-    "birthday": "06/30"
-  }
-];
+const PRESET_ARCHIVED = [{"name":"Heather McRae","manager":"Noah","archivedOn":"6/4/2026","endedOn":"05/08/2026","subs":[6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],"ivs":[1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],"placements":[0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],"hireDate":"2014-07-07","birthday":""},{"name":"Helen Phillips","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/19/2026","subs":[2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],"ivs":[1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],"placements":[0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],"starts":[1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],"leads":[0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],"hireDate":"2003-02-07","birthday":"06/30"},{"name":"John Gorsuch","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/10/2026","subs":[5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],"ivs":[1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],"starts":[0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],"leads":[0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],"hireDate":"2022-09-12","birthday":""},{"name":"Jason Beir","manager":"Kevin","archivedOn":"6/8/2026","endedOn":"06/05/2026","subs":[4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],"ivs":[3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],"placements":[0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2020-10-01","birthday":""},{"name":"Jessica Paden","manager":"Brett","archivedOn":"6/9/2026","endedOn":"06/08/2026","subs":[6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],"ivs":[2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],"placements":[2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],"starts":[0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],"leads":[0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],"hireDate":"2024-01-29","birthday":"06/30"},{"name":"Stephen Pemberton","manager":"Joe","archivedOn":"6/23/2026","endedOn":"06/22/2026","subs":[5,3,6,5,5,7,5,6,6,5,4,10,6,7,5,10,7,5,5,5,4,5,10,3],"ivs":[0,0,1,0,1,0,1,3,0,1,0,1,1,0,2,0,3,2,2,2,0,0,0,0],"placements":[0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0],"starts":[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0],"leads":[1,0,0,0,5,2,1,0,3,2,0,1,0,2,0,1,0,0,0,0,1,1,0,2],"hireDate":"2025-12-15","birthday":"07/20"}];
 
 // PRESET_BIRTHDAYS — baked in to survive dashboard updates
 const PRESET_BIRTHDAYS = {"Aidan (AJ) Smith": "01/31", "Amanda Panizzut": "07/04", "Amy Orndorff": "03/26", "Andraea Hagadorn": "05/19", "Andy Dalmau": "11/13", "Anthony Ginnis": "08/18", "Barry Andis": "11/16", "Benjamin Grover": "07/13", "Brett Schuber": "03/22", "Briana Moglia": "04/22", "Briana Siler": "03/10", "Brittany Youlden": "03/19", "Drew Barker": "05/01", "Erin Cadden": "11/08", "Felipe Parra": "09/17", "Gary Prestipino": "05/14", "Heather Stevens": "12/22", "Helen Phillips": "06/30", "Henry Schibli": "11/11", "Jared Pliskow": "08/12", "Jessica Mema": "06/21", "Jessica Paden": "06/30", "Jillian Dunn": "02/18", "Joseph Paolozzi": "01/15", "Justin LaSorsa": "01/08", "Kaitlyn Moreschi": "08/24", "Kyle McMahon": "04/17", "Lazaro Calderin": "03/26", "Logan Rayburn": "10/06", "Madison Garra": "06/10", "Megan Curtis": "09/11", "Michael Brennan": "08/25", "Michael Sheahan": "01/11", "Noah Simon": "05/05", "Paige Atkinson": "05/18", "Peter Costello": "02/20", "Rachel Hewitt": "02/05", "Rebecca Schopfer": "07/13", "Sam Royall": "11/01", "Samuel Simon": "04/18", "Sitara Ramessar": "12/07", "Stephen Pemberton": "07/20", "Taylor Durrill": "01/18", "Tiffany Silgas": "03/01", "Tyler Rostad": "03/01", "William Payton": "06/13", "Zachary Jacobson": "11/20", "Corey Phillips": "04/13", "Dan Van Gemert": "12/06", "Molly Burton": "09/06", "Matt Grimes": "04/16", "Jonathan Robertson": "04/15", "Sean McDivitt": "11/09", "Caitlin Choy": "07/10", "Hannah Murphy": "06/05", "Courtney Ricci": "09/05"};
@@ -6459,7 +6393,11 @@ document.addEventListener('mouseout', function(e) {
 function renderOrgChart() {
   var wrap = document.getElementById('orgchart-wrap');
   if (!wrap) return;
-  var all = computedAll();
+  // Org chart always shows only active recruiters, never archived
+  var archivedNames = archivedRecruiters.map(function(a){ return (a.name||'').trim().toLowerCase(); });
+  var all = computedAll().filter(function(r){
+    return !r._isArchived && archivedNames.indexOf((r.name||'').trim().toLowerCase()) < 0;
+  });
 
   // Build a set of all manager first names AND full names (lowercase) to detect duplicates
   // Use MGR_COLORS as definitive manager list — includes Matt even before MGRS rebuilds from Sheet
