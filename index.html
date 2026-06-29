@@ -3478,21 +3478,20 @@ function renderTiHealth(recs, mgrF, f, t) {
     var startTrend = priorStarts ? Math.round((totalStarts-priorStarts)/priorStarts*100) : null;
     var subTrend = priorSubs ? Math.round((totalSubs-priorSubs)/priorSubs*100) : null;
     var onTrack = team.filter(function(r){return r.starts>=2;}).length;
-    var status = onTrack >= team.length*0.7 ? 'green' : onTrack >= team.length*0.4 ? 'amber' : 'red';
-    var statusText = status==='green'?'On track':status==='amber'?'Watch':'Needs attention';
-    var statusBg = status==='green'?'#EAF3DE':status==='amber'?'#FAEEDA':'#FCEBEB';
-    var statusCol = status==='green'?'#3B6D11':status==='amber'?'#854F0B':'#A32D2D';
+    var startsPerRec = team.length ? (totalStarts/team.length) : 0;
+    var subsPerRec = team.length ? Math.round(totalSubs/team.length) : 0;
+    var convPct = totalSubs ? (totalStarts/totalSubs*100) : 0;
+    var convRatio = totalStarts ? (totalSubs/totalStarts) : 0;
+    var convText = !totalSubs ? '—' : (!totalStarts ? '0.0%' : convPct.toFixed(1)+'% (1 in '+convRatio.toFixed(1)+')');
     var trendHtml = function(v) {
       if (v===null) return '<span style="color:var(--text3)">—</span>';
       var col = v>0?'#3B6D11':v<0?'#A32D2D':'var(--text3)';
       return '<span style="color:'+col+'">'+(v>0?'+':'')+v+'%</span>';
     };
-    var barPct = Math.min(100, Math.round(onTrack/team.length*100));
 
     html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<div style="display:flex;align-items:center;margin-bottom:8px">'
         +'<span style="font-size:14px;font-weight:700;color:'+mc+'">'+mgr+'</span>'
-        +'<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:100px;background:'+statusBg+';color:'+statusCol+'">'+statusText+'</span>'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">'
         +'<div style="font-size:12px;color:var(--text3)">Recruiters</div><div style="font-size:12px;text-align:right;color:var(--text)">'+team.length+'</div>'
@@ -3500,8 +3499,9 @@ function renderTiHealth(recs, mgrF, f, t) {
         +'<div style="font-size:12px;color:var(--text3)">Subs</div><div style="font-size:12px;text-align:right;color:var(--text)">'+totalSubs+' '+trendHtml(subTrend)+'</div>'
         +'<div style="font-size:12px;color:var(--text3)">On target</div><div style="font-size:12px;text-align:right;color:var(--text)">'+onTrack+' / '+team.length+'</div>'
       +'</div>'
-      +'<div style="height:4px;background:var(--border2);border-radius:2px;overflow:hidden">'
-        +'<div style="height:100%;width:'+barPct+'%;background:'+mc+';border-radius:2px"></div>'
+      +'<div style="border-top:1px solid var(--border);padding-top:8px;display:flex;flex-direction:column;gap:4px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text3)">Per recruiter</span><span style="color:var(--text)">'+startsPerRec.toFixed(1)+' starts/rec · '+subsPerRec+' subs/rec</span></div>'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text3)">Sub → start</span><span style="color:var(--text)">'+convText+'</span></div>'
       +'</div>'
     +'</div>';
   });
