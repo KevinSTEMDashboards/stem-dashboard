@@ -1838,8 +1838,16 @@ function compute(r){
   const pl4=plv2.length>=4?plv2.slice(-4).reduce((s,x)=>s+x,0):plv2.reduce((s,x)=>s+x,0);
   // Status: 2+ starts = On Target (green), 1 start = Below Target (amber), 0 = Needs Attention (red)
   const status=starts4w>=2?'green':starts4w===1?'amber':'red';
+  // On track (separate from status): tenure-aware 2-starts-per-completed-4-week-block.
+  // status drives Recruiter Summary (Below/On/Needs); onTrack drives the "On track" counts.
+  const _rf=(r._rangeFrom!=null?r._rangeFrom:0);
+  const _rt=(r._rangeTo!=null?r._rangeTo:(r.starts.length-1+_rf));
+  const _firstActive=Math.max(_rf,r.startWeekIndex||0);
+  const _activeWks=Math.max(0,_rt-_firstActive+1);
+  const _target=2*Math.floor(_activeWks/4);
+  const onTrack=tst>=_target;
   const falloff=tpl>0?Math.round(((tpl-tst)/tpl)*100):null;
-  return{...r,totalSubs:ts,totalIvs:ti,totalPlacements:tpl,totalStarts:tst,totalLeads:totalArr(r.leads),sub2iv:s2i,iv2placement:i2pl,pl2start:pl2st,sub2start:s2s,falloffPct:falloff,avgSub4w:a4,starts4w,ivs4w,placements4w,wksSinceLast,status};
+  return{...r,totalSubs:ts,totalIvs:ti,totalPlacements:tpl,totalStarts:tst,totalLeads:totalArr(r.leads),sub2iv:s2i,iv2placement:i2pl,pl2start:pl2st,sub2start:s2s,falloffPct:falloff,avgSub4w:a4,starts4w,ivs4w,placements4w,wksSinceLast,status,onTrack,onTrackTarget:_target};
 }
 // computedAll now slices to week range before computing
 let includeArchived = false;
@@ -1879,11 +1887,29 @@ function computedAll() {
       subs: pad(r.subs), ivs: pad(r.ivs),
       placements: pad(r.placements||[]),
       starts: pad(r.starts), leads: pad(r.leads),
+      _fullStarts: r.starts,
+      _rangeFrom: f, _rangeTo: t,
       _isArchived: true
     };
     return compute(sliced);
   });
   return [...active, ...archived];
+}
+
+// ─── ON TRACK RULE ───
+// A recruiter is "on track" if their total starts >= 2 per completed 4-week block
+// of tenure within the selected range. Tenure starts at startWeekIndex (0 = active
+// from Wk 1, i.e. hired before the season). Only whole 4-week blocks count; leftover
+// 1-3 weeks are ignored until they complete the next block. Cumulative — a strong
+// stretch can cover a weak one. Hired <4 weeks ago = no target yet, never flagged.
+function onTrackTarget(startWeekIndex, f, t) {
+  var firstActive = Math.max(f, startWeekIndex || 0);
+  var activeWeeks = Math.max(0, t - firstActive + 1);
+  var blocks = Math.floor(activeWeeks / 4);
+  return 2 * blocks;
+}
+function isOnTrack(totalStarts, startWeekIndex, f, t) {
+  return totalStarts >= onTrackTarget(startWeekIndex, f, t);
 }
 
 // Active week labels for the selected range
@@ -2209,7 +2235,7 @@ function renderKPIs(d){
   const ts=d.reduce((s,r)=>s+r.totalSubs,0),ti=d.reduce((s,r)=>s+r.totalIvs,0),tst=d.reduce((s,r)=>s+r.totalStarts,0);
   const vr=d.filter(r=>r.sub2start!==null);
   const as=vr.length?vr.reduce((s,r)=>s+r.sub2start,0)/vr.length:0;
-  const ot=d.filter(r=>r.status==='green').length;
+  const ot=d.filter(r=>r.onTrack).length;
   const tp=[...d].sort((a,b)=>b.totalStarts-a.totalStarts)[0];
   document.getElementById('kpis').innerHTML=`
     <div class="kpi kpi-accent"><div class="kpi-label">Total submittals</div><div class="kpi-val" style="color:var(--c-subs)">${ts.toLocaleString()}</div><div class="kpi-sub">${d.length} recruiters</div></div>
@@ -2217,7 +2243,7 @@ function renderKPIs(d){
     <div class="kpi kpi-purple"><div class="kpi-label">Total placements</div><div class="kpi-val" style="color:var(--purple)">${d.reduce((s,r)=>s+r.totalPlacements,0)}</div><div class="kpi-sub">Pl→Start: ${((d.reduce((s,r)=>s+r.totalStarts,0)/Math.max(1,d.reduce((s,r)=>s+r.totalPlacements,0)))*100).toFixed(0)}%</div></div>
     <div class="kpi kpi-red"><div class="kpi-label">Total starts</div><div class="kpi-val" style="color:var(--c-starts)">${tst}</div><div class="kpi-sub">Avg ${(tst/d.length).toFixed(1)}/recruiter</div></div>
     <div class="kpi kpi-amber"><div class="kpi-label">Total leads</div><div class="kpi-val" style="color:var(--c-leads)">${d.reduce((s,r)=>s+r.totalLeads,0).toLocaleString()}</div><div class="kpi-sub">Avg ${(d.reduce((s,r)=>s+r.totalLeads,0)/d.length).toFixed(1)}/recruiter</div></div>
-    <div class="kpi kpi-purple"><div class="kpi-label">On track</div><div class="kpi-val" style="color:var(--purple)">${ot}</div><div class="kpi-sub">of ${d.length} recruiters</div></div>
+    <div class="kpi kpi-purple" style="cursor:help" title="On track = at least 2 starts per completed 4-week period since hire. Veterans (here from Wk 1) are measured over the full range; newer hires get a smaller target that grows every 4 weeks. A strong stretch can cover a weak one, and anyone with under 4 weeks isn't counted against yet."><div class="kpi-label">On track</div><div class="kpi-val" style="color:var(--purple)">${ot}</div><div class="kpi-sub">of ${d.length} recruiters</div></div>
     ${tp?`<div class="kpi kpi-teal"><div class="kpi-label">Top starts</div><div class="kpi-val" style="font-size:17px;line-height:1.3;color:var(--teal)">${tp.name.split(' ')[0]}</div><div class="kpi-sub">${tp.totalStarts} starts · ${tp.manager}</div></div>`:''}
   `;
 }
@@ -3442,6 +3468,7 @@ function renderTrends() {
       leads: sliceSum(r.leads, f, t),
       priorSubs: priorSliceSum(r.subs, f, t),
       priorStarts: priorSliceSum(r.starts, f, t),
+      startWeekIndex: r.startWeekIndex || 0,
       weeklyData: { subs: r.subs, ivs: r.ivs, starts: r.starts }
     };
   });
@@ -3477,7 +3504,7 @@ function renderTiHealth(recs, mgrF, f, t) {
     var priorSubs = team.reduce(function(s,r){return s+r.priorSubs;},0);
     var startTrend = priorStarts ? Math.round((totalStarts-priorStarts)/priorStarts*100) : null;
     var subTrend = priorSubs ? Math.round((totalSubs-priorSubs)/priorSubs*100) : null;
-    var onTrack = team.filter(function(r){return r.starts>=2;}).length;
+    var onTrack = team.filter(function(r){return isOnTrack(r.starts, r.startWeekIndex, f, t);}).length;
     var startsPerRec = team.length ? (totalStarts/team.length) : 0;
     var subsPerRec = team.length ? Math.round(totalSubs/team.length) : 0;
     var convPct = totalSubs ? (totalStarts/totalSubs*100) : 0;
@@ -3497,11 +3524,17 @@ function renderTiHealth(recs, mgrF, f, t) {
         +'<div style="font-size:12px;color:var(--text3)">Recruiters</div><div style="font-size:12px;text-align:right;color:var(--text)">'+team.length+'</div>'
         +'<div style="font-size:12px;color:var(--text3)">Starts</div><div style="font-size:12px;text-align:right;color:var(--text)">'+totalStarts+' '+trendHtml(startTrend)+'</div>'
         +'<div style="font-size:12px;color:var(--text3)">Subs</div><div style="font-size:12px;text-align:right;color:var(--text)">'+totalSubs+' '+trendHtml(subTrend)+'</div>'
-        +'<div style="font-size:12px;color:var(--text3)">On target</div><div style="font-size:12px;text-align:right;color:var(--text)">'+onTrack+' / '+team.length+'</div>'
+        +'<div style="font-size:12px;color:var(--text3);cursor:help" title="On track = at least 2 starts per completed 4-week period since hire. Veterans (here from Wk 1) are measured over the full range; newer hires get a smaller target that grows every 4 weeks. A strong stretch can cover a weak one, and anyone with under 4 weeks isn\'t counted against yet.">On target</div><div style="font-size:12px;text-align:right;color:var(--text)">'+onTrack+' / '+team.length+'</div>'
       +'</div>'
-      +'<div style="border-top:1px solid var(--border);padding-top:8px;display:flex;flex-direction:column;gap:4px">'
-        +'<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text3)">Per recruiter</span><span style="color:var(--text)">'+startsPerRec.toFixed(1)+' starts/rec · '+subsPerRec+' subs/rec</span></div>'
-        +'<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text3)">Sub → start</span><span style="color:var(--text)">'+convText+'</span></div>'
+      +'<div style="border-top:1px solid var(--border);padding-top:8px;display:flex;flex-direction:column;gap:8px">'
+        +'<div>'
+          +'<div style="font-size:11px;color:var(--text3);margin-bottom:3px">Per recruiter</div>'
+          +'<div style="display:flex;gap:6px">'
+            +'<div style="flex:1;background:var(--border2);border-radius:6px;padding:5px 8px"><span style="font-size:14px;font-weight:600;color:var(--text)">'+startsPerRec.toFixed(1)+'</span> <span style="font-size:11px;color:var(--text3)">starts</span></div>'
+            +'<div style="flex:1;background:var(--border2);border-radius:6px;padding:5px 8px"><span style="font-size:14px;font-weight:600;color:var(--text)">'+subsPerRec+'</span> <span style="font-size:11px;color:var(--text3)">subs</span></div>'
+          +'</div>'
+        +'</div>'
+        +'<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px"><span style="color:var(--text3)">Sub → start</span><span style="color:var(--text);font-weight:600">'+convText+'</span></div>'
       +'</div>'
     +'</div>';
   });
