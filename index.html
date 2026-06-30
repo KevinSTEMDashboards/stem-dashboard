@@ -2798,7 +2798,7 @@ function renderWoWAggregated(m, mgr, view, grain){
     document.getElementById('wow-ln-card').style.display='none';
     document.getElementById('wow-tbl-title').textContent=`Recruiter ${grainName} ${m}`;
     const thead=document.getElementById('wow-thead'),tbody=document.getElementById('wow-tbody');
-    const wowTable=document.querySelector('.wow-table');
+    const wowTable=document.querySelector('#wow-tbl-card .wow-table');
     if(wowTable) wowTable.style.width='100%';
     thead.innerHTML=`<tr><th class="sticky-col-1" style="min-width:130px">Recruiter</th><th class="sticky-col-2" style="min-width:60px">Mgr</th><th style="text-align:right">Total</th><th style="text-align:right">Avg</th>${labels.map(l=>`<th style="text-align:right;min-width:80px">${l}</th>`).join('')}</tr>`;
     tbody.innerHTML=recs.map(r=>{
@@ -2887,7 +2887,7 @@ function renderWoW(){
     document.getElementById('wow-tbl-title').textContent=`Recruiter weekly ${m}`;
     const thead=document.getElementById('wow-thead'),tbody=document.getElementById('wow-tbody');
     // Constrain table width when only showing one week
-    const wowTable = document.querySelector('.wow-table');
+    const wowTable = document.querySelector('#wow-tbl-card .wow-table');
     if (wowTable) wowTable.style.width = singleWk ? 'auto' : '100%';
     thead.innerHTML=`<tr><th class="sticky-col-1" style="min-width:${singleWk?'150':'130'}px">Recruiter</th><th class="sticky-col-2" style="min-width:${singleWk?'80':'60'}px">Mgr</th>${!singleWk?`<th style="text-align:right">Total</th><th style="text-align:right">YTD avg</th><th style="text-align:right">4w avg</th>`:''}${m==='starts'?'<th style="text-align:center;white-space:nowrap" title="Weeks since this recruiter last had a start">Wks since last start</th>':''}${awl.map(w=>`<th style="text-align:right;min-width:70px">${w}</th>`).join('')}${currentUser?'<th style="width:32px"></th>':''}</tr>`;
     tbody.innerHTML=recs.map(r=>{
