@@ -3650,7 +3650,7 @@ function renderTiSnapshot(recsArg, fArg, tArg) {
     var topPerf = recs.slice().sort(function(a,b){return b.starts-a.starts;})[0];
     var improved = recs.filter(function(r){return r.priorSubs>0;}).sort(function(a,b){return (b.subs-b.priorSubs)-(a.subs-a.priorSubs);})[0];
     var dropped = recs.filter(function(r){return r.priorSubs>0;}).sort(function(a,b){return (a.subs-a.priorSubs)-(b.subs-b.priorSubs);})[0];
-    var zeroRecs = recs.filter(function(r){ return r.subs===0||r.starts===0||r.ivs===0; }).slice(0,8);
+    var zeroRecs = priorIdx>=0 ? recs.filter(function(r){ return r.priorSubs===0||r.priorLeads===0; }) : [];
 
     function snapshotRow(iconBg, iconCol, icon, title, sub) {
       return '<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:0.5px solid var(--border)">'
@@ -3675,10 +3675,10 @@ function renderTiSnapshot(recsArg, fArg, tArg) {
     if (dropped && dropped.subs < dropped.priorSubs) html += snapshotRow('#FCEBEB','#A32D2D','📉','Biggest drop — '+dropped.name, dropped.subs+' subs ('+(dropped.subs-dropped.priorSubs)+' vs prior week) · '+dropped.starts+' starts');
     if (zeroRecs.length) {
       var zLines = zeroRecs.map(function(r){
-        var m=[]; if(r.subs===0)m.push('0 subs'); if(r.ivs===0)m.push('0 interviews'); if(r.placements===0)m.push('0 placements'); if(r.starts===0)m.push('0 starts');
-        return r.name+' — '+m.join(', ');
+        var m=[]; if(r.priorSubs===0)m.push('0 subs'); if(r.priorLeads===0)m.push('0 leads');
+        return r.name+' — '+m.join(', ')+' (prior wk)';
       }).join('<br>');
-      html += snapshotRow('#FAEEDA','#854F0B','⚠️','Missing activity ('+zeroRecs.length+' recruiters)', zLines);
+      html += snapshotRow('#FAEEDA','#854F0B','⚠️','Missing activity, prior week ('+zeroRecs.length+' recruiters)', zLines);
     }
     html += '</div>';
     wrap.innerHTML = html;
