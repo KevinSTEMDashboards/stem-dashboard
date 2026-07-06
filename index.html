@@ -270,6 +270,28 @@ tbody tr:nth-child(even):hover td{background:var(--bg2)}
 .cell-input{width:44px;height:24px;font-size:12px;text-align:center;padding:0 4px;border:1px solid var(--accent);border-radius:4px;background:var(--bg);color:var(--text);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent)}
 .cell-saving{opacity:.5;pointer-events:none}
 td.editing{padding:2px 4px!important}
+/* ── Recruiter Profile ── */
+.pf-name-link{cursor:pointer}
+.pf-name-link:hover{color:var(--accent);text-decoration:underline}
+.pf-pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
+.pf-funnel{display:flex;align-items:stretch;flex-wrap:wrap;gap:0}
+.pf-stage{flex:1;min-width:118px;text-align:center;padding:12px 6px;border-radius:var(--radius);background:var(--bg2);border:1px solid var(--border)}
+.pf-num{font-size:24px;font-weight:800}
+.pf-lbl{font-size:10.5px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.pf-vs{font-size:11px;margin-top:5px;font-weight:600}
+.pf-up{color:var(--green)}.pf-down{color:var(--red)}.pf-flat{color:var(--text3)}
+.pf-conv{display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:78px;padding:0 4px}
+.pf-conv .pf-rate{font-size:14px;font-weight:800}
+.pf-conv .pf-rlbl{font-size:9.5px;color:var(--text3);text-transform:uppercase}
+.pf-conv .pf-rmed{font-size:10px;margin-top:2px;color:var(--text3)}
+.pf-cohort-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.pf-cohort-lbl{width:96px;font-size:12px;color:var(--text2);text-align:right;flex-shrink:0}
+.pf-cohort-track{flex:1;height:20px;background:var(--bg4);border-radius:10px;position:relative}
+.pf-cohort-fill{height:100%;border-radius:10px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:11px;font-weight:700;min-width:42px;color:#fff}
+.pf-cohort-med{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text3)}
+.pf-pctile{font-size:12px;font-weight:700;width:76px;flex-shrink:0}
+.pf-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:860px){.pf-grid2{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -685,7 +707,7 @@ td.editing{padding:2px 4px!important}
 
 <!-- RECRUITER DETAIL -->
 <div class="tab-panel" id="tab-recruiter">
-  <div class="wctrl"><select id="rec-select" style="min-width:210px"></select></div>
+  <div class="wctrl"><select id="rec-select" style="min-width:210px"></select><button class="btn" onclick="openRecruiterProfile(document.getElementById('rec-select').value)" style="height:32px;font-size:12px;margin-left:8px" title="Deep-dive profile: funnel, pacing, cohort benchmark, 1:1 export">👤 Open profile</button></div>
   <div class="kpis" id="rec-kpis"></div>
   <div class="charts-row">
     <div class="card card-accent-blue"><div class="card-hdr"><span class="card-title">Weekly submittals</span></div><div class="chart-wrap"><canvas id="rSubsC" role="img" aria-label="Weekly subs"></canvas></div></div>
@@ -1109,6 +1131,17 @@ td.editing{padding:2px 4px!important}
       <button class="btn" onclick="confirmArchive()" style="height:32px;font-size:12px;background:var(--amber-bg);color:var(--amber);border-color:var(--amber);flex:1">Archive</button>
       <button class="btn" onclick="closeArchiveModal()" style="height:32px;font-size:12px;flex:1">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Recruiter Profile modal ── -->
+<div id="profile-modal" style="display:none;position:fixed;inset:0;z-index:9985;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 10px">
+  <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:18px;width:1020px;max-width:96vw;box-shadow:0 8px 32px rgba(0,0,0,0.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Recruiter Profile</div>
+      <button class="btn" onclick="closeRecruiterProfile()" style="width:28px;height:28px;padding:0;justify-content:center;font-size:16px">×</button>
+    </div>
+    <div id="profile-body"></div>
   </div>
 </div>
 <script>try {
@@ -3791,7 +3824,7 @@ function renderTiSparklines(recs, f, t) {
     var sparkColor = trendPct>0?'#639922':trendPct<0?'#E24B4A':'#888780';
 
     html += '<div style="display:grid;grid-template-columns:150px 1fr 60px;gap:8px;align-items:center;padding:6px 14px;border-bottom:0.5px solid var(--border)">'
-      +'<div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
+      +'<div class="pf-name-link" onclick="openProfileEnc(\''+encodeURIComponent(r.name)+'\')" title="Open profile" style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
       +'<div style="height:32px;position:relative"><canvas id="'+cid+'" role="img" aria-label="'+r.name+' trend" style="position:absolute;inset:0;width:100%;height:100%"></canvas></div>'
       +'<div style="font-size:12px;font-weight:600;text-align:right;color:'+trendCol+'">'+trendStr+'</div>'
     +'</div>';
@@ -5536,7 +5569,7 @@ function showLbModal(kpiIdx, mgrFilter){
     return '<div class="lb-row">'
       +'<div class="'+(rank<=3?'lb-rank lb-rank-'+rank:'lb-rank')+'">'+rankDisp+'</div>'
       +'<div style="flex:1;min-width:0">'
-        +'<div style="display:flex;align-items:center;gap:6px"><div class="lb-name">'+r.name+'</div>'
+        +'<div style="display:flex;align-items:center;gap:6px"><div class="lb-name pf-name-link" onclick="openProfileEnc(\''+encodeURIComponent(r.name)+'\')" title="Open profile">'+r.name+'</div>'
         +'<span class="lb-mgr-tag" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span></div>'
         +'<div class="lb-bar-wrap"><div class="lb-bar" style="width:'+barW+'%;background:'+kpi.color+'"></div></div>'
       +'</div>'
@@ -5578,7 +5611,7 @@ function renderLeaderboard(){
       return '<div class="lb-row">'
         +'<div class="'+(rank<=3?'lb-rank lb-rank-'+rank:'lb-rank')+'">'+rankDisp+'</div>'
         +'<div style="flex:1;min-width:0">'
-          +'<div style="display:flex;align-items:center;gap:6px"><div class="lb-name">'+r.name+'</div>'
+          +'<div style="display:flex;align-items:center;gap:6px"><div class="lb-name pf-name-link" onclick="openProfileEnc(\''+encodeURIComponent(r.name)+'\')" title="Open profile">'+r.name+'</div>'
           +'<span class="lb-mgr-tag" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span></div>'
           +'<div class="lb-bar-wrap"><div class="lb-bar" style="width:'+barW+'%;background:'+kpi.color+'"></div></div>'
         +'</div>'
@@ -6581,6 +6614,375 @@ window.safeSet = safeSet;
 // then refresh silently from Google Sheets in the background.
 renderOverview();
 updateSyncBadge();
+// ─── RECRUITER PROFILE ───
+// Click-through drill-down for evaluating one recruiter: funnel vs team medians,
+// weekly trend + momentum, pacing vs the on-track rule, tenure-cohort benchmark,
+// and a printable 1:1 review sheet.
+var profileName = null;
+var profileRangeMode = 'full'; // 'full' | '12' | '4'
+var _pfCharts = {};
+
+function openProfileEnc(enc){ openRecruiterProfile(decodeURIComponent(enc)); }
+
+function openRecruiterProfile(name){
+  if(!name) return;
+  profileName = name;
+  profileRangeMode = 'full';
+  renderRecruiterProfile();
+  document.getElementById('profile-modal').style.display = 'flex';
+}
+function closeRecruiterProfile(){
+  document.getElementById('profile-modal').style.display = 'none';
+  Object.keys(_pfCharts).forEach(function(k){ try{_pfCharts[k].destroy();}catch(e){} });
+  _pfCharts = {};
+}
+function setProfileRange(mode){ profileRangeMode = mode; renderRecruiterProfile(); }
+
+// Find full (unsliced) recruiter record by name; active first, then archived
+function _pfFind(name){
+  var norm = function(s){ return (s||'').trim().replace(/\s+/g,' ').toLowerCase(); };
+  var n = norm(name);
+  var r = RECRUITERS.find(function(x){ return norm(x.name)===n; });
+  if(r) return {rec:r, archived:false};
+  var a = (archivedRecruiters||[]).find(function(x){ return norm(x.name)===n; });
+  if(a) return {rec:a, archived:true};
+  return null;
+}
+
+// First week the recruiter was active: startWeekIndex, or first non-null data week
+function _pfFirstActive(r){
+  var swi = r.startWeekIndex || 0;
+  var firstData = -1;
+  var len = (r.subs||[]).length;
+  for(var i=0;i<len;i++){
+    if(r.subs[i]!=null || (r.ivs&&r.ivs[i]!=null) || (r.starts&&r.starts[i]!=null)){ firstData=i; break; }
+  }
+  return Math.max(swi, firstData<0?0:firstData);
+}
+function _pfSum(arr,f,t){ var s=0; for(var i=f;i<=t&&i<(arr||[]).length;i++) s+=(arr[i]||0); return s; }
+function _pfMedian(vals){
+  var v = vals.filter(function(x){return x!=null&&isFinite(x);}).sort(function(a,b){return a-b;});
+  if(!v.length) return null;
+  var m = Math.floor(v.length/2);
+  return v.length%2 ? v[m] : (v[m-1]+v[m])/2;
+}
+function _pfOrdinal(n){
+  var s=['th','st','nd','rd'], v=n%100;
+  return n+(s[(v-20)%10]||s[v]||s[0]);
+}
+function _pfEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Percentile of subject among cohort values (share of cohort at or below subject)
+function _pfPercentile(vals, v){
+  var clean = vals.filter(function(x){return x!=null&&isFinite(x);});
+  if(clean.length < 2) return null;
+  var atOrBelow = clean.filter(function(x){ return x <= v + 1e-9; }).length;
+  return Math.round(atOrBelow / clean.length * 100);
+}
+
+// Build per-recruiter range stats for team/cohort comparisons.
+// Each recruiter is measured over [max(f, their firstActive) .. t] so ramping
+// hires aren't penalized for weeks before they existed.
+function _pfTeamStats(f, t){
+  return RECRUITERS.map(function(r){
+    var fa = _pfFirstActive(r);
+    var from = Math.max(f, fa);
+    var wks = Math.max(0, t - from + 1);
+    if(!wks) return null;
+    var subs=_pfSum(r.subs,from,t), ivs=_pfSum(r.ivs,from,t),
+        pls=_pfSum(r.placements||[],from,t), sts=_pfSum(r.starts,from,t);
+    return {
+      name:r.name, wks:wks,
+      subs:subs, ivs:ivs, placements:pls, starts:sts,
+      subsWk:subs/wks, ivsWk:ivs/wks, plsWk:pls/wks, stsWk:sts/wks,
+      s2i: subs>=5 ? ivs/subs*100 : null,
+      i2p: ivs>=5 ? pls/ivs*100 : null,
+      p2s: pls>=3 ? sts/pls*100 : null,
+      hireDate: getHireDate(r.name) || r.hireDate || ''
+    };
+  }).filter(Boolean);
+}
+
+function _pfMonthsBetween(isoA, isoB){
+  var a=new Date(isoA+'T00:00:00'), b=new Date(isoB+'T00:00:00');
+  if(isNaN(a)||isNaN(b)) return null;
+  return Math.abs((a.getFullYear()-b.getFullYear())*12 + (a.getMonth()-b.getMonth()));
+}
+
+// vs-median arrow html for per-week rates
+function _pfVsHtml(v, med, higherIsBetter){
+  if(med==null || !isFinite(med) || med===0) return '<span class="pf-vs pf-flat">— no benchmark</span>';
+  var d = Math.round((v-med)/med*100);
+  if(Math.abs(d)<5) return '<span class="pf-vs pf-flat">— even vs team</span>';
+  var good = (d>0)===!!higherIsBetter;
+  return '<span class="pf-vs '+(good?'pf-up':'pf-down')+'">'+(d>0?'▲ +':'▼ ')+d+'% vs team</span>';
+}
+
+function renderRecruiterProfile(){
+  var found = _pfFind(profileName);
+  var body = document.getElementById('profile-body');
+  if(!found){ body.innerHTML='<div style="padding:20px;color:var(--text3)">No data found for "'+_pfEsc(profileName)+'"</div>'; return; }
+  var r = found.rec, isArch = found.archived;
+  var mc = MGR_COLORS[r.manager]||'#888';
+  Object.keys(_pfCharts).forEach(function(k){ try{_pfCharts[k].destroy();}catch(e){} });
+  _pfCharts = {};
+
+  var firstActive = _pfFirstActive(r);
+  var lastWk = Math.min((r.subs||[]).length, wkLabels.length) - 1;
+  if(lastWk < firstActive) lastWk = firstActive;
+  var f, t = lastWk;
+  if(profileRangeMode==='4') f = Math.max(firstActive, t-3);
+  else if(profileRangeMode==='12') f = Math.max(firstActive, t-11);
+  else f = firstActive;
+  var rangeWks = t - f + 1;
+  var tenureWks = lastWk - firstActive + 1;
+
+  // ── Range totals & funnel ──
+  var subs=_pfSum(r.subs,f,t), ivs=_pfSum(r.ivs,f,t),
+      pls=_pfSum(r.placements||[],f,t), sts=_pfSum(r.starts,f,t);
+  var s2i = subs>0 ? ivs/subs*100 : null;
+  var i2p = ivs>0 ? pls/ivs*100 : null;
+  var p2s = pls>0 ? sts/pls*100 : null;
+
+  // ── Team benchmarks over same range (active recruiters) ──
+  var team = _pfTeamStats(f, t);
+  var medSubsWk=_pfMedian(team.map(function(x){return x.subsWk;}));
+  var medIvsWk=_pfMedian(team.map(function(x){return x.ivsWk;}));
+  var medPlsWk=_pfMedian(team.map(function(x){return x.plsWk;}));
+  var medStsWk=_pfMedian(team.map(function(x){return x.stsWk;}));
+  var medS2i=_pfMedian(team.map(function(x){return x.s2i;}));
+  var medI2p=_pfMedian(team.map(function(x){return x.i2p;}));
+  var medP2s=_pfMedian(team.map(function(x){return x.p2s;}));
+
+  // ── On-track (full tenure, existing rule) ──
+  var tenureStarts = _pfSum(r.starts, firstActive, lastWk);
+  var target = onTrackTarget(firstActive, firstActive, lastWk);
+  var onTrk = tenureStarts >= target;
+  var onTrackTip = 'On-track rule: cumulative starts ≥ 2 per completed 4-week block since hire. '+tenureStarts+' starts vs target of '+target+' over '+tenureWks+' active weeks.';
+
+  // ── Momentum: last-4wk subs avg vs prior-4wk ──
+  var momHtml='<span class="pf-pill" style="background:var(--bg4);color:var(--text3)">Momentum: — not enough weeks</span>';
+  if(tenureWks>=8){
+    var last4=_pfSum(r.subs,lastWk-3,lastWk)/4, prior4=_pfSum(r.subs,lastWk-7,lastWk-4)/4;
+    if(prior4>0){
+      var md=Math.round((last4-prior4)/prior4*100);
+      if(md>=15) momHtml='<span class="pf-pill" style="background:var(--green-bg);color:var(--green)" title="Subs 4-wk avg: '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior">Momentum: ▲ Heating ('+(md>0?'+':'')+md+'%)</span>';
+      else if(md<=-15) momHtml='<span class="pf-pill" style="background:var(--amber-bg);color:var(--amber)" title="Subs 4-wk avg: '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior">Momentum: ▼ Cooling ('+md+'%)</span>';
+      else momHtml='<span class="pf-pill" style="background:var(--bg4);color:var(--text2)" title="Subs 4-wk avg: '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior">Momentum: → Steady ('+(md>0?'+':'')+md+'%)</span>';
+    }
+  }
+
+  // ── Cohort: peers hired within ±12mo (widen to ±24 if thin) ──
+  var hd = getHireDate(r.name) || r.hireDate || '';
+  var cohort = team, cohortLabel = 'all active recruiters';
+  if(hd){
+    var within = function(mo){ return team.filter(function(x){
+      if(x.name===r.name) return true;
+      if(!x.hireDate) return false;
+      var m=_pfMonthsBetween(hd, x.hireDate);
+      return m!=null && m<=mo;
+    });};
+    var c12=within(12);
+    if(c12.length>=4){ cohort=c12; cohortLabel='hired within ±12 mo'; }
+    else { var c24=within(24); if(c24.length>=4){ cohort=c24; cohortLabel='hired within ±24 mo'; } }
+  }
+  var self = team.find(function(x){return x.name===r.name;}) ||
+    {subsWk:subs/rangeWks, ivsWk:ivs/rangeWks, plsWk:pls/rangeWks, stsWk:sts/rangeWks};
+  var cohortRows=[
+    {lbl:'Subs / wk', v:self.subsWk, vals:cohort.map(function(x){return x.subsWk;}), color:'var(--c-subs)', dec:1},
+    {lbl:'Interviews / wk', v:self.ivsWk, vals:cohort.map(function(x){return x.ivsWk;}), color:'var(--c-ivs)', dec:1},
+    {lbl:'Placements / wk', v:self.plsWk, vals:cohort.map(function(x){return x.plsWk;}), color:'var(--purple)', dec:2},
+    {lbl:'Starts / wk', v:self.stsWk, vals:cohort.map(function(x){return x.stsWk;}), color:'var(--c-starts)', dec:2}
+  ];
+  var startsPctile = _pfPercentile(cohortRows[3].vals, self.stsWk);
+
+  // ── Coaching signal: biggest conversion gap below team median ──
+  var gaps=[];
+  if(s2i!=null && medS2i!=null && subs>=5) gaps.push({stage:'sub → interview', v:s2i, med:medS2i, gap:s2i-medS2i});
+  if(i2p!=null && medI2p!=null && ivs>=5) gaps.push({stage:'interview → placement', v:i2p, med:medI2p, gap:i2p-medI2p});
+  if(p2s!=null && medP2s!=null && pls>=3) gaps.push({stage:'placement → start', v:p2s, med:medP2s, gap:p2s-medP2s});
+  var signal;
+  var worst = gaps.slice().sort(function(a,b){return a.gap-b.gap;})[0];
+  var volumeLow = medSubsWk!=null && self.subsWk < medSubsWk*0.8;
+  if(worst && worst.gap <= -5){
+    signal = '<b style="color:var(--text)">Coaching signal:</b> '+ (volumeLow ? 'Both volume and conversion need attention — subs/wk is below team median and ' : 'Volume isn\'t the problem — ')
+      + worst.stage+' ('+Math.round(worst.v)+'% vs team '+Math.round(worst.med)+'%) is the biggest leak.';
+  } else if(volumeLow){
+    signal = '<b style="color:var(--text)">Coaching signal:</b> Conversion rates hold up vs team, but top-of-funnel volume is light ('+self.subsWk.toFixed(1)+' subs/wk vs team median '+medSubsWk.toFixed(1)+'). More at-bats.';
+  } else if(gaps.length){
+    signal = '<b style="color:var(--text)">Coaching signal:</b> Funnel is healthy — every measurable stage is at or above team median for this range.';
+  } else {
+    signal = '<b style="color:var(--text)">Coaching signal:</b> Not enough volume in this range to benchmark conversions reliably — widen the range.';
+  }
+
+  // ── Build HTML ──
+  function stage(num,lbl,color,v,med,hib){
+    return '<div class="pf-stage"><div class="pf-num" style="color:'+color+'">'+num+'</div><div class="pf-lbl">'+lbl+'</div>'+_pfVsHtml(v,med,hib)+'</div>';
+  }
+  function conv(rate,lbl,med){
+    var cls='pf-flat';
+    if(rate!=null&&med!=null) cls = rate>=med+3?'pf-up':rate<=med-3?'pf-down':'pf-flat';
+    return '<div class="pf-conv"><span class="pf-rate '+cls+'">'+(rate==null?'—':Math.round(rate)+'%')+'</span><span class="pf-rlbl">'+lbl+'</span><span class="pf-rmed">'+(med==null?'':'team '+Math.round(med)+'%')+'</span></div>';
+  }
+  var initials = r.name.split(/\s+/).map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase();
+  var rangeBtn = function(mode,lbl){
+    var on = profileRangeMode===mode;
+    return '<button class="btn" onclick="setProfileRange(\''+mode+'\')" style="height:30px;font-size:12px'+(on?';background:var(--accent-dim);border-color:var(--accent);color:var(--accent)':'')+'">'+lbl+'</button>';
+  };
+
+  body.innerHTML =
+  '<div class="card" style="margin-bottom:14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'
+      +'<div style="display:flex;align-items:center;gap:13px">'
+        +'<div style="width:50px;height:50px;border-radius:50%;background:'+mc+'22;color:'+mc+';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;border:1px solid var(--border2)">'+initials+'</div>'
+        +'<div><div style="font-size:20px;font-weight:800">'+_pfEsc(r.name)+(isArch?' <span style="font-size:11px;color:var(--amber);font-weight:700">📦 ARCHIVED</span>':'')+'</div>'
+        +'<div style="color:var(--text2);font-size:12.5px;margin-top:3px">Manager: <b style="color:'+mc+'">'+_pfEsc(r.manager)+'</b>'
+          +(hd?' · Hired <b style="color:var(--text)">'+formatHireDate(hd)+'</b> ('+calcTenure(hd)+')':'')
+          +' · Active <b style="color:var(--text)">'+tenureWks+' wks</b> of data</div></div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+        +'<span class="pf-pill" style="background:'+(onTrk?'var(--green-bg)':'var(--red-bg)')+';color:'+(onTrk?'var(--green)':'var(--red)')+';cursor:help" title="'+_pfEsc(onTrackTip)+'">'+(onTrk?'✓ On track':'✗ Off track')+' · '+tenureStarts+' / '+target+' starts</span>'
+        +momHtml
+        +(startsPctile!=null?'<span class="pf-pill" style="background:var(--accent-dim);color:var(--accent)">'+_pfOrdinal(startsPctile)+' pctile starts/wk</span>':'')
+      +'</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">'
+      +'<span style="font-size:12px;color:var(--text3)">Range:</span>'
+      +rangeBtn('4','Last 4 wks')+rangeBtn('12','Last 12 wks')+rangeBtn('full','Full tenure')
+      +'<span style="font-size:11.5px;color:var(--text3)">'+wkLabels[f]+' → '+wkLabels[t]+' ('+rangeWks+' wks)</span>'
+      +'<span style="flex:1"></span>'
+      +'<button class="btn" onclick="exportProfileSheet()" style="height:30px;font-size:12px;background:var(--accent);border-color:var(--accent);color:#fff">📄 Export 1:1 sheet</button>'
+    +'</div>'
+  +'</div>'
+  +'<div class="card" style="margin-bottom:14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px"><span class="card-title">Conversion funnel — '+wkLabels[f]+' → '+wkLabels[t]+'</span><span style="font-size:11px;color:var(--text3)">count arrows = per-week rate vs team median, same range</span></div>'
+    +'<div class="pf-funnel">'
+      +stage(subs,'Submissions','var(--c-subs)',self.subsWk,medSubsWk,true)
+      +conv(s2i,'sub → iv',medS2i)
+      +stage(ivs,'Interviews','var(--c-ivs)',self.ivsWk,medIvsWk,true)
+      +conv(i2p,'iv → plc',medI2p)
+      +stage(pls,'Placements','var(--purple)',self.plsWk,medPlsWk,true)
+      +conv(p2s,'plc → start',medP2s)
+      +stage(sts,'Starts','var(--c-starts)',self.stsWk,medStsWk,true)
+    +'</div>'
+    +'<div style="margin-top:12px;font-size:12px;color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px">💡 '+signal+'</div>'
+  +'</div>'
+  +'<div class="pf-grid2" style="margin-bottom:14px">'
+    +'<div class="card" style="margin-bottom:0"><div class="card-hdr"><span class="card-title">Weekly activity trend</span></div><div style="position:relative;height:230px"><canvas id="pf-trend"></canvas></div></div>'
+    +'<div class="card" style="margin-bottom:0"><div class="card-hdr"><span class="card-title">Pacing — cumulative starts vs required</span><span style="font-size:11px;color:var(--text3);cursor:help" title="'+_pfEsc(onTrackTip)+'">ⓘ on-track rule</span></div><div style="position:relative;height:230px"><canvas id="pf-pace"></canvas></div></div>'
+  +'</div>'
+  +'<div class="card" style="margin-bottom:0">'
+    +'<div class="card-hdr"><span class="card-title">Cohort benchmark — '+cohortLabel+' (n = '+cohort.length+')</span><span style="font-size:11px;color:var(--text3)">per-active-week averages, same range</span></div>'
+    +cohortRows.map(function(row){
+      var max = Math.max.apply(null, row.vals.concat([row.v]).filter(function(x){return isFinite(x);}));
+      var med = _pfMedian(row.vals);
+      var w = max>0 ? Math.max(6, Math.round(row.v/max*100)) : 6;
+      var mPos = (max>0&&med!=null) ? Math.round(med/max*100) : null;
+      var p = _pfPercentile(row.vals, row.v);
+      var pCls = p==null?'pf-flat':p>=60?'pf-up':p<=40?'pf-down':'pf-flat';
+      return '<div class="pf-cohort-row"><span class="pf-cohort-lbl">'+row.lbl+'</span>'
+        +'<div class="pf-cohort-track">'+(mPos!=null?'<div class="pf-cohort-med" style="left:'+mPos+'%" title="cohort median: '+med.toFixed(row.dec)+'"></div>':'')
+        +'<div class="pf-cohort-fill" style="width:'+w+'%;background:'+row.color+'">'+row.v.toFixed(row.dec)+'</div></div>'
+        +'<span class="pf-pctile '+pCls+'">'+(p==null?'—':_pfOrdinal(p)+' pctile')+'</span></div>';
+    }).join('')
+    +'<div style="font-size:11px;color:var(--text3);margin-top:4px">Tick mark = cohort median. Percentile = share of cohort at or below this recruiter.</div>'
+  +'</div>';
+
+  // ── Charts ──
+  var labels=[], dSubs=[], dIvs=[], dSts=[], roll=[];
+  for(var i=f;i<=t;i++){
+    labels.push(wkLabels[i]);
+    dSubs.push(r.subs[i]||0); dIvs.push(r.ivs[i]||0); dSts.push(r.starts[i]||0);
+  }
+  for(var j=0;j<dSubs.length;j++){
+    var lo=Math.max(0,j-3), seg=dSubs.slice(lo,j+1);
+    roll.push(+(seg.reduce(function(a,b){return a+b;},0)/seg.length).toFixed(1));
+  }
+  _pfCharts.trend = new Chart(document.getElementById('pf-trend'),{
+    type:'bar',
+    data:{labels:labels,datasets:[
+      {label:'Subs',data:dSubs,backgroundColor:'rgba(79,142,247,0.75)',borderRadius:3,order:3},
+      {label:'Interviews',data:dIvs,backgroundColor:'rgba(52,209,122,0.75)',borderRadius:3,order:3},
+      {label:'Starts',data:dSts,backgroundColor:'rgba(245,86,86,0.85)',borderRadius:3,order:3},
+      {label:'Subs 4-wk avg',data:roll,type:'line',borderColor:'#f5a623',borderWidth:2,pointRadius:0,tension:0.35,order:1}
+    ]},
+    options:{maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:10,font:{size:10}}}},
+      scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{ticks:{font:{size:10}},beginAtZero:true}}}
+  });
+  var pLabels=[], cum=[], req=[], c=0;
+  for(var w=firstActive;w<=lastWk;w++){
+    pLabels.push(wkLabels[w]);
+    c += (r.starts[w]||0); cum.push(c);
+    req.push(2*Math.floor((w-firstActive+1)/4));
+  }
+  _pfCharts.pace = new Chart(document.getElementById('pf-pace'),{
+    type:'line',
+    data:{labels:pLabels,datasets:[
+      {label:'Cumulative starts',data:cum,borderColor:'#34d17a',backgroundColor:'rgba(52,209,122,0.12)',fill:true,borderWidth:2,pointRadius:0,tension:0.2},
+      {label:'Required pace',data:req,borderColor:'#f55656',borderDash:[6,4],borderWidth:2,pointRadius:0,stepped:true}
+    ]},
+    options:{maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:10,font:{size:10}}}},
+      scales:{x:{ticks:{font:{size:10},maxTicksLimit:8},grid:{display:false}},y:{ticks:{font:{size:10}},beginAtZero:true}}}
+  });
+}
+
+// ── Printable 1:1 review sheet ──
+function exportProfileSheet(){
+  var found=_pfFind(profileName);
+  if(!found) return;
+  var r=found.rec;
+  var firstActive=_pfFirstActive(r);
+  var lastWk=Math.min((r.subs||[]).length,wkLabels.length)-1;
+  if(lastWk<firstActive) lastWk=firstActive;
+  var f,t=lastWk;
+  if(profileRangeMode==='4') f=Math.max(firstActive,t-3);
+  else if(profileRangeMode==='12') f=Math.max(firstActive,t-11);
+  else f=firstActive;
+  var rangeWks=t-f+1;
+  var subs=_pfSum(r.subs,f,t),ivs=_pfSum(r.ivs,f,t),pls=_pfSum(r.placements||[],f,t),sts=_pfSum(r.starts,f,t);
+  var team=_pfTeamStats(f,t);
+  var self=team.find(function(x){return x.name===r.name;});
+  var tenureStarts=_pfSum(r.starts,firstActive,lastWk);
+  var target=onTrackTarget(firstActive,firstActive,lastWk);
+  var hd=getHireDate(r.name)||r.hireDate||'';
+  var d=new Date();
+  var pct=function(a,b){return b>0?Math.round(a/b*100)+'%':'—';};
+  var medRow=function(key){var m=_pfMedian(team.map(function(x){return x[key];}));return m==null?'—':m.toFixed(2);};
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>1:1 Review — '+_pfEsc(r.name)+'</title><style>'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +"body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;color:#1a1c24;background:#fff;padding:28px 32px}"
+    +'.h1{font-size:20px;font-weight:800}'
+    +'.sub{color:#5c6480;font-size:12px;margin-top:4px}'
+    +'.hdr{padding-bottom:12px;border-bottom:2px solid #4f8ef7;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-end}'
+    +'.h2{font-size:13px;font-weight:700;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #e8eaf0}'
+    +'table{width:100%;border-collapse:collapse;font-size:12px}'
+    +'th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #e8eaf0}'
+    +'th{background:#f8f9fc;font-weight:700}'
+    +'.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-weight:700;font-size:11px}'
+    +'.lines{margin-top:8px}.lines div{border-bottom:1px solid #cfd4e0;height:26px}'
+    +'@media print{body{padding:16px}}'
+    +'</style></head><body>'
+    +'<div class="hdr"><div><div class="h1">1:1 Review — '+_pfEsc(r.name)+'</div>'
+    +'<div class="sub">Manager: '+_pfEsc(r.manager)+(hd?' · Hired '+formatHireDate(hd)+' ('+calcTenure(hd)+')':'')+' · Range: '+wkLabels[f]+' → '+wkLabels[t]+' ('+rangeWks+' wks)</div></div>'
+    +'<div class="sub">Generated '+(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear()+'</div></div>'
+    +'<span class="badge" style="background:'+(tenureStarts>=target?'#e3f7ec;color:#1a7a45':'#fdeaea;color:#b93030')+'">'+(tenureStarts>=target?'✓ ON TRACK':'✗ OFF TRACK')+' — '+tenureStarts+' starts vs target '+target+'</span>'
+    +'<span class="sub" style="margin-left:8px">Rule: cumulative starts ≥ 2 per completed 4-week block since hire.</span>'
+    +'<div class="h2">Funnel — selected range</div>'
+    +'<table><tr><th></th><th>Subs</th><th>Interviews</th><th>Placements</th><th>Starts</th></tr>'
+    +'<tr><td><b>Total</b></td><td>'+subs+'</td><td>'+ivs+'</td><td>'+pls+'</td><td>'+sts+'</td></tr>'
+    +'<tr><td><b>Per week</b></td><td>'+(subs/rangeWks).toFixed(1)+'</td><td>'+(ivs/rangeWks).toFixed(1)+'</td><td>'+(pls/rangeWks).toFixed(2)+'</td><td>'+(sts/rangeWks).toFixed(2)+'</td></tr>'
+    +'<tr><td><b>Team median /wk</b></td><td>'+medRow('subsWk')+'</td><td>'+medRow('ivsWk')+'</td><td>'+medRow('plsWk')+'</td><td>'+medRow('stsWk')+'</td></tr>'
+    +'<tr><td><b>Stage conversion</b></td><td>—</td><td>'+pct(ivs,subs)+' of subs</td><td>'+pct(pls,ivs)+' of ivs</td><td>'+pct(sts,pls)+' of placements</td></tr></table>'
+    +'<div class="h2">Discussion notes</div><div class="lines"><div></div><div></div><div></div><div></div><div></div></div>'
+    +'<div class="h2">Goals for next period</div><div class="lines"><div></div><div></div><div></div></div>'
+    +'</body></html>';
+  var w=window.open('','_blank');
+  if(!w){alert('Pop-up blocked — allow pop-ups to export the 1:1 sheet.');return;}
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){try{w.print();}catch(e){}},400);
+}
+
 loadFromSheets();
 
 } catch(e) { console.error('STEM Dashboard error:', e.message, e.stack); document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;color:#f55656;background:#16181d;min-height:100vh"><h2>Dashboard failed to load</h2><p style="margin-top:12px;color:#9ba3b8">Error: ' + e.message + '</p><p style="margin-top:8px;color:#5c6480;font-size:12px">' + (e.stack||'').replace(/\n/g,'<br>') + '</p></div>'; }
