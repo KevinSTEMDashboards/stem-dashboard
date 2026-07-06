@@ -1135,7 +1135,7 @@ td.editing{padding:2px 4px!important}
 </div>
 
 <!-- ── Recruiter Profile modal ── -->
-<div id="profile-modal" style="display:none;position:fixed;inset:0;z-index:9985;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 10px">
+<div id="profile-modal" onclick="if(event.target===this)closeRecruiterProfile()" style="display:none;position:fixed;inset:0;z-index:9985;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 10px">
   <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:18px;width:1020px;max-width:96vw;box-shadow:0 8px 32px rgba(0,0,0,0.4)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Recruiter Profile</div>
@@ -5573,7 +5573,7 @@ function showLbModal(kpiIdx, mgrFilter){
         +'<span class="lb-mgr-tag" style="background:'+mc+'22;color:'+mc+'">'+r.manager+'</span></div>'
         +'<div class="lb-bar-wrap"><div class="lb-bar" style="width:'+barW+'%;background:'+kpi.color+'"></div></div>'
       +'</div>'
-      +'<div class="lb-val" style="color:'+(kpi.ratioKey?'ratioColor(r[kpi.wkey],kpi.ratioKey)':kpi.color)+'">'+kpi.fmt(r[kpi.wkey])+'</div>'
+      +'<div class="lb-val" style="color:'+(kpi.ratioKey?ratioColor(r[kpi.wkey],kpi.ratioKey):kpi.color)+'">'+kpi.fmt(r[kpi.wkey])+'</div>'
     +'</div>';
   }).join('');
   document.getElementById('lb-modal').style.display='flex';
@@ -6621,6 +6621,14 @@ updateSyncBadge();
 var profileName = null;
 var profileRangeMode = 'full'; // 'full' | '12' | '4'
 var _pfCharts = {};
+var _pfLast = null; // stats stash from last render — keeps the 1:1 export in lockstep with the on-screen view
+
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape'){
+    var m = document.getElementById('profile-modal');
+    if(m && m.style.display === 'flex') closeRecruiterProfile();
+  }
+});
 
 function openProfileEnc(enc){ openRecruiterProfile(decodeURIComponent(enc)); }
 
@@ -6772,14 +6780,16 @@ function renderRecruiterProfile(){
   var onTrackTip = 'On-track rule: cumulative starts ≥ 2 per completed 4-week block since hire. '+tenureStarts+' starts vs target of '+target+' over '+tenureWks+' active weeks.';
 
   // ── Momentum: last-4wk subs avg vs prior-4wk ──
+  var momText='Not enough weeks of data (needs 8+)';
   var momHtml='<span class="pf-pill" style="background:var(--bg4);color:var(--text3)">Momentum: — not enough weeks</span>';
   if(tenureWks>=8){
     var last4=_pfSum(r.subs,lastWk-3,lastWk)/4, prior4=_pfSum(r.subs,lastWk-7,lastWk-4)/4;
     if(prior4>0){
       var md=Math.round((last4-prior4)/prior4*100);
-      if(md>=15) momHtml='<span class="pf-pill" style="background:var(--green-bg);color:var(--green)" title="Subs 4-wk avg: '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior">Momentum: ▲ Heating ('+(md>0?'+':'')+md+'%)</span>';
-      else if(md<=-15) momHtml='<span class="pf-pill" style="background:var(--amber-bg);color:var(--amber)" title="Subs 4-wk avg: '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior">Momentum: ▼ Cooling ('+md+'%)</span>';
-      else momHtml='<span class="pf-pill" style="background:var(--bg4);color:var(--text2)" title="Subs 4-wk avg: '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior">Momentum: → Steady ('+(md>0?'+':'')+md+'%)</span>';
+      var momDetail='subs 4-wk avg '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior';
+      if(md>=15){ momText='▲ Heating (+'+md+'%) — '+momDetail; momHtml='<span class="pf-pill" style="background:var(--green-bg);color:var(--green)" title="Subs 4-wk avg: '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior">Momentum: ▲ Heating (+'+md+'%)</span>'; }
+      else if(md<=-15){ momText='▼ Cooling ('+md+'%) — '+momDetail; momHtml='<span class="pf-pill" style="background:var(--amber-bg);color:var(--amber)" title="Subs 4-wk avg: '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior">Momentum: ▼ Cooling ('+md+'%)</span>'; }
+      else { momText='→ Steady ('+(md>0?'+':'')+md+'%) — '+momDetail; momHtml='<span class="pf-pill" style="background:var(--bg4);color:var(--text2)" title="Subs 4-wk avg: '+last4.toFixed(1)+' now vs '+prior4.toFixed(1)+' prior">Momentum: → Steady ('+(md>0?'+':'')+md+'%)</span>'; }
     }
   }
 
@@ -6805,7 +6815,11 @@ function renderRecruiterProfile(){
     {lbl:'Placements / wk', v:self.plsWk, vals:cohort.map(function(x){return x.plsWk;}), color:'var(--purple)', dec:2},
     {lbl:'Starts / wk', v:self.stsWk, vals:cohort.map(function(x){return x.stsWk;}), color:'var(--c-starts)', dec:2}
   ];
-  var startsPctile = _pfPercentile(cohortRows[3].vals, self.stsWk);
+  cohortRows.forEach(function(row){
+    row.p = _pfPercentile(row.vals, row.v);
+    row.med = _pfMedian(row.vals);
+  });
+  var startsPctile = cohortRows[3].p;
 
   // ── Coaching signal: biggest conversion gap below team median ──
   var gaps=[];
@@ -6825,6 +6839,22 @@ function renderRecruiterProfile(){
   } else {
     signal = '<b style="color:var(--text)">Coaching signal:</b> Not enough volume in this range to benchmark conversions reliably — widen the range.';
   }
+
+  // Stash everything the 1:1 export needs so it always matches what's on screen
+  _pfLast = {
+    name:r.name, manager:r.manager, hd:hd, isArch:isArch,
+    f:f, t:t, rangeWks:rangeWks, tenureWks:tenureWks,
+    subs:subs, ivs:ivs, pls:pls, sts:sts,
+    self:self,
+    medSubsWk:medSubsWk, medIvsWk:medIvsWk, medPlsWk:medPlsWk, medStsWk:medStsWk,
+    mgrOk:mgrOk, mgrLbl:r.manager,
+    mMedSubsWk:mMedSubsWk, mMedIvsWk:mMedIvsWk, mMedPlsWk:mMedPlsWk, mMedStsWk:mMedStsWk,
+    s2i:s2i, i2p:i2p, p2s:p2s, medS2i:medS2i, medI2p:medI2p, medP2s:medP2s,
+    mMedS2i:mMedS2i, mMedI2p:mMedI2p, mMedP2s:mMedP2s,
+    tenureStarts:tenureStarts, target:target, onTrk:onTrk,
+    momText:momText, signal:signal,
+    cohortLabel:cohortLabel, cohortN:cohort.length, cohortRows:cohortRows
+  };
 
   // ── Build HTML ──
   function stage(num,lbl,color,v,med,mMed,hib){
@@ -6889,10 +6919,10 @@ function renderRecruiterProfile(){
     +'<div class="card-hdr"><span class="card-title">Cohort benchmark — '+cohortLabel+' (n = '+cohort.length+')</span><span style="font-size:11px;color:var(--text3)">per-active-week averages, same range</span></div>'
     +cohortRows.map(function(row){
       var max = Math.max.apply(null, row.vals.concat([row.v]).filter(function(x){return isFinite(x);}));
-      var med = _pfMedian(row.vals);
+      var med = row.med;
       var w = max>0 ? Math.max(6, Math.round(row.v/max*100)) : 6;
       var mPos = (max>0&&med!=null) ? Math.round(med/max*100) : null;
-      var p = _pfPercentile(row.vals, row.v);
+      var p = row.p;
       var pCls = p==null?'pf-flat':p>=60?'pf-up':p<=40?'pf-down':'pf-flat';
       return '<div class="pf-cohort-row"><span class="pf-cohort-lbl">'+row.lbl+'</span>'
         +'<div class="pf-cohort-track">'+(mPos!=null?'<div class="pf-cohort-med" style="left:'+mPos+'%" title="cohort median: '+med.toFixed(row.dec)+'"></div>':'')
@@ -6940,29 +6970,16 @@ function renderRecruiterProfile(){
   });
 }
 
-// ── Printable 1:1 review sheet ──
+// ── Printable 1:1 review sheet — reads the last-rendered profile stats for exact parity ──
 function exportProfileSheet(){
-  var found=_pfFind(profileName);
-  if(!found) return;
-  var r=found.rec;
-  var firstActive=_pfFirstActive(r);
-  var lastWk=Math.min((r.subs||[]).length,wkLabels.length)-1;
-  if(lastWk<firstActive) lastWk=firstActive;
-  var f,t=lastWk;
-  if(profileRangeMode==='4') f=Math.max(firstActive,t-3);
-  else if(profileRangeMode==='12') f=Math.max(firstActive,t-11);
-  else f=firstActive;
-  var rangeWks=t-f+1;
-  var subs=_pfSum(r.subs,f,t),ivs=_pfSum(r.ivs,f,t),pls=_pfSum(r.placements||[],f,t),sts=_pfSum(r.starts,f,t);
-  var team=_pfTeamStats(f,t);
-  var self=team.find(function(x){return x.name===r.name;});
-  var tenureStarts=_pfSum(r.starts,firstActive,lastWk);
-  var target=onTrackTarget(firstActive,firstActive,lastWk);
-  var hd=getHireDate(r.name)||r.hireDate||'';
+  var L = _pfLast;
+  if(!L) return;
   var d=new Date();
-  var pct=function(a,b){return b>0?Math.round(a/b*100)+'%':'—';};
-  var medRow=function(key){var m=_pfMedian(team.map(function(x){return x[key];}));return m==null?'—':m.toFixed(2);};
-  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>1:1 Review — '+_pfEsc(r.name)+'</title><style>'
+  var fx=function(v,dec){ return (v==null||!isFinite(v))?'—':v.toFixed(dec==null?2:dec); };
+  var pc=function(v){ return v==null?'—':Math.round(v)+'%'; };
+  var signalText = String(L.signal||'').replace(/<[^>]+>/g,'');
+  var mgrCols = L.mgrOk;
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>1:1 Review — '+_pfEsc(L.name)+'</title><style>'
     +'*{margin:0;padding:0;box-sizing:border-box}'
     +"body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;color:#1a1c24;background:#fff;padding:28px 32px}"
     +'.h1{font-size:20px;font-weight:800}'
@@ -6973,20 +6990,37 @@ function exportProfileSheet(){
     +'th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #e8eaf0}'
     +'th{background:#f8f9fc;font-weight:700}'
     +'.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-weight:700;font-size:11px}'
+    +'.callout{background:#f8f9fc;border:1px solid #e8eaf0;border-radius:6px;padding:8px 12px;font-size:12px;margin-top:8px}'
     +'.lines{margin-top:8px}.lines div{border-bottom:1px solid #cfd4e0;height:26px}'
     +'@media print{body{padding:16px}}'
     +'</style></head><body>'
-    +'<div class="hdr"><div><div class="h1">1:1 Review — '+_pfEsc(r.name)+'</div>'
-    +'<div class="sub">Manager: '+_pfEsc(r.manager)+(hd?' · Hired '+formatHireDate(hd)+' ('+calcTenure(hd)+')':'')+' · Range: '+wkLabels[f]+' → '+wkLabels[t]+' ('+rangeWks+' wks)</div></div>'
+    +'<div class="hdr"><div><div class="h1">1:1 Review — '+_pfEsc(L.name)+(L.isArch?' (archived)':'')+'</div>'
+    +'<div class="sub">Manager: '+_pfEsc(L.manager)+(L.hd?' · Hired '+formatHireDate(L.hd)+' ('+calcTenure(L.hd)+')':'')+' · Range: '+wkLabels[L.f]+' → '+wkLabels[L.t]+' ('+L.rangeWks+' wks)</div></div>'
     +'<div class="sub">Generated '+(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear()+'</div></div>'
-    +'<span class="badge" style="background:'+(tenureStarts>=target?'#e3f7ec;color:#1a7a45':'#fdeaea;color:#b93030')+'">'+(tenureStarts>=target?'✓ ON TRACK':'✗ OFF TRACK')+' — '+tenureStarts+' starts vs target '+target+'</span>'
-    +'<span class="sub" style="margin-left:8px">Rule: cumulative starts ≥ 2 per completed 4-week block since hire.</span>'
+    +'<span class="badge" style="background:'+(L.onTrk?'#e3f7ec;color:#1a7a45':'#fdeaea;color:#b93030')+'">'+(L.onTrk?'✓ ON TRACK':'✗ OFF TRACK')+' — '+L.tenureStarts+' starts vs target '+L.target+'</span>'
+    +'<span class="badge" style="background:#eef3fd;color:#2a5db0;margin-left:6px">Momentum: '+_pfEsc(L.momText)+'</span>'
+    +'<div class="sub" style="margin-top:6px">On-track rule: cumulative starts ≥ 2 per completed 4-week block since hire.</div>'
     +'<div class="h2">Funnel — selected range</div>'
     +'<table><tr><th></th><th>Subs</th><th>Interviews</th><th>Placements</th><th>Starts</th></tr>'
-    +'<tr><td><b>Total</b></td><td>'+subs+'</td><td>'+ivs+'</td><td>'+pls+'</td><td>'+sts+'</td></tr>'
-    +'<tr><td><b>Per week</b></td><td>'+(subs/rangeWks).toFixed(1)+'</td><td>'+(ivs/rangeWks).toFixed(1)+'</td><td>'+(pls/rangeWks).toFixed(2)+'</td><td>'+(sts/rangeWks).toFixed(2)+'</td></tr>'
-    +'<tr><td><b>Team median /wk</b></td><td>'+medRow('subsWk')+'</td><td>'+medRow('ivsWk')+'</td><td>'+medRow('plsWk')+'</td><td>'+medRow('stsWk')+'</td></tr>'
-    +'<tr><td><b>Stage conversion</b></td><td>—</td><td>'+pct(ivs,subs)+' of subs</td><td>'+pct(pls,ivs)+' of ivs</td><td>'+pct(sts,pls)+' of placements</td></tr></table>'
+    +'<tr><td><b>Total</b></td><td>'+L.subs+'</td><td>'+L.ivs+'</td><td>'+L.pls+'</td><td>'+L.sts+'</td></tr>'
+    +'<tr><td><b>Per week</b></td><td>'+fx(L.self.subsWk,1)+'</td><td>'+fx(L.self.ivsWk,1)+'</td><td>'+fx(L.self.plsWk)+'</td><td>'+fx(L.self.stsWk)+'</td></tr>'
+    +'<tr><td><b>Org median /wk</b></td><td>'+fx(L.medSubsWk,1)+'</td><td>'+fx(L.medIvsWk,1)+'</td><td>'+fx(L.medPlsWk)+'</td><td>'+fx(L.medStsWk)+'</td></tr>'
+    +(mgrCols?'<tr><td><b>'+_pfEsc(L.mgrLbl)+' team median /wk</b></td><td>'+fx(L.mMedSubsWk,1)+'</td><td>'+fx(L.mMedIvsWk,1)+'</td><td>'+fx(L.mMedPlsWk)+'</td><td>'+fx(L.mMedStsWk)+'</td></tr>':'')
+    +'</table>'
+    +'<div class="h2">Stage conversions</div>'
+    +'<table><tr><th>Stage</th><th>'+_pfEsc(L.name.split(' ')[0])+'</th><th>Org median</th>'+(mgrCols?'<th>'+_pfEsc(L.mgrLbl)+' team median</th>':'')+'</tr>'
+    +'<tr><td>Sub → Interview</td><td>'+pc(L.s2i)+'</td><td>'+pc(L.medS2i)+'</td>'+(mgrCols?'<td>'+pc(L.mMedS2i)+'</td>':'')+'</tr>'
+    +'<tr><td>Interview → Placement</td><td>'+pc(L.i2p)+'</td><td>'+pc(L.medI2p)+'</td>'+(mgrCols?'<td>'+pc(L.mMedI2p)+'</td>':'')+'</tr>'
+    +'<tr><td>Placement → Start</td><td>'+pc(L.p2s)+'</td><td>'+pc(L.medP2s)+'</td>'+(mgrCols?'<td>'+pc(L.mMedP2s)+'</td>':'')+'</tr>'
+    +'</table>'
+    +'<div class="callout">💡 '+_pfEsc(signalText)+'</div>'
+    +'<div class="h2">Cohort benchmark — '+_pfEsc(L.cohortLabel)+' (n = '+L.cohortN+')</div>'
+    +'<table><tr><th>Metric (per active wk)</th><th>'+_pfEsc(L.name.split(' ')[0])+'</th><th>Cohort median</th><th>Percentile</th></tr>'
+    +L.cohortRows.map(function(row){
+      return '<tr><td>'+row.lbl+'</td><td>'+fx(row.v,row.dec)+'</td><td>'+fx(row.med,row.dec)+'</td><td>'+(row.p==null?'—':_pfOrdinal(row.p))+'</td></tr>';
+    }).join('')
+    +'</table>'
+    +'<div class="sub" style="margin-top:4px">Percentile = share of cohort at or below this recruiter — higher is better; 50th ≈ cohort median.</div>'
     +'<div class="h2">Discussion notes</div><div class="lines"><div></div><div></div><div></div><div></div><div></div></div>'
     +'<div class="h2">Goals for next period</div><div class="lines"><div></div><div></div><div></div></div>'
     +'</body></html>';
