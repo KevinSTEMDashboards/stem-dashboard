@@ -644,6 +644,10 @@ td.editing{padding:2px 4px!important}
       <option value="ivs">Sort by interviews</option>
       <option value="sub2start">Sort by efficiency</option>
     </select>
+    <div style="display:inline-flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;margin-left:auto">
+      <button id="mgr-norm-tot" onclick="setMgrNormalize('tot')" style="height:32px;padding:0 12px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:var(--accent-dim);color:var(--accent)">Totals</button>
+      <button id="mgr-norm-pc" onclick="setMgrNormalize('pc')" style="height:32px;padding:0 12px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:var(--bg2);color:var(--text3)" title="Divide by active recruiter-weeks in the window so team sizes compare fairly">Per recruiter-wk</button>
+    </div>
   </div>
 
   <!-- Side-by-side manager KPI comparison -->
@@ -652,8 +656,8 @@ td.editing{padding:2px 4px!important}
   <!-- Charts row -->
   <div class="charts-row" style="margin-bottom:14px">
     <div class="card card-accent-blue">
-      <div class="card-hdr"><span class="card-title">Submittals by manager — weekly trend</span></div>
-      <div class="chart-wrap"><canvas id="mgrSubsChart" role="img" aria-label="Manager submittals trend"></canvas></div>
+      <div class="card-hdr"><span class="card-title">Submittals by manager — weekly trend</span><span id="mgr-sm-note" style="font-size:11px;color:var(--text3)"></span></div>
+      <div id="mgr-sm-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:10px"></div>
     </div>
     <div class="card card-accent-red">
       <div class="card-hdr"><span class="card-title">Starts by manager — weekly trend</span></div>
@@ -5206,7 +5210,20 @@ applyArchives();
 
 
 // ─── MANAGER ROLLUP ───
-var cMgrSubs=null,cMgrStarts=null,cMgrRatio=null,cMgrAvg=null;
+var cMgrStarts=null,cMgrRatio=null,cMgrAvg=null;
+var cMgrSmalls=[]; // small-multiples chart instances (replaced the single subs overlay)
+var mgrNormalize='tot'; // 'tot' | 'pc' (per recruiter-week)
+function setMgrNormalize(m){
+  mgrNormalize=m;
+  ['tot','pc'].forEach(function(k){
+    var b=document.getElementById('mgr-norm-'+k);
+    if(!b)return;
+    var on=(k===m);
+    b.style.background=on?'var(--accent-dim)':'var(--bg2)';
+    b.style.color=on?'var(--accent)':'var(--text3)';
+  });
+  renderManagers();
+}
 
 function populateMgrWkSelects() {
   var fromSel = document.getElementById('mgr-wk-from');
@@ -5254,21 +5271,51 @@ function renderManagers(){
   var gc='rgba(128,128,128,0.1)';
   var tf={size:10};
 
+  var pcMode = mgrNormalize==='pc';
+  var GR=getWeekRange();
+  // Window bounds in sliced-array coordinates (same space custom selects already use)
+  var wFrel = isCustom ? customF : (w==='all' ? 0 : Math.max(0, nW - parseInt(w)));
+  var wTrel = isCustom ? customT : nW - 1;
+  // Active bounds per recruiter, sliced coords. Archived recruiters' arrays are
+  // zero-padded to the current week, so derive their true end from _fullStarts —
+  // padded weeks must not inflate the per-recruiter denominator.
+  function _mgrFirstRel(r){
+    var swi=Math.max(0,(r.startWeekIndex||0)-GR[0]);
+    var fd=-1, L=(r.subs||[]).length;
+    for(var i=0;i<L;i++){ if(r.subs[i]!=null||(r.ivs&&r.ivs[i]!=null)||(r.starts&&r.starts[i]!=null)){fd=i;break;} }
+    return Math.max(swi, fd<0?0:fd);
+  }
+  function _mgrLastRel(r){
+    var L=(r.subs||[]).length;
+    if(r._isArchived&&r._fullStarts) return Math.min(L-1, r._fullStarts.length-1-GR[0]);
+    return L-1;
+  }
+
   // Build per-manager aggregates
   var mgrData={};
   MGRS.forEach(function(m){
     var team=all.filter(function(r){return r.manager===m;});
-    var subsW=[],ivsW=[],plW=[],stW=[];
+    var bounds=team.map(function(r){return [_mgrFirstRel(r),_mgrLastRel(r)];});
+    var subsW=[],ivsW=[],plW=[],stW=[],hcW=[];
     for(var wi=0;wi<nW;wi++){
-      var s=0,iv=0,pl=0,st=0;
+      // In custom mode the displayed window starts at customF, so read the
+      // matching absolute slice index (previously this always read 0..nW-1,
+      // which mislabeled custom-range charts and totals).
+      var ai=isCustom?customF+wi:wi;
+      var s=0,iv=0,pl=0,st=0,hc=0;
       for(var ti=0;ti<team.length;ti++){
-        s+=(team[ti].subs[wi]||0);
-        iv+=(team[ti].ivs[wi]||0);
-        pl+=((team[ti].placements||[])[wi]||0);
-        st+=(team[ti].starts[wi]||0);
+        s+=(team[ti].subs[ai]||0);
+        iv+=(team[ti].ivs[ai]||0);
+        pl+=((team[ti].placements||[])[ai]||0);
+        st+=(team[ti].starts[ai]||0);
+        if(bounds[ti][0]<=ai&&ai<=bounds[ti][1])hc++;
       }
-      subsW.push(s);ivsW.push(iv);plW.push(pl);stW.push(st);
+      subsW.push(s);ivsW.push(iv);plW.push(pl);stW.push(st);hcW.push(hc);
     }
+    // Active recruiter-weeks within the selected window (per-recruiter denominator)
+    var recWks=0;
+    bounds.forEach(function(b){ recWks+=Math.max(0, Math.min(wTrel,b[1])-Math.max(wFrel,b[0])+1); });
+    var otc=team.filter(function(r){return r.onTrack;}).length;
     // Window slice helper
     var getW=function(arr){
       var v=arr.filter(function(x){return x!=null;});
@@ -5301,17 +5348,20 @@ function renderManagers(){
     var a4=team.length?team.reduce(function(s,r){return s+r.avgSub4w;},0)/team.length:0;
     var ws=getW(subsW),wiv=getW(ivsW),wpl=getW(plW),wst=getW(stW);
     var wld=getW((function(){var ldW=[];for(var wi=0;wi<nW;wi++){var l=0;for(var ti=0;ti<team.length;ti++)l+=((team[ti].leads||[])[wi]||0);ldW.push(l);}return ldW;})());
-    mgrData[m]={team:team,subsW:subsW,ivsW:ivsW,plW:plW,stW:stW,ts:ts,tiv:tiv,tpl:tpl,tst:tst,
+    mgrData[m]={team:team,subsW:subsW,ivsW:ivsW,plW:plW,stW:stW,hcW:hcW,recWks:recWks,otc:otc,
+      ts:ts,tiv:tiv,tpl:tpl,tst:tst,
       s2s:tst>0?ts/tst:null,a4:a4,
       slS:slp(ws),slIv:slp(wiv),slPl:slp(wpl),slSt:slp(wst),slLd:slp(wld),pcS:pct(ws)};
   });
 
-  // Sort managers by selected metric
+  // Sort managers by selected metric (per recruiter-week when that view is on)
+  var fmtN=function(v,d,dec){ return pcMode ? (d.recWks>0?(v/d.recWks).toFixed(dec==null?2:dec):'—') : v; };
   var sm=MGRS.slice().sort(function(a,b){
     var da=mgrData[a],db=mgrData[b];
-    if(sortBy==='starts')return db.tst-da.tst;
-    if(sortBy==='subs')return db.ts-da.ts;
-    if(sortBy==='ivs')return db.tiv-da.tiv;
+    var na=(pcMode&&da.recWks>0)?da.recWks:1, nb=(pcMode&&db.recWks>0)?db.recWks:1;
+    if(sortBy==='starts')return db.tst/nb-da.tst/na;
+    if(sortBy==='subs')return db.ts/nb-da.ts/na;
+    if(sortBy==='ivs')return db.tiv/nb-da.tiv/na;
     if(sortBy==='sub2start'){
       if(da.s2s===null)return 1;if(db.s2s===null)return -1;
       return da.s2s-db.s2s;
@@ -5332,29 +5382,52 @@ function renderManagers(){
         +'<div style="font-size:10px;color:var(--text3);margin-left:auto">'+d.team.length+' recruiters</div>'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">'
-        +'<div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--c-subs);letter-spacing:-.02em">'+d.ts+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:2px">Subs</div></div>'
-        +'<div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--c-starts);letter-spacing:-.02em">'+d.tst+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:2px">Starts</div></div>'
+        +'<div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--c-subs);letter-spacing:-.02em">'+fmtN(d.ts,d,1)+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:2px">Subs'+(pcMode?'/rw':'')+'</div></div>'
+        +'<div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--c-starts);letter-spacing:-.02em">'+fmtN(d.tst,d,2)+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:2px">Starts'+(pcMode?'/rw':'')+'</div></div>'
         +'<div style="text-align:center"><div style="font-size:22px;font-weight:700;color:'+pcc+';letter-spacing:-.02em">'+pcs+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:2px">Sub trend</div></div>'
       +'</div>'
       +'<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);display:flex;gap:12px">'
-        +'<span>Placements: <b style="color:var(--purple)">'+d.tpl+'</b></span>'
+        +'<span>Placements: <b style="color:var(--purple)">'+fmtN(d.tpl,d,2)+'</b></span>'
         +'<span>Sub&#8594;Start: <b style="color:var(--text)">'+(d.s2s?d.s2s.toFixed(1)+':1':'—')+'</b></span>'
         +'<span>4-wk avg: <b style="color:var(--text)">'+d.a4.toFixed(1)+'</b></span>'
       +'</div>'
     +'</div>';
   }).join('');
 
-  // ── Subs trend chart ──
-  if(cMgrSubs)cMgrSubs.destroy();
-  cMgrSubs=new Chart(document.getElementById('mgrSubsChart'),{
-    type:'line',
-    data:{labels:awl,datasets:sm.map(function(m,i){
-      return{label:m,data:mgrData[m].subsW,borderColor:pal[i],borderWidth:2,pointRadius:0,tension:.35,fill:false};
-    })},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:true,labels:{font:{size:10},boxWidth:10,padding:8}}},
-      scales:{x:{ticks:{font:tf,maxRotation:45},grid:{display:false}},y:{grid:{color:gc},ticks:{font:tf}}}}
-  });
+  // ── Subs by manager — small multiples (replaced the 8-line overlay) ──
+  cMgrSmalls.forEach(function(c){try{c.destroy();}catch(e){}});
+  cMgrSmalls=[];
+  var smGrid=document.getElementById('mgr-sm-grid');
+  if(smGrid){
+    var smMax=0;
+    sm.forEach(function(m){
+      var d=mgrData[m];
+      d.subsW.forEach(function(v,i){
+        var val=pcMode?(d.hcW[i]>0?v/d.hcW[i]:0):v;
+        if(val>smMax)smMax=val;
+      });
+    });
+    smMax=Math.ceil(smMax*1.1)||1;
+    var smNote=document.getElementById('mgr-sm-note');
+    if(smNote)smNote.textContent='Shared y-scale: 0–'+smMax+(pcMode?' per rec-wk':'');
+    smGrid.innerHTML=sm.map(function(m,i){
+      return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 9px 3px">'
+        +'<div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;margin-bottom:2px"><span style="width:8px;height:8px;border-radius:50%;background:'+(MGR_COLORS[m]||'#888')+';flex-shrink:0"></span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+m+'</span></div>'
+        +'<div style="position:relative;height:68px"><canvas id="mgr-sm-'+i+'"></canvas></div></div>';
+    }).join('');
+    sm.forEach(function(m,i){
+      var d=mgrData[m];
+      var mc2=MGR_COLORS[m]||'#888';
+      var data=d.subsW.map(function(v,wi){ return pcMode?+(d.hcW[wi]>0?v/d.hcW[wi]:0).toFixed(2):v; });
+      cMgrSmalls.push(new Chart(document.getElementById('mgr-sm-'+i),{
+        type:'line',
+        data:{labels:awl,datasets:[{data:data,borderColor:mc2,backgroundColor:mc2+'22',fill:true,borderWidth:1.5,pointRadius:0,tension:.35}]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false}},
+          scales:{x:{display:false},y:{min:0,max:smMax,ticks:{font:{size:8},maxTicksLimit:3},grid:{color:gc}}}}
+      }));
+    });
+  }
 
   // ── Starts by manager bar ──
   if(cMgrStarts)cMgrStarts.destroy();
@@ -5368,18 +5441,23 @@ function renderManagers(){
       scales:{x:{ticks:{font:tf,maxRotation:45},grid:{display:false}},y:{grid:{color:gc},ticks:{font:tf}}}}
   });
 
-  // ── Sub-to-start ratio ──
+  // ── Sub-to-start ratio (managers under 5 starts in window are grayed — too little volume to rank fairly) ──
+  var RATIO_MIN_STARTS=5;
   if(cMgrRatio)cMgrRatio.destroy();
   cMgrRatio=new Chart(document.getElementById('mgrRatioChart'),{
     type:'bar',
     data:{labels:sm,datasets:[{
       data:sm.map(function(m){var d=mgrData[m];return d.s2s?parseFloat(d.s2s.toFixed(1)):null;}),
-      backgroundColor:pal,borderRadius:5,borderSkipped:false
+      backgroundColor:sm.map(function(m,i){return mgrData[m].tst<RATIO_MIN_STARTS?'rgba(128,136,160,0.35)':pal[i];}),
+      borderRadius:5,borderSkipped:false
     }]},
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){return c.raw+':1 sub-to-start';}}}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){
+        var d=mgrData[c.label];
+        return c.raw+':1 sub-to-start'+(d&&d.tst<RATIO_MIN_STARTS?' — only '+d.tst+' starts in window, below min volume ('+RATIO_MIN_STARTS+') to rank fairly':'');
+      }}}},
       scales:{x:{ticks:{font:tf},grid:{display:false}},
-        y:{grid:{color:gc},ticks:{font:tf},title:{display:true,text:'Lower = better',font:{size:10},color:'#5c6480'}}}}
+        y:{grid:{color:gc},ticks:{font:tf},title:{display:true,text:'Lower = better · gray = under '+RATIO_MIN_STARTS+' starts',font:{size:10},color:'#5c6480'}}}}
   });
 
   // ── 4-week avg subs ──
@@ -5463,8 +5541,16 @@ function renderManagers(){
     return '<div class="mgr-scorecard" style="border-top:3px solid '+mc+'">'
       +'<div class="mgr-scorecard-hdr">'
         +'<div>'
-          +'<div class="mgr-scorecard-name" style="color:'+mc+'">'+m+'</div>'
-          +'<div class="mgr-scorecard-meta">'+d.team.length+' recruiters &nbsp;&#183;&nbsp; sub&#8594;start: '+(d.s2s?d.s2s.toFixed(1)+':1':'—')+'</div>'
+          +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+            +'<div class="mgr-scorecard-name" style="color:'+mc+'">'+m+'</div>'
+            +(function(){
+              var n=d.team.length; if(!n)return '';
+              var share=d.otc/n;
+              var ob=share>=0.75?['var(--green-bg)','var(--green)']:share>=0.5?['var(--amber-bg)','var(--amber)']:['var(--red-bg)','var(--red)'];
+              return '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:11px;background:'+ob[0]+';color:'+ob[1]+';cursor:help;white-space:nowrap" title="Recruiters meeting the pacing rule (cumulative starts &#8805; 2 per completed 4-week block since hire) over the dashboard\'s selected week range — same calc as Team Health">'+d.otc+'/'+n+' on track</span>';
+            })()
+          +'</div>'
+          +'<div class="mgr-scorecard-meta">'+d.team.length+' recruiters &nbsp;&#183;&nbsp; <span style="cursor:help" title="Active recruiter-weeks in the selected window — the per-recruiter denominator. Archived recruiters count only the weeks they were active.">'+d.recWks+' rec-wks</span> &nbsp;&#183;&nbsp; sub&#8594;start: '+(d.s2s?d.s2s.toFixed(1)+':1':'—')+'</div>'
         +'</div>'
         +(top?'<div style="text-align:right">'
           +'<div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Top performer</div>'
@@ -5473,11 +5559,11 @@ function renderManagers(){
         +'</div>':'')
       +'</div>'
       +'<div class="mgr-stat-grid">'
-        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-subs)">'+d.ts+'</div><div class="mgr-stat-lbl">Subs</div></div>'
-        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-ivs)">'+d.tiv+'</div><div class="mgr-stat-lbl">IVs</div></div>'
-        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--purple)">'+d.tpl+'</div><div class="mgr-stat-lbl">Placements</div></div>'
-        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-starts)">'+d.tst+'</div><div class="mgr-stat-lbl">Starts</div></div>'
-        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-leads)">'+d.a4.toFixed(1)+'</div><div class="mgr-stat-lbl">4-wk Sub Average</div></div>'
+        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-subs)">'+fmtN(d.ts,d,1)+'</div><div class="mgr-stat-lbl">Subs'+(pcMode?'/rw':'')+'</div></div>'
+        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-ivs)">'+fmtN(d.tiv,d,1)+'</div><div class="mgr-stat-lbl">IVs'+(pcMode?'/rw':'')+'</div></div>'
+        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--purple)">'+fmtN(d.tpl,d,2)+'</div><div class="mgr-stat-lbl">Placements'+(pcMode?'/rw':'')+'</div></div>'
+        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-starts)">'+fmtN(d.tst,d,2)+'</div><div class="mgr-stat-lbl">Starts'+(pcMode?'/rw':'')+'</div></div>'
+        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-leads)">'+d.a4.toFixed(1)+'</div><div class="mgr-stat-lbl" style="cursor:help" title="Already a per-recruiter average — unaffected by the Totals / Per recruiter-wk view">4-wk Sub Average</div></div>'
       +'</div>'
       +'<div class="mgr-trend-row" style="margin-bottom:6px">'
         +chip(d.slS,'Subs')+chip(d.slIv,'IVs')+chip(d.slPl,'Placements')+chip(d.slSt,'Starts')+chip(d.slLd,'Leads')
