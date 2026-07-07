@@ -7306,24 +7306,23 @@ function renderRecruiterProfile(){
   var self = team.find(function(x){return x.name===r.name;}) ||
     {subsWk:subs/rangeWks, ivsWk:ivs/rangeWks, plsWk:pls/rangeWks, stsWk:sts/rangeWks};
   var cohortRows=[
-    {lbl:'Subs / wk', v:self.subsWk, vals:cohort.map(function(x){return x.subsWk;}), color:'var(--c-subs)', dec:1},
-    {lbl:'Interviews / wk', v:self.ivsWk, vals:cohort.map(function(x){return x.ivsWk;}), color:'var(--c-ivs)', dec:1},
-    {lbl:'Placements / wk', v:self.plsWk, vals:cohort.map(function(x){return x.plsWk;}), color:'var(--purple)', dec:2},
-    {lbl:'Starts / wk', v:self.stsWk, vals:cohort.map(function(x){return x.stsWk;}), color:'var(--c-starts)', dec:2}
+    {lbl:'Subs / wk', key:'subsWk', color:'var(--c-subs)', dec:1},
+    {lbl:'Interviews / wk', key:'ivsWk', color:'var(--c-ivs)', dec:1},
+    {lbl:'Placements / wk', key:'plsWk', color:'var(--purple)', dec:2},
+    {lbl:'Starts / wk', key:'stsWk', color:'var(--c-starts)', dec:2}
   ];
+  if(self.gpWk!=null) cohortRows.push({lbl:'GP / wk', key:'gpWk', color:'var(--teal,#2dd4bf)', dec:0, isGP:true});
   cohortRows.forEach(function(row){
-    row.rk = _pfRank(row.vals, row.v);
+    var pick=function(arr){return arr.map(function(x){return x[row.key];});};
+    row.v = self[row.key];
+    row.vals = pick(cohort);
+    row.rk  = _pfRank(row.vals, row.v);                 // tenure cohort
+    row.rkO = _pfRank(pick(team), row.v);               // all active recruiters
+    row.rkM = _pfRank(pick(mgrTeam), row.v);            // same manager's active team
     row.med = _pfMedian(row.vals);
   });
   // Org-wide standing: rank among ALL active recruiters (archived excluded), same range/math
-  var orgRank = _pfRank(team.map(function(x){return x.stsWk;}), self.stsWk);
-  // GP/wk cohort row — only when this recruiter has GP data; peers without GP rows are excluded from the comparison
-  if(self.gpWk!=null){
-    var gpRow={lbl:'GP / wk', v:self.gpWk, vals:cohort.map(function(x){return x.gpWk;}), color:'var(--teal,#2dd4bf)', dec:0, isGP:true};
-    gpRow.rk=_pfRank(gpRow.vals, gpRow.v);
-    gpRow.med=_pfMedian(gpRow.vals);
-    cohortRows.push(gpRow);
-  }
+  var orgRank = cohortRows[3].rkO;
 
   // ── Coaching signal: biggest conversion gap below team median ──
   var gaps=[];
@@ -7436,21 +7435,30 @@ function renderRecruiterProfile(){
   +'</div>'
   +'<div class="card" style="margin-bottom:0">'
     +'<div class="card-hdr"><span class="card-title">Cohort benchmark — '+cohortLabel+' (n = '+cohort.length+')</span><span style="font-size:11px;color:var(--text3)">per-active-week averages, same range</span></div>'
+    +'<div class="pf-cohort-row" style="margin-bottom:4px"><span class="pf-cohort-lbl"></span><div style="flex:1"></div>'
+      +'<span style="width:72px;flex-shrink:0;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">Cohort</span>'
+      +'<span style="width:72px;flex-shrink:0;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">All active</span>'
+      +'<span style="width:72px;flex-shrink:0;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="Active recruiters under '+mgrLbl+'">'+mgrLbl+'</span></div>'
     +cohortRows.map(function(row){
       var max = Math.max.apply(null, row.vals.concat([row.v]).filter(function(x){return x!=null&&isFinite(x);}));
       var med = row.med;
       var w = max>0 ? Math.max(6, Math.round(row.v/max*100)) : 6;
       var mPos = (max>0&&med!=null) ? Math.round(med/max*100) : null;
-      var rk = row.rk;
-      var pCls = rk==null?'pf-flat':rk.rank<=rk.n/3?'pf-up':rk.rank>rk.n*2/3?'pf-down':'pf-flat';
       var vDisp = row.isGP ? formatGP(row.v) : row.v.toFixed(row.dec);
       var mDisp = med==null ? '' : (row.isGP ? formatGP(med) : med.toFixed(row.dec));
+      var rkCls=function(rk){return rk==null?'pf-flat':rk.rank<=rk.n/3?'pf-up':rk.rank>rk.n*2/3?'pf-down':'pf-flat';};
+      var rkCell=function(rk,scope){
+        return '<span class="pf-pctile '+rkCls(rk)+'" style="width:72px;cursor:help" title="'+(rk==null?'Not enough recruiters to rank.':'Rank for '+row.lbl.toLowerCase()+' among '+rk.n+' recruiters ('+scope+'), by per-active-week rate — 1st is best; ties share a rank (T-).')+'">'+_pfRankStr(rk)+'</span>';
+      };
       return '<div class="pf-cohort-row"><span class="pf-cohort-lbl">'+row.lbl+'</span>'
         +'<div class="pf-cohort-track">'+(mPos!=null?'<div class="pf-cohort-med" style="left:'+mPos+'%" title="cohort median: '+mDisp+'"></div>':'')
         +'<div class="pf-cohort-fill" style="width:'+w+'%;background:'+row.color+'">'+vDisp+'</div></div>'
-        +'<span class="pf-pctile '+pCls+'" style="cursor:help" title="'+(rk==null?'Not enough recruiters in this cohort to rank.':'Rank for '+row.lbl.toLowerCase()+' among the '+rk.n+' recruiters in this cohort ('+cohortLabel+'), by per-active-week rate — 1st is best; ties share a rank (T-).')+'">'+_pfRankStr(rk)+'</span></div>';
+        +rkCell(row.rk,'tenure cohort: '+cohortLabel)
+        +rkCell(row.rkO,'all active recruiters')
+        +rkCell(row.rkM,'active recruiters under '+mgrLbl)
+        +'</div>';
     }).join('')
-    +'<div style="font-size:11px;color:var(--text3);margin-top:4px">Tick mark = cohort median. Rank is within this cohort — 1st is best; ties share a rank (T-).</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-top:4px">Bars and tick mark are cohort-scoped. Ranks: 1st is best; ties share a rank (T-); archived recruiters excluded from all three.</div>'
   +'</div>';
 
   // ── Charts ──
@@ -7538,14 +7546,14 @@ function exportProfileSheet(){
     +'</table>'
     +'<div class="callout">💡 '+_pfEsc(signalText)+'</div>'
     +'<div class="h2">Cohort benchmark — '+_pfEsc(L.cohortLabel)+' (n = '+L.cohortN+')</div>'
-    +'<table><tr><th>Metric (per active wk)</th><th>'+_pfEsc(L.name.split(' ')[0])+'</th><th>Cohort median</th><th>Rank</th></tr>'
+    +'<table><tr><th>Metric (per active wk)</th><th>'+_pfEsc(L.name.split(' ')[0])+'</th><th>Cohort median</th><th>Cohort rank</th><th>All-active rank</th><th>'+_pfEsc(L.mgrLbl)+' team rank</th></tr>'
     +L.cohortRows.map(function(row){
       var vD=row.isGP?formatGP(row.v):fx(row.v,row.dec);
       var mD=row.isGP?(row.med==null?'—':formatGP(row.med)):fx(row.med,row.dec);
-      return '<tr><td>'+row.lbl+'</td><td>'+vD+'</td><td>'+mD+'</td><td>'+_pfRankStr(row.rk)+'</td></tr>';
+      return '<tr><td>'+row.lbl+'</td><td>'+vD+'</td><td>'+mD+'</td><td>'+_pfRankStr(row.rk)+'</td><td>'+_pfRankStr(row.rkO)+'</td><td>'+_pfRankStr(row.rkM)+'</td></tr>';
     }).join('')
     +'</table>'
-    +'<div class="sub" style="margin-top:4px">Rank is within the tenure cohort — 1st is best; ties share a rank (T-).</div>'
+    +'<div class="sub" style="margin-top:4px">Ranks: 1st is best; ties share a rank (T-); archived recruiters excluded from all three scopes.</div>'
     +'<div class="h2">Discussion notes</div><div class="lines"><div></div><div></div><div></div><div></div><div></div></div>'
     +'<div class="h2">Goals for next period</div><div class="lines"><div></div><div></div><div></div></div>'
     +'</body></html>';
