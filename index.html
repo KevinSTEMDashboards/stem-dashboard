@@ -1013,6 +1013,7 @@ td.editing{padding:2px 4px!important}
       <option value="prior">Prior period</option>
       <option value="lastq">Same period last quarter</option>
     </select>
+    <select id="recap-mgr" onchange="renderRecap()"></select>
     <select id="recap-metric" onchange="renderRecap()">
       <option value="st">Movement: Starts</option>
       <option value="subs">Movement: Subs</option>
@@ -6773,18 +6774,20 @@ function _recapEntries(mx){
   });
   return out;
 }
-// Aggregate one bucket: org totals, per-manager, per-recruiter, on-track at close
-function _recapAgg(def, mx){
+// Aggregate one bucket: org totals, per-manager, per-recruiter, on-track at close.
+// `recs` = recruiter list to include (full active roster, or one manager's team).
+function _recapAgg(def, mx, recs){
   var ws = def.weeks.filter(function(wi){return wi<=mx;});
   if(!ws.length) return null;
   var f=ws[0], e=ws[ws.length-1];
   var org={subs:0,ivs:0,pl:0,st:0,gp:0,ot:0,act:0}, mgr={}, rec=[];
-  RECRUITERS.forEach(function(r){
+  (recs||RECRUITERS).forEach(function(r){
     var fa=_recapFirstAbs(r);
     var sum=function(arr){var s=0;ws.forEach(function(wi){s+=((arr||[])[wi]||0);});return s;};
     var s=sum(r.subs), iv=sum(r.ivs), pl=sum(r.placements), st=sum(r.starts);
     var g=_gpRange(r.name,f,e);
     var active = fa<=e;
+    var rw = active ? Math.max(0, e-Math.max(f,fa)+1) : 0;
     var onT=false;
     if(active){
       var cum=0; for(var i=fa;i<=e;i++) cum+=((r.starts||[])[i]||0);
@@ -6794,8 +6797,8 @@ function _recapAgg(def, mx){
     org.subs+=s; org.ivs+=iv; org.pl+=pl; org.st+=st; if(g!=null)org.gp+=g;
     if(!mgr[r.manager]) mgr[r.manager]={subs:0,st:0,gp:0,rw:0};
     mgr[r.manager].subs+=s; mgr[r.manager].st+=st; if(g!=null)mgr[r.manager].gp+=g;
-    if(active) mgr[r.manager].rw += Math.max(0, e-Math.max(f,fa)+1);
-    rec.push({name:r.name, manager:r.manager, subs:s, st:st, gp:g==null?0:g, onT:onT, active:active});
+    mgr[r.manager].rw += rw;
+    rec.push({name:r.name, manager:r.manager, subs:s, st:st, gp:g==null?0:g, rw:rw, onT:onT, active:active});
   });
   return {org:org, mgr:mgr, rec:rec, f:f, e:e, nWks:ws.length};
 }
@@ -6843,8 +6846,18 @@ function renderRecap(){
   // Only compare against closed buckets — a partial prior is a misleading baseline
   if(prevEntry && !prevEntry.closed) prevEntry=null;
 
-  var cur=_recapAgg(selEntry.def,mx);
-  var prev=prevEntry?_recapAgg(prevEntry.def,mx):null;
+  // Manager filter (populate once)
+  var mgrSel=document.getElementById('recap-mgr');
+  if(mgrSel && mgrSel.options.length===0){
+    var oAll=document.createElement('option'); oAll.value=''; oAll.textContent='All managers'; mgrSel.appendChild(oAll);
+    MGRS.forEach(function(m){ var o=document.createElement('option'); o.value=m; o.textContent=m; mgrSel.appendChild(o); });
+  }
+  var mgrFilter=mgrSel?mgrSel.value:'';
+  var recs = mgrFilter ? RECRUITERS.filter(function(r){return r.manager===mgrFilter;}) : RECRUITERS;
+  var scopeLbl = mgrFilter ? mgrFilter+"'s team" : 'Org';
+
+  var cur=_recapAgg(selEntry.def,mx,recs);
+  var prev=prevEntry?_recapAgg(prevEntry.def,mx,recs):null;
   var prevLbl=prevEntry?prevEntry.def.label:null;
   var mvKey=document.getElementById('recap-metric').value;
   var mvIsGP=mvKey==='gp';
@@ -6885,15 +6898,27 @@ function renderRecap(){
   }
   var summaryText=summary.join(' ');
 
-  // ── Manager movement ──
+  // ── Movement (per manager org-wide; per recruiter when a manager is selected) ──
   var mgrRows=[];
   if(prev){
-    MGRS.forEach(function(m){
-      var c=cur.mgr[m]||{subs:0,st:0,gp:0,rw:0}, p=prev.mgr[m]||{subs:0,st:0,gp:0,rw:0};
-      var cv=c[mvKey]||0, pv=p[mvKey]||0;
-      var rwD=(c.rw>0&&p.rw>0)?(cv/c.rw - pv/p.rw):null;
-      mgrRows.push({m:m, d:cv-pv, rwD:rwD});
-    });
+    if(mgrFilter){
+      var pRw={}; prev.rec.forEach(function(r){pRw[r.name]=r;});
+      cur.rec.forEach(function(r){
+        var p=pRw[r.name];
+        if(!p) return;
+        var cv=(mvKey==='st'?r.st:mvKey==='subs'?r.subs:r.gp);
+        var pv=(mvKey==='st'?p.st:mvKey==='subs'?p.subs:p.gp);
+        var rwD=(r.rw>0&&p.rw>0)?(cv/r.rw - pv/p.rw):null;
+        mgrRows.push({m:r.name, d:cv-pv, rwD:rwD, isRec:true});
+      });
+    } else {
+      MGRS.forEach(function(m){
+        var c=cur.mgr[m]||{subs:0,st:0,gp:0,rw:0}, p=prev.mgr[m]||{subs:0,st:0,gp:0,rw:0};
+        var cv=c[mvKey]||0, pv=p[mvKey]||0;
+        var rwD=(c.rw>0&&p.rw>0)?(cv/c.rw - pv/p.rw):null;
+        mgrRows.push({m:m, d:cv-pv, rwD:rwD});
+      });
+    }
     mgrRows.sort(function(a,b){return b.d-a.d;});
   }
   var maxAbsD=Math.max.apply(null,mgrRows.map(function(x){return Math.abs(x.d);}).concat([1]));
@@ -6901,13 +6926,16 @@ function renderRecap(){
   var mgrHtml=mgrRows.map(function(x){
     var w=Math.round(Math.abs(x.d)/maxAbsD*46);
     var pos=x.d>0, zero=x.d===0;
-    var mc=MGR_COLORS[x.m]||'#888';
+    var mc=x.isRec?(MGR_COLORS[mgrFilter]||'#888'):(MGR_COLORS[x.m]||'#888');
     var bar=zero?'<div style="position:absolute;left:50%;top:2px;bottom:2px;width:2px;background:var(--text3)"></div>'
       :'<div style="position:absolute;'+(pos?'left:50%':'right:50%')+';top:2px;bottom:2px;width:'+Math.max(w,2)+'%;border-radius:6px;background:'+(pos?'var(--green)':'var(--red)')+'"></div>';
     var vTxt=zero?'— even':(pos?'+':'−')+mvFmt(Math.abs(x.d))+(mvIsGP?'':' '+mvName);
     var rwTxt=x.rwD==null?'':' <span style="color:var(--text3)">('+(x.rwD>=0?'+':'−')+(mvIsGP?formatGP(Math.abs(x.rwD)):Math.abs(x.rwD).toFixed(2))+'/rw)</span>';
+    var nameHtml=x.isRec
+      ?'<span style="width:110px;font-size:12px;font-weight:600;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" class="pf-name-link" onclick="openProfileEnc(\''+encodeURIComponent(x.m)+'\')" title="Open profile">'+x.m+'</span>'
+      :'<span style="width:64px;font-size:12px;font-weight:700;color:'+mc+';flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+x.m+'</span>';
     return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0">'
-      +'<span style="width:64px;font-size:12px;font-weight:700;color:'+mc+';flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+x.m+'</span>'
+      +nameHtml
       +'<div style="flex:1;height:16px;position:relative;background:var(--bg4);border-radius:8px"><div style="position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:var(--text3)"></div>'+bar+'</div>'
       +'<span style="width:150px;font-size:11px;font-weight:700;flex-shrink:0;text-align:right" class="'+(zero?'pf-flat':pos?'pf-up':'pf-down')+'">'+vTxt+rwTxt+'</span></div>';
   }).join('');
@@ -6954,7 +6982,7 @@ function renderRecap(){
   body.innerHTML =
    noCmp
   +'<div class="card" style="margin-bottom:16px">'
-    +'<div class="card-title" style="margin-bottom:12px">Org — '+selEntry.def.label+(prevLbl?' vs '+prevLbl:'')+(selEntry.closed?'':' <span style="color:var(--amber)">(in progress)</span>')+'</div>'
+    +'<div class="card-title" style="margin-bottom:12px">'+scopeLbl+' — '+selEntry.def.label+(prevLbl?' vs '+prevLbl:'')+(selEntry.closed?'':' <span style="color:var(--amber)">(in progress)</span>')+'</div>'
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px">'
       +kpi(cur.org.subs.toLocaleString(),'Subs','var(--c-subs)',dSubs.html)
       +kpi(cur.org.ivs.toLocaleString(),'Interviews','var(--c-ivs)',dIvs.html)
@@ -6967,7 +6995,7 @@ function renderRecap(){
   +'</div>'
   +(prev?'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">'
     +'<div class="card" style="margin-bottom:0">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px"><span class="card-title">Manager movement — '+mvName+' Δ vs '+prevLbl+'</span><span style="font-size:11px;color:var(--text3)">gray = per rec-wk change</span></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px"><span class="card-title">'+(mgrFilter?'Recruiter':'Manager')+' movement — '+mvName+' Δ vs '+prevLbl+'</span><span style="font-size:11px;color:var(--text3)">gray = per rec-wk change</span></div>'
       +mgrHtml
     +'</div>'
     +'<div class="card" style="margin-bottom:0">'
@@ -6981,6 +7009,7 @@ function renderRecap(){
 
   _recapLast={
     lbl:selEntry.def.label, prevLbl:prevLbl, closed:selEntry.closed,
+    scopeLbl:scopeLbl, isTeam:!!mgrFilter,
     org:cur.org, prevOrg:prev?prev.org:null, summaryText:summaryText,
     mgrRows:mgrRows, mvName:mvName, mvIsGP:mvIsGP,
     upList:upList, downList:downList
@@ -7007,10 +7036,10 @@ function exportRecap(){
     +'.callout{background:#f8f9fc;border:1px solid #e8eaf0;border-radius:6px;padding:8px 12px;font-size:12px;margin-top:8px}'
     +'ul{margin:4px 0 0 18px}@media print{body{padding:16px}}'
     +'</style></head><body>'
-    +'<div class="hdr"><div><div class="h1">Period Recap — '+_pfEsc(L.lbl)+(L.closed?'':' (in progress)')+'</div>'
+    +'<div class="hdr"><div><div class="h1">Period Recap — '+_pfEsc(L.scopeLbl)+' · '+_pfEsc(L.lbl)+(L.closed?'':' (in progress)')+'</div>'
     +'<div class="sub">'+(L.prevLbl?'Compared to '+_pfEsc(L.prevLbl):'No comparison bucket')+' · Active roster only</div></div>'
     +'<div class="sub">Generated '+(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear()+'</div></div>'
-    +'<div class="h2">Org totals</div>'
+    +'<div class="h2">'+_pfEsc(L.scopeLbl)+' totals</div>'
     +'<table><tr><th>Metric</th><th>'+_pfEsc(L.lbl)+'</th><th>Δ vs '+(L.prevLbl?_pfEsc(L.prevLbl):'—')+'</th></tr>'
     +'<tr><td>Subs</td><td>'+L.org.subs.toLocaleString()+'</td><td>'+pd(L.org.subs,P?P.subs:null)+'</td></tr>'
     +'<tr><td>Interviews</td><td>'+L.org.ivs.toLocaleString()+'</td><td>'+pd(L.org.ivs,P?P.ivs:null)+'</td></tr>'
@@ -7019,8 +7048,8 @@ function exportRecap(){
     +'<tr><td>Gross Profit</td><td>'+formatGP(L.org.gp)+'</td><td>'+pd(L.org.gp,P?P.gp:null,true)+'</td></tr>'
     +'<tr><td>On track</td><td>'+L.org.ot+' / '+L.org.act+'</td><td>'+(P?(L.org.ot-P.ot>=0?'+':'')+(L.org.ot-P.ot)+' (prev '+P.ot+'/'+P.act+')':'—')+'</td></tr></table>'
     +(L.summaryText?'<div class="callout">💡 '+_pfEsc(L.summaryText)+'</div>':'')
-    +(L.mgrRows.length?'<div class="h2">Manager movement — '+_pfEsc(L.mvName)+' Δ</div>'
-      +'<table><tr><th>Manager</th><th>Δ</th><th>Δ per rec-wk</th></tr>'
+    +(L.mgrRows.length?'<div class="h2">'+(L.isTeam?'Recruiter':'Manager')+' movement — '+_pfEsc(L.mvName)+' Δ</div>'
+      +'<table><tr><th>'+(L.isTeam?'Recruiter':'Manager')+'</th><th>Δ</th><th>Δ per rec-wk</th></tr>'
       +L.mgrRows.map(function(x){
         var v=(x.d>0?'+':x.d<0?'−':'')+(L.mvIsGP?formatGP(Math.abs(x.d)):Math.abs(x.d));
         var rw=x.rwD==null?'—':(x.rwD>=0?'+':'−')+(L.mvIsGP?formatGP(Math.abs(x.rwD)):Math.abs(x.rwD).toFixed(2));
@@ -7180,6 +7209,17 @@ function renderRecruiterProfile(){
   var f, t = lastWk;
   if(profileRangeMode==='4') f = Math.max(firstActive, t-3);
   else if(profileRangeMode==='12') f = Math.max(firstActive, t-11);
+  else if(profileRangeMode.indexOf(':')>0){
+    // Period/quarter preset: clamp the bucket to this recruiter's active window
+    var pm=profileRangeMode.split(':');
+    var pDefs=pm[0]==='Q'?QUARTER_DEFS:PERIOD_DEFS;
+    var pDef=pDefs[parseInt(pm[1])];
+    if(pDef){
+      f=Math.max(firstActive, pDef.weeks[0]);
+      t=Math.min(lastWk, pDef.weeks[pDef.weeks.length-1]);
+      if(t<f){ f=firstActive; t=lastWk; profileRangeMode='full'; } // no overlap — fall back
+    } else { f=firstActive; }
+  }
   else f = firstActive;
   var rangeWks = t - f + 1;
   var tenureWks = lastWk - firstActive + 1;
@@ -7326,6 +7366,19 @@ function renderRecruiterProfile(){
     var on = profileRangeMode===mode;
     return '<button class="btn" onclick="setProfileRange(\''+mode+'\')" style="height:30px;font-size:12px'+(on?';background:var(--accent-dim);border-color:var(--accent);color:var(--accent)':'')+'">'+lbl+'</button>';
   };
+  // Period/quarter presets: only buckets overlapping this recruiter's active window
+  var periodOpts='';
+  var addOpts=function(defs,kind){
+    defs.forEach(function(pd,i){
+      if(pd.weeks[0]>lastWk || pd.weeks[pd.weeks.length-1]<firstActive) return;
+      var v=kind+':'+i;
+      periodOpts+='<option value="'+v+'"'+(profileRangeMode===v?' selected':'')+'>'+pd.label+'</option>';
+    });
+  };
+  addOpts(PERIOD_DEFS,'P'); addOpts(QUARTER_DEFS,'Q');
+  var periodOn = profileRangeMode.indexOf(':')>0;
+  var periodSel = '<select onchange="if(this.value)setProfileRange(this.value)" style="height:30px;font-size:12px;background:'+(periodOn?'var(--accent-dim)':'var(--bg4)')+';color:'+(periodOn?'var(--accent)':'var(--text)')+';border:1px solid '+(periodOn?'var(--accent)':'var(--border2)')+';border-radius:var(--radius);padding:0 8px">'
+    +'<option value=""'+(periodOn?'':' selected')+' disabled>Period…</option>'+periodOpts+'</select>';
 
   body.innerHTML =
   '<div class="card" style="margin-bottom:14px">'
@@ -7347,6 +7400,7 @@ function renderRecruiterProfile(){
     +'<div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">'
       +'<span style="font-size:12px;color:var(--text3)">Range:</span>'
       +rangeBtn('4','Last 4 wks')+rangeBtn('12','Last 12 wks')+rangeBtn('full','Full tenure')
+      +periodSel
       +'<span style="font-size:11.5px;color:var(--text3)">'+wkLabels[f]+' → '+wkLabels[t]+' ('+rangeWks+' wks)</span>'
       +'<span style="flex:1"></span>'
       +'<button class="btn" onclick="exportProfileSheet()" style="height:30px;font-size:12px;background:var(--accent);border-color:var(--accent);color:#fff">📄 Export 1:1 sheet</button>'
