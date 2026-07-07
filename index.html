@@ -253,7 +253,7 @@ tbody tr:nth-child(even):hover td{background:var(--bg2)}
 .mgr-scorecard-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
 .mgr-scorecard-name{font-size:14px;font-weight:700;letter-spacing:-.01em}
 .mgr-scorecard-meta{font-size:11px;color:var(--text3);margin-top:2px}
-.mgr-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.mgr-stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px;margin-bottom:12px}
 .mgr-stat{text-align:center;padding:8px 4px;background:var(--bg2);border-radius:var(--radius)}
 .mgr-stat-val{font-size:18px;font-weight:700;line-height:1;letter-spacing:-.02em}
 .mgr-stat-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:3px;font-weight:600}
@@ -522,6 +522,7 @@ td.editing{padding:2px 4px!important}
   <div class="tab" data-tab="trends">Trends &amp; Insights</div>
   <div class="tab" data-tab="leaderboard">🏆 Leaderboard</div>
   <div class="tab" data-tab="gp">💰 Gross Profit</div>
+  <div class="tab" data-tab="recap">📋 Period Recap</div>
   <div class="tab" data-tab="roster" id="roster-tab" style="display:none">Roster</div>
   <div class="tab" data-tab="orgchart" id="orgchart-tab" style="display:none">🗂 Org Chart</div>
   <div class="tab" data-tab="calendar" id="calendar-tab" style="display:none">🗓 Calendar</div>
@@ -1003,6 +1004,26 @@ td.editing{padding:2px 4px!important}
 </div>
 
 <!-- ROSTER MANAGEMENT -->
+<!-- ── Period Recap ── -->
+<div class="tab-panel" id="tab-recap">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+    <select id="recap-period" onchange="renderRecap()"></select>
+    <span style="font-size:12px;color:var(--text3)">vs</span>
+    <select id="recap-vs" onchange="renderRecap()">
+      <option value="prior">Prior period</option>
+      <option value="lastq">Same period last quarter</option>
+    </select>
+    <select id="recap-metric" onchange="renderRecap()">
+      <option value="st">Movement: Starts</option>
+      <option value="subs">Movement: Subs</option>
+      <option value="gp">Movement: GP</option>
+    </select>
+    <span style="flex:1"></span>
+    <button onclick="exportRecap()" style="background:var(--accent);border:1px solid var(--accent);color:#fff;border-radius:var(--radius);height:32px;padding:0 12px;font-size:12px;font-weight:600;cursor:pointer">📄 Export recap</button>
+  </div>
+  <div id="recap-body"></div>
+</div>
+
 <div class="tab-panel" id="tab-roster">
   <div id="roster-auth-gate" style="display:none;text-align:center;padding:48px 20px">
     <div style="font-size:32px;margin-bottom:12px">🔒</div>
@@ -2016,6 +2037,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     if(t.dataset.tab==='recruiter')renderRecruiter();
     if(t.dataset.tab==='trends')renderTrends();
     if(t.dataset.tab==='leaderboard')renderLeaderboard();
+    if(t.dataset.tab==='recap')renderRecap();
     if(t.dataset.tab==='roster')renderRoster();
     if(t.dataset.tab==='orgchart')renderOrgChart();
     if(t.dataset.tab==='gp')renderGP();
@@ -5316,6 +5338,23 @@ function renderManagers(){
     var recWks=0;
     bounds.forEach(function(b){ recWks+=Math.max(0, Math.min(wTrel,b[1])-Math.max(wFrel,b[0])+1); });
     var otc=team.filter(function(r){return r.onTrack;}).length;
+    // GP for this window (absolute week coords), matched by name; unmatched rows footnoted on the tile
+    var absF=GR[0]+wFrel, absT=GR[0]+wTrel;
+    var teamGP=0, gpNorm=function(s){return (s||'').trim().replace(/\s+/g,' ').toLowerCase();};
+    var teamNames={};
+    team.forEach(function(r){
+      teamNames[gpNorm(r.name)]=1;
+      var g=_gpRange(r.name,absF,absT);
+      if(g!=null)teamGP+=g;
+    });
+    var orphanGP=0, orphanN=0;
+    GP_DATA.forEach(function(g){
+      if(g.manager===m && !teamNames[gpNorm(g.name)]){
+        var s=0;
+        for(var gi=absF;gi<=absT;gi++){ if(gi<g.weekly.length)s+=(g.weekly[gi]||0); }
+        if(s!==0){orphanGP+=s;orphanN++;}
+      }
+    });
     // Window slice helper
     var getW=function(arr){
       var v=arr.filter(function(x){return x!=null;});
@@ -5349,6 +5388,7 @@ function renderManagers(){
     var ws=getW(subsW),wiv=getW(ivsW),wpl=getW(plW),wst=getW(stW);
     var wld=getW((function(){var ldW=[];for(var wi=0;wi<nW;wi++){var l=0;for(var ti=0;ti<team.length;ti++)l+=((team[ti].leads||[])[wi]||0);ldW.push(l);}return ldW;})());
     mgrData[m]={team:team,subsW:subsW,ivsW:ivsW,plW:plW,stW:stW,hcW:hcW,recWks:recWks,otc:otc,
+      gp:teamGP,orphanGP:orphanGP,orphanN:orphanN,
       ts:ts,tiv:tiv,tpl:tpl,tst:tst,
       s2s:tst>0?ts/tst:null,a4:a4,
       slS:slp(ws),slIv:slp(wiv),slPl:slp(wpl),slSt:slp(wst),slLd:slp(wld),pcS:pct(ws)};
@@ -5563,6 +5603,7 @@ function renderManagers(){
         +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-ivs)">'+fmtN(d.tiv,d,1)+'</div><div class="mgr-stat-lbl">IVs'+(pcMode?'/rw':'')+'</div></div>'
         +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--purple)">'+fmtN(d.tpl,d,2)+'</div><div class="mgr-stat-lbl">Placements'+(pcMode?'/rw':'')+'</div></div>'
         +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-starts)">'+fmtN(d.tst,d,2)+'</div><div class="mgr-stat-lbl">Starts'+(pcMode?'/rw':'')+'</div></div>'
+        +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--teal,#2dd4bf)">'+(pcMode?(d.recWks>0?formatGP(d.gp/d.recWks):'—'):formatGP(d.gp))+'</div><div class="mgr-stat-lbl" style="cursor:help" title="Gross profit in this window from the GP tab\'s data, matched by recruiter name.'+(d.orphanN>0?' Excludes '+formatGP(d.orphanGP)+' from '+d.orphanN+' GP row(s) under this manager that don\'t match a roster name.':'')+'">GP'+(pcMode?'/rw':'')+'</div></div>'
         +'<div class="mgr-stat"><div class="mgr-stat-val" style="color:var(--c-leads)">'+d.a4.toFixed(1)+'</div><div class="mgr-stat-lbl" style="cursor:help" title="Already a per-recruiter average — unaffected by the Totals / Per recruiter-wk view">4-wk Sub Average</div></div>'
       +'</div>'
       +'<div class="mgr-trend-row" style="margin-bottom:6px">'
@@ -6700,6 +6741,302 @@ window.safeSet = safeSet;
 // then refresh silently from Google Sheets in the background.
 renderOverview();
 updateSyncBadge();
+// ─── PERIOD RECAP ───
+// Period-end rollup: org deltas, on-track shift, manager movement, biggest
+// individual movers. Active roster only (archived excluded — matches the GP tab).
+// Built on PERIOD_DEFS / QUARTER_DEFS (5/4/4) with absolute week indices.
+var _recapLast = null;
+
+function _recapMaxWeek(){
+  var mx = -1;
+  RECRUITERS.forEach(function(r){
+    var L = Math.min((r.subs||[]).length, wkLabels.length);
+    for(var i=L-1;i>mx;i--){
+      if(r.subs[i]!=null||(r.ivs&&r.ivs[i]!=null)||(r.starts&&r.starts[i]!=null)){ mx=i; break; }
+    }
+  });
+  return mx;
+}
+function _recapFirstAbs(r){
+  var swi=r.startWeekIndex||0;
+  var fd=-1, L=(r.subs||[]).length;
+  for(var i=0;i<L;i++){ if(r.subs[i]!=null||(r.ivs&&r.ivs[i]!=null)||(r.starts&&r.starts[i]!=null)){fd=i;break;} }
+  return Math.max(swi, fd<0?0:fd);
+}
+function _recapEntries(mx){
+  var out=[];
+  PERIOD_DEFS.forEach(function(d,i){
+    if(d.weeks[0]<=mx) out.push({kind:'P',idx:i,def:d,closed:d.weeks[d.weeks.length-1]<=mx});
+  });
+  QUARTER_DEFS.forEach(function(d,i){
+    if(d.weeks[0]<=mx) out.push({kind:'Q',idx:i,def:d,closed:d.weeks[d.weeks.length-1]<=mx});
+  });
+  return out;
+}
+// Aggregate one bucket: org totals, per-manager, per-recruiter, on-track at close
+function _recapAgg(def, mx){
+  var ws = def.weeks.filter(function(wi){return wi<=mx;});
+  if(!ws.length) return null;
+  var f=ws[0], e=ws[ws.length-1];
+  var org={subs:0,ivs:0,pl:0,st:0,gp:0,ot:0,act:0}, mgr={}, rec=[];
+  RECRUITERS.forEach(function(r){
+    var fa=_recapFirstAbs(r);
+    var sum=function(arr){var s=0;ws.forEach(function(wi){s+=((arr||[])[wi]||0);});return s;};
+    var s=sum(r.subs), iv=sum(r.ivs), pl=sum(r.placements), st=sum(r.starts);
+    var g=_gpRange(r.name,f,e);
+    var active = fa<=e;
+    var onT=false;
+    if(active){
+      var cum=0; for(var i=fa;i<=e;i++) cum+=((r.starts||[])[i]||0);
+      onT = cum >= onTrackTarget(fa, 0, e);
+      org.act++; if(onT)org.ot++;
+    }
+    org.subs+=s; org.ivs+=iv; org.pl+=pl; org.st+=st; if(g!=null)org.gp+=g;
+    if(!mgr[r.manager]) mgr[r.manager]={subs:0,st:0,gp:0,rw:0};
+    mgr[r.manager].subs+=s; mgr[r.manager].st+=st; if(g!=null)mgr[r.manager].gp+=g;
+    if(active) mgr[r.manager].rw += Math.max(0, e-Math.max(f,fa)+1);
+    rec.push({name:r.name, manager:r.manager, subs:s, st:st, gp:g==null?0:g, onT:onT, active:active});
+  });
+  return {org:org, mgr:mgr, rec:rec, f:f, e:e, nWks:ws.length};
+}
+function _recapDelta(cur, prev, isGP){
+  if(prev==null) return {html:'<span class="pf-flat" style="font-size:11.5px;font-weight:700">no comparison</span>', pct:null};
+  var d = cur - prev;
+  var pct = prev!==0 ? Math.round(d/prev*100) : (cur!==0?100:0);
+  var prevDisp = isGP?formatGP(prev):prev.toLocaleString();
+  if(Math.abs(pct)<3) return {html:'<span class="pf-flat" style="font-size:11.5px;font-weight:700">— '+(pct>=0?'+':'')+pct+'% ('+prevDisp+')</span>', pct:pct};
+  var cls = pct>0?'pf-up':'pf-down';
+  var arrow = pct>0?'▲ +':'▼ ';
+  return {html:'<span class="'+cls+'" style="font-size:11.5px;font-weight:700">'+arrow+pct+'% ('+prevDisp+')</span>', pct:pct};
+}
+
+function renderRecap(){
+  var body=document.getElementById('recap-body');
+  if(!body) return;
+  var mx=_recapMaxWeek();
+  if(mx<0){ body.innerHTML='<div class="card" style="color:var(--text3)">No weekly data yet.</div>'; return; }
+  var entries=_recapEntries(mx);
+
+  // Populate period selector once (default: latest closed period)
+  var sel=document.getElementById('recap-period');
+  if(sel && sel.options.length===0){
+    entries.forEach(function(en){
+      var o=document.createElement('option');
+      o.value=en.kind+':'+en.idx;
+      var wksTxt=wkLabels[en.def.weeks[0]]+'–'+wkLabels[Math.min(en.def.weeks[en.def.weeks.length-1],mx)];
+      o.textContent=en.def.label+' ('+wksTxt+')'+(en.closed?'':' — in progress');
+      sel.appendChild(o);
+    });
+    var closedP=entries.filter(function(en){return en.kind==='P'&&en.closed;});
+    if(closedP.length) sel.value='P:'+closedP[closedP.length-1].idx;
+  }
+  var parts=(sel.value||'P:0').split(':');
+  var selEntry=entries.find(function(en){return en.kind===parts[0]&&en.idx===parseInt(parts[1]);})||entries[0];
+  var vs=document.getElementById('recap-vs').value;
+  var vsSel=document.getElementById('recap-vs');
+  if(vsSel) vsSel.disabled = selEntry.kind==='Q'; // quarters always compare to prior quarter
+  var prevEntry = selEntry.kind==='Q'
+    ? entries.find(function(en){return en.kind==='Q'&&en.idx===selEntry.idx-1;})
+    : (vs==='lastq'
+        ? entries.find(function(en){return en.kind==='P'&&en.idx===selEntry.idx-3;})
+        : entries.find(function(en){return en.kind==='P'&&en.idx===selEntry.idx-1;}));
+  // Only compare against closed buckets — a partial prior is a misleading baseline
+  if(prevEntry && !prevEntry.closed) prevEntry=null;
+
+  var cur=_recapAgg(selEntry.def,mx);
+  var prev=prevEntry?_recapAgg(prevEntry.def,mx):null;
+  var prevLbl=prevEntry?prevEntry.def.label:null;
+  var mvKey=document.getElementById('recap-metric').value;
+  var mvIsGP=mvKey==='gp';
+  var mvName=mvIsGP?'GP':(mvKey==='st'?'starts':'subs');
+
+  // ── KPI cards ──
+  var kpi=function(v,lbl,color,d){
+    return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center">'
+      +'<div style="font-size:24px;font-weight:800;color:'+color+'">'+v+'</div>'
+      +'<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:2px">'+lbl+'</div>'
+      +'<div style="margin-top:5px">'+d+'</div></div>';
+  };
+  var dSubs=_recapDelta(cur.org.subs, prev?prev.org.subs:null);
+  var dIvs=_recapDelta(cur.org.ivs, prev?prev.org.ivs:null);
+  var dPl=_recapDelta(cur.org.pl, prev?prev.org.pl:null);
+  var dSt=_recapDelta(cur.org.st, prev?prev.org.st:null);
+  var dGp=_recapDelta(cur.org.gp, prev?prev.org.gp:null, true);
+  var otD='';
+  if(prev){
+    var otdv=cur.org.ot-prev.org.ot;
+    otD = otdv>0?'<span class="pf-up" style="font-size:11.5px;font-weight:700">▲ from '+prev.org.ot+'/'+prev.org.act+'</span>'
+        : otdv<0?'<span class="pf-down" style="font-size:11.5px;font-weight:700">▼ from '+prev.org.ot+'/'+prev.org.act+'</span>'
+        : '<span class="pf-flat" style="font-size:11.5px;font-weight:700">— even ('+prev.org.ot+'/'+prev.org.act+')</span>';
+  } else otD='<span class="pf-flat" style="font-size:11.5px;font-weight:700">no comparison</span>';
+
+  // ── Auto-summary (rule-based; numbers only, no speculation beyond direction) ──
+  var summary=[];
+  if(prev){
+    var pS=dSubs.pct,pI=dIvs.pct,pSt=dSt.pct,pPl=dPl.pct,pG=dGp.pct;
+    if(pS>=3&&pI>=3&&pSt<=-3) summary.push('Pipeline grew (subs '+(pS>0?'+':'')+pS+'%, interviews '+(pI>0?'+':'')+pI+'%) while starts dipped — the interview build-up should convert next period.');
+    else if(pS>=3&&pI>=3&&pSt>=3) summary.push('Broad-based growth: subs, interviews, and starts all up vs '+prevLbl+'.');
+    else if(pS<=-3&&pI<=-3&&pSt<=-3) summary.push('Activity contracted across the funnel vs '+prevLbl+' — worth a look at the movers below.');
+    if(pG>=5&&Math.abs(pPl)<5) summary.push('GP up '+pG+'% on flat placements — higher-value deals.');
+    else if(pG<=-5&&pPl>=5) summary.push('Placements up but GP down '+pG+'% — smaller deals this '+(selEntry.kind==='Q'?'quarter':'period')+'.');
+    var otdv2=cur.org.ot-prev.org.ot;
+    if(otdv2>0) summary.push(otdv2+' recruiter'+(otdv2>1?'s':'')+' moved onto pace.');
+    else if(otdv2<0) summary.push((-otdv2)+' recruiter'+(otdv2<-1?'s':'')+' fell off pace.');
+  }
+  var summaryText=summary.join(' ');
+
+  // ── Manager movement ──
+  var mgrRows=[];
+  if(prev){
+    MGRS.forEach(function(m){
+      var c=cur.mgr[m]||{subs:0,st:0,gp:0,rw:0}, p=prev.mgr[m]||{subs:0,st:0,gp:0,rw:0};
+      var cv=c[mvKey]||0, pv=p[mvKey]||0;
+      var rwD=(c.rw>0&&p.rw>0)?(cv/c.rw - pv/p.rw):null;
+      mgrRows.push({m:m, d:cv-pv, rwD:rwD});
+    });
+    mgrRows.sort(function(a,b){return b.d-a.d;});
+  }
+  var maxAbsD=Math.max.apply(null,mgrRows.map(function(x){return Math.abs(x.d);}).concat([1]));
+  var mvFmt=function(v){return mvIsGP?formatGP(v):Math.round(v*100)/100;};
+  var mgrHtml=mgrRows.map(function(x){
+    var w=Math.round(Math.abs(x.d)/maxAbsD*46);
+    var pos=x.d>0, zero=x.d===0;
+    var mc=MGR_COLORS[x.m]||'#888';
+    var bar=zero?'<div style="position:absolute;left:50%;top:2px;bottom:2px;width:2px;background:var(--text3)"></div>'
+      :'<div style="position:absolute;'+(pos?'left:50%':'right:50%')+';top:2px;bottom:2px;width:'+Math.max(w,2)+'%;border-radius:6px;background:'+(pos?'var(--green)':'var(--red)')+'"></div>';
+    var vTxt=zero?'— even':(pos?'+':'−')+mvFmt(Math.abs(x.d))+(mvIsGP?'':' '+mvName);
+    var rwTxt=x.rwD==null?'':' <span style="color:var(--text3)">('+(x.rwD>=0?'+':'−')+(mvIsGP?formatGP(Math.abs(x.rwD)):Math.abs(x.rwD).toFixed(2))+'/rw)</span>';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0">'
+      +'<span style="width:64px;font-size:12px;font-weight:700;color:'+mc+';flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+x.m+'</span>'
+      +'<div style="flex:1;height:16px;position:relative;background:var(--bg4);border-radius:8px"><div style="position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:var(--text3)"></div>'+bar+'</div>'
+      +'<span style="width:150px;font-size:11px;font-weight:700;flex-shrink:0;text-align:right" class="'+(zero?'pf-flat':pos?'pf-up':'pf-down')+'">'+vTxt+rwTxt+'</span></div>';
+  }).join('');
+
+  // ── Biggest individual movers (blended, scale-free) ──
+  var upHtml='',downHtml='',upList=[],downList=[];
+  if(prev){
+    var pByName={}; prev.rec.forEach(function(r){pByName[r.name]=r;});
+    var movers=[];
+    cur.rec.forEach(function(r){
+      var p=pByName[r.name];
+      if(!p||!r.active) return;
+      movers.push({name:r.name,manager:r.manager,dSt:r.st-p.st,dSubs:r.subs-p.subs,dGp:r.gp-p.gp,flip:r.onT!==p.onT,onT:r.onT});
+    });
+    var mA=function(k){return Math.max.apply(null,movers.map(function(x){return Math.abs(x[k]);}).concat([1]));};
+    var aSt=mA('dSt'),aSubs=mA('dSubs'),aGp=mA('dGp');
+    movers.forEach(function(x){ x.score=x.dSt/aSt + x.dSubs/aSubs + x.dGp/aGp; });
+    movers.sort(function(a,b){return b.score-a.score;});
+    var comp=function(x){
+      var parts=[
+        {v:x.dSt, t:(x.dSt>0?'+':'−')+Math.abs(x.dSt)+' start'+(Math.abs(x.dSt)!==1?'s':''), n:Math.abs(x.dSt)/aSt},
+        {v:x.dSubs, t:(x.dSubs>0?'+':'−')+Math.abs(x.dSubs)+' subs', n:Math.abs(x.dSubs)/aSubs},
+        {v:x.dGp, t:(x.dGp>0?'+':'−')+formatGP(Math.abs(x.dGp))+' GP', n:Math.abs(x.dGp)/aGp}
+      ].filter(function(pp){return pp.v!==0;}).sort(function(a,b){return b.n-a.n;}).slice(0,2).map(function(pp){return pp.t;});
+      if(x.flip) parts.push(x.onT?'moved onto pace':'fell off pace');
+      return parts.join(' · ');
+    };
+    var row=function(x,cls){
+      var mc=MGR_COLORS[x.manager]||'#888';
+      return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">'
+        +'<span style="font-size:12.5px;font-weight:600" class="pf-name-link" onclick="openProfileEnc(\''+encodeURIComponent(x.name)+'\')" title="Open profile">'+x.name+' <span style="font-size:10.5px;color:'+mc+'">'+x.manager+'</span></span>'
+        +'<span class="'+cls+'" style="font-size:11.5px;font-weight:700;text-align:right;flex-shrink:0">'+comp(x)+'</span></div>';
+    };
+    var ups=movers.filter(function(x){return x.score>0.01;}).slice(0,3);
+    var downs=movers.filter(function(x){return x.score<-0.01;}).slice(-3).reverse();
+    upHtml=ups.map(function(x){return row(x,'pf-up');}).join('')||'<div style="font-size:12px;color:var(--text3);padding:6px 0">No meaningful gains.</div>';
+    downHtml=downs.map(function(x){return row(x,'pf-down');}).join('')||'<div style="font-size:12px;color:var(--text3);padding:6px 0">No meaningful declines.</div>';
+    upList=ups.map(function(x){return x.name+' ('+x.manager+'): '+comp(x);});
+    downList=downs.map(function(x){return x.name+' ('+x.manager+'): '+comp(x);});
+  }
+
+  var noCmp=!prev?'<div style="font-size:12px;color:var(--text3);margin-bottom:12px">No closed comparison bucket available'+(vs==='lastq'?' (same period last quarter hasn\'t closed or doesn\'t exist)':'')+' — showing totals only.</div>':'';
+
+  body.innerHTML =
+   noCmp
+  +'<div class="card" style="margin-bottom:16px">'
+    +'<div class="card-title" style="margin-bottom:12px">Org — '+selEntry.def.label+(prevLbl?' vs '+prevLbl:'')+(selEntry.closed?'':' <span style="color:var(--amber)">(in progress)</span>')+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px">'
+      +kpi(cur.org.subs.toLocaleString(),'Subs','var(--c-subs)',dSubs.html)
+      +kpi(cur.org.ivs.toLocaleString(),'Interviews','var(--c-ivs)',dIvs.html)
+      +kpi(cur.org.pl.toLocaleString(),'Placements','var(--purple)',dPl.html)
+      +kpi(cur.org.st.toLocaleString(),'Starts','var(--c-starts)',dSt.html)
+      +kpi(formatGP(cur.org.gp),'Gross Profit','var(--teal,#2dd4bf)',dGp.html)
+      +kpi(cur.org.ot+'<span style="font-size:14px;color:var(--text3)">/'+cur.org.act+'</span>','On track','var(--text)',otD)
+    +'</div>'
+    +(summaryText?'<div style="font-size:11.5px;color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px;margin-top:12px">💡 <b style="color:var(--text)">Auto-summary:</b> '+summaryText+'</div>':'')
+  +'</div>'
+  +(prev?'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">'
+    +'<div class="card" style="margin-bottom:0">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px"><span class="card-title">Manager movement — '+mvName+' Δ vs '+prevLbl+'</span><span style="font-size:11px;color:var(--text3)">gray = per rec-wk change</span></div>'
+      +mgrHtml
+    +'</div>'
+    +'<div class="card" style="margin-bottom:0">'
+      +'<div class="card-title" style="margin-bottom:10px">Biggest individual movers vs '+prevLbl+'</div>'
+      +'<div style="font-size:10.5px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">▲ Up</div>'+upHtml
+      +'<div style="font-size:10.5px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 2px">▼ Down</div>'+downHtml
+      +'<div style="font-size:11px;color:var(--text3);margin-top:10px">Ranked by a blended Δ across starts, subs, and GP. Names open the Recruiter Profile.</div>'
+    +'</div>'
+  +'</div>':'')
+  +'<div style="font-size:11px;color:var(--text3);margin-top:14px;padding:0 4px">Active roster only — archived recruiters excluded (matches the GP tab). On-track compares each recruiter\'s pacing status at period close vs prior close using the standard rule.</div>';
+
+  _recapLast={
+    lbl:selEntry.def.label, prevLbl:prevLbl, closed:selEntry.closed,
+    org:cur.org, prevOrg:prev?prev.org:null, summaryText:summaryText,
+    mgrRows:mgrRows, mvName:mvName, mvIsGP:mvIsGP,
+    upList:upList, downList:downList
+  };
+}
+
+function exportRecap(){
+  var L=_recapLast;
+  if(!L) return;
+  var d=new Date();
+  var pd=function(c,p,isGP){
+    if(p==null) return '—';
+    var pct=p!==0?Math.round((c-p)/p*100):(c!==0?100:0);
+    return (pct>0?'+':'')+pct+'% (prev '+(isGP?formatGP(p):p.toLocaleString())+')';
+  };
+  var P=L.prevOrg;
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Period Recap — '+_pfEsc(L.lbl)+'</title><style>'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +"body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;color:#1a1c24;background:#fff;padding:28px 32px}"
+    +'.h1{font-size:20px;font-weight:800}.sub{color:#5c6480;font-size:12px;margin-top:4px}'
+    +'.hdr{padding-bottom:12px;border-bottom:2px solid #4f8ef7;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-end}'
+    +'.h2{font-size:13px;font-weight:700;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #e8eaf0}'
+    +'table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #e8eaf0}th{background:#f8f9fc;font-weight:700}'
+    +'.callout{background:#f8f9fc;border:1px solid #e8eaf0;border-radius:6px;padding:8px 12px;font-size:12px;margin-top:8px}'
+    +'ul{margin:4px 0 0 18px}@media print{body{padding:16px}}'
+    +'</style></head><body>'
+    +'<div class="hdr"><div><div class="h1">Period Recap — '+_pfEsc(L.lbl)+(L.closed?'':' (in progress)')+'</div>'
+    +'<div class="sub">'+(L.prevLbl?'Compared to '+_pfEsc(L.prevLbl):'No comparison bucket')+' · Active roster only</div></div>'
+    +'<div class="sub">Generated '+(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear()+'</div></div>'
+    +'<div class="h2">Org totals</div>'
+    +'<table><tr><th>Metric</th><th>'+_pfEsc(L.lbl)+'</th><th>Δ vs '+(L.prevLbl?_pfEsc(L.prevLbl):'—')+'</th></tr>'
+    +'<tr><td>Subs</td><td>'+L.org.subs.toLocaleString()+'</td><td>'+pd(L.org.subs,P?P.subs:null)+'</td></tr>'
+    +'<tr><td>Interviews</td><td>'+L.org.ivs.toLocaleString()+'</td><td>'+pd(L.org.ivs,P?P.ivs:null)+'</td></tr>'
+    +'<tr><td>Placements</td><td>'+L.org.pl.toLocaleString()+'</td><td>'+pd(L.org.pl,P?P.pl:null)+'</td></tr>'
+    +'<tr><td>Starts</td><td>'+L.org.st.toLocaleString()+'</td><td>'+pd(L.org.st,P?P.st:null)+'</td></tr>'
+    +'<tr><td>Gross Profit</td><td>'+formatGP(L.org.gp)+'</td><td>'+pd(L.org.gp,P?P.gp:null,true)+'</td></tr>'
+    +'<tr><td>On track</td><td>'+L.org.ot+' / '+L.org.act+'</td><td>'+(P?(L.org.ot-P.ot>=0?'+':'')+(L.org.ot-P.ot)+' (prev '+P.ot+'/'+P.act+')':'—')+'</td></tr></table>'
+    +(L.summaryText?'<div class="callout">💡 '+_pfEsc(L.summaryText)+'</div>':'')
+    +(L.mgrRows.length?'<div class="h2">Manager movement — '+_pfEsc(L.mvName)+' Δ</div>'
+      +'<table><tr><th>Manager</th><th>Δ</th><th>Δ per rec-wk</th></tr>'
+      +L.mgrRows.map(function(x){
+        var v=(x.d>0?'+':x.d<0?'−':'')+(L.mvIsGP?formatGP(Math.abs(x.d)):Math.abs(x.d));
+        var rw=x.rwD==null?'—':(x.rwD>=0?'+':'−')+(L.mvIsGP?formatGP(Math.abs(x.rwD)):Math.abs(x.rwD).toFixed(2));
+        return '<tr><td>'+x.m+'</td><td>'+(x.d===0?'even':v)+'</td><td>'+rw+'</td></tr>';
+      }).join('')+'</table>':'')
+    +(L.upList.length||L.downList.length?'<div class="h2">Biggest individual movers</div>'
+      +(L.upList.length?'<b>Up:</b><ul>'+L.upList.map(function(s){return '<li>'+_pfEsc(s)+'</li>';}).join('')+'</ul>':'')
+      +(L.downList.length?'<b style="display:block;margin-top:8px">Down:</b><ul>'+L.downList.map(function(s){return '<li>'+_pfEsc(s)+'</li>';}).join('')+'</ul>':''):'')
+    +'</body></html>';
+  var w=window.open('','_blank');
+  if(!w){alert('Pop-up blocked — allow pop-ups to export the recap.');return;}
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){try{w.print();}catch(e){}},400);
+}
+
 // ─── RECRUITER PROFILE ───
 // Click-through drill-down for evaluating one recruiter: funnel vs team medians,
 // weekly trend + momentum, pacing vs the on-track rule, tenure-cohort benchmark,
@@ -6774,6 +7111,20 @@ function _pfPercentile(vals, v){
   return Math.round(atOrBelow / clean.length * 100);
 }
 
+// ── GP lookup (matched by normalized name against GP_DATA; null = no GP row) ──
+function _gpFind(name){
+  var norm=function(s){return (s||'').trim().replace(/\s+/g,' ').toLowerCase();};
+  var n=norm(name);
+  return GP_DATA.find(function(g){return norm(g.name)===n;})||null;
+}
+function _gpRange(name,f,t){
+  var g=_gpFind(name);
+  if(!g) return null;
+  var s=0;
+  for(var i=f;i<=t;i++){ if(i<g.weekly.length) s+=(g.weekly[i]||0); }
+  return s;
+}
+
 // Build per-recruiter range stats for team/cohort comparisons.
 // Each recruiter is measured over [max(f, their firstActive) .. t] so ramping
 // hires aren't penalized for weeks before they existed.
@@ -6785,10 +7136,12 @@ function _pfTeamStats(f, t){
     if(!wks) return null;
     var subs=_pfSum(r.subs,from,t), ivs=_pfSum(r.ivs,from,t),
         pls=_pfSum(r.placements||[],from,t), sts=_pfSum(r.starts,from,t);
+    var gp=_gpRange(r.name,from,t);
     return {
       name:r.name, manager:r.manager, wks:wks,
       subs:subs, ivs:ivs, placements:pls, starts:sts,
       subsWk:subs/wks, ivsWk:ivs/wks, plsWk:pls/wks, stsWk:sts/wks,
+      gp:gp, gpWk:gp!=null?gp/wks:null,
       s2i: subs>=5 ? ivs/subs*100 : null,
       i2p: ivs>=5 ? pls/ivs*100 : null,
       p2s: pls>=3 ? sts/pls*100 : null,
@@ -6879,6 +7232,13 @@ function renderRecruiterProfile(){
     }
   }
 
+  // ── GP for selected range (null if this recruiter has no GP row) ──
+  var gpTot = _gpRange(r.name, f, t);
+  var gpWk = gpTot!=null && rangeWks>0 ? gpTot/rangeWks : null;
+  var gpPill = gpTot!=null
+    ? '<span class="pf-pill" style="background:var(--teal-bg,rgba(45,212,191,0.12));color:var(--teal,#2dd4bf);cursor:help" title="Gross profit generated in the selected range, from the GP tab\'s data (matched by name). Per-week rate uses the same range.">GP: '+formatGP(gpTot)+' · '+formatGP(gpWk)+'/wk</span>'
+    : '';
+
   // ── Cohort: peers hired within ±12mo (widen to ±24 if thin) ──
   var hd = getHireDate(r.name) || r.hireDate || '';
   var cohort = team, cohortLabel = 'all active recruiters';
@@ -6906,6 +7266,13 @@ function renderRecruiterProfile(){
     row.med = _pfMedian(row.vals);
   });
   var startsPctile = cohortRows[3].p;
+  // GP/wk cohort row — only when this recruiter has GP data; peers without GP rows are excluded from the comparison
+  if(self.gpWk!=null){
+    var gpRow={lbl:'GP / wk', v:self.gpWk, vals:cohort.map(function(x){return x.gpWk;}), color:'var(--teal,#2dd4bf)', dec:0, isGP:true};
+    gpRow.p=_pfPercentile(gpRow.vals, gpRow.v);
+    gpRow.med=_pfMedian(gpRow.vals);
+    cohortRows.push(gpRow);
+  }
 
   // ── Coaching signal: biggest conversion gap below team median ──
   var gaps=[];
@@ -6938,7 +7305,7 @@ function renderRecruiterProfile(){
     s2i:s2i, i2p:i2p, p2s:p2s, medS2i:medS2i, medI2p:medI2p, medP2s:medP2s,
     mMedS2i:mMedS2i, mMedI2p:mMedI2p, mMedP2s:mMedP2s,
     tenureStarts:tenureStarts, target:target, onTrk:onTrk,
-    momText:momText, signal:signal,
+    momText:momText, signal:signal, gpTot:gpTot, gpWk:gpWk,
     cohortLabel:cohortLabel, cohortN:cohort.length, cohortRows:cohortRows
   };
 
@@ -6973,6 +7340,7 @@ function renderRecruiterProfile(){
       +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
         +'<span class="pf-pill" style="background:'+(onTrk?'var(--green-bg)':'var(--red-bg)')+';color:'+(onTrk?'var(--green)':'var(--red)')+';cursor:help" title="'+_pfEsc(onTrackTip)+'">'+(onTrk?'✓ On track':'✗ Off track')+' · '+tenureStarts+' / '+target+' starts</span>'
         +momHtml
+        +gpPill
         +(startsPctile!=null?'<span class="pf-pill" style="background:var(--accent-dim);color:var(--accent);cursor:help" title="Percentile rank for starts per active week within this recruiter\'s tenure cohort ('+cohortLabel+', n='+cohort.length+'). '+_pfOrdinal(startsPctile)+' percentile means they are performing at or above '+startsPctile+'% of that cohort — higher is better. 50th ≈ cohort median.">'+_pfOrdinal(startsPctile)+' pctile starts/wk</span>':'')
       +'</div>'
     +'</div>'
@@ -7004,15 +7372,17 @@ function renderRecruiterProfile(){
   +'<div class="card" style="margin-bottom:0">'
     +'<div class="card-hdr"><span class="card-title">Cohort benchmark — '+cohortLabel+' (n = '+cohort.length+')</span><span style="font-size:11px;color:var(--text3)">per-active-week averages, same range</span></div>'
     +cohortRows.map(function(row){
-      var max = Math.max.apply(null, row.vals.concat([row.v]).filter(function(x){return isFinite(x);}));
+      var max = Math.max.apply(null, row.vals.concat([row.v]).filter(function(x){return x!=null&&isFinite(x);}));
       var med = row.med;
       var w = max>0 ? Math.max(6, Math.round(row.v/max*100)) : 6;
       var mPos = (max>0&&med!=null) ? Math.round(med/max*100) : null;
       var p = row.p;
       var pCls = p==null?'pf-flat':p>=60?'pf-up':p<=40?'pf-down':'pf-flat';
+      var vDisp = row.isGP ? formatGP(row.v) : row.v.toFixed(row.dec);
+      var mDisp = med==null ? '' : (row.isGP ? formatGP(med) : med.toFixed(row.dec));
       return '<div class="pf-cohort-row"><span class="pf-cohort-lbl">'+row.lbl+'</span>'
-        +'<div class="pf-cohort-track">'+(mPos!=null?'<div class="pf-cohort-med" style="left:'+mPos+'%" title="cohort median: '+med.toFixed(row.dec)+'"></div>':'')
-        +'<div class="pf-cohort-fill" style="width:'+w+'%;background:'+row.color+'">'+row.v.toFixed(row.dec)+'</div></div>'
+        +'<div class="pf-cohort-track">'+(mPos!=null?'<div class="pf-cohort-med" style="left:'+mPos+'%" title="cohort median: '+mDisp+'"></div>':'')
+        +'<div class="pf-cohort-fill" style="width:'+w+'%;background:'+row.color+'">'+vDisp+'</div></div>'
         +'<span class="pf-pctile '+pCls+'" style="cursor:help" title="'+(p==null?'Not enough recruiters in this cohort to rank.':'Percentile rank for '+row.lbl.toLowerCase()+' within this cohort (n='+cohort.length+'). '+_pfOrdinal(p)+' percentile = at or above '+p+'% of the cohort — higher is better. 50th ≈ cohort median (the tick mark on the bar).')+'">'+(p==null?'—':_pfOrdinal(p)+' pctile')+'</span></div>';
     }).join('')
     +'<div style="font-size:11px;color:var(--text3);margin-top:4px">Tick mark = cohort median. Percentile = share of cohort at or below this recruiter.</div>'
@@ -7085,6 +7455,7 @@ function exportProfileSheet(){
     +'<div class="sub">Generated '+(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear()+'</div></div>'
     +'<span class="badge" style="background:'+(L.onTrk?'#e3f7ec;color:#1a7a45':'#fdeaea;color:#b93030')+'">'+(L.onTrk?'✓ ON TRACK':'✗ OFF TRACK')+' — '+L.tenureStarts+' starts vs target '+L.target+'</span>'
     +'<span class="badge" style="background:#eef3fd;color:#2a5db0;margin-left:6px">Momentum: '+_pfEsc(L.momText)+'</span>'
+    +(L.gpTot!=null?'<span class="badge" style="background:#e6faf6;color:#0e7c6b;margin-left:6px">GP: '+formatGP(L.gpTot)+' ('+formatGP(L.gpWk)+'/wk)</span>':'')
     +'<div class="sub" style="margin-top:6px">On-track rule: cumulative starts ≥ 2 per completed 4-week block since hire.</div>'
     +'<div class="h2">Funnel — selected range</div>'
     +'<table><tr><th></th><th>Subs</th><th>Interviews</th><th>Placements</th><th>Starts</th></tr>'
@@ -7103,7 +7474,9 @@ function exportProfileSheet(){
     +'<div class="h2">Cohort benchmark — '+_pfEsc(L.cohortLabel)+' (n = '+L.cohortN+')</div>'
     +'<table><tr><th>Metric (per active wk)</th><th>'+_pfEsc(L.name.split(' ')[0])+'</th><th>Cohort median</th><th>Percentile</th></tr>'
     +L.cohortRows.map(function(row){
-      return '<tr><td>'+row.lbl+'</td><td>'+fx(row.v,row.dec)+'</td><td>'+fx(row.med,row.dec)+'</td><td>'+(row.p==null?'—':_pfOrdinal(row.p))+'</td></tr>';
+      var vD=row.isGP?formatGP(row.v):fx(row.v,row.dec);
+      var mD=row.isGP?(row.med==null?'—':formatGP(row.med)):fx(row.med,row.dec);
+      return '<tr><td>'+row.lbl+'</td><td>'+vD+'</td><td>'+mD+'</td><td>'+(row.p==null?'—':_pfOrdinal(row.p))+'</td></tr>';
     }).join('')
     +'</table>'
     +'<div class="sub" style="margin-top:4px">Percentile = share of cohort at or below this recruiter — higher is better; 50th ≈ cohort median.</div>'
