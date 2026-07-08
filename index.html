@@ -2188,14 +2188,14 @@ function generatePDFReport() {
     +'<div class="kpi kpi-red"><div class="kpi-val">'+d.totalSt+'</div><div class="kpi-lbl">Starts</div></div>'
     +'</div>'
     +'<div class="stat-row">'
-    +'<div class="stat"><div class="stat-val" style="color:#16a34a">'+d.onTarget+'</div><div class="stat-lbl">On Target</div></div>'
-    +'<div class="stat"><div class="stat-val" style="color:#b45309">'+d.below+'</div><div class="stat-lbl">Below Target</div></div>'
-    +'<div class="stat"><div class="stat-val" style="color:#dc2626">'+d.needs+'</div><div class="stat-lbl">Needs Attention</div></div>'
+    +'<div class="stat"><div class="stat-val" style="color:#16a34a">'+d.onTarget+'</div><div class="stat-lbl">On Target (4wk)</div></div>'
+    +'<div class="stat"><div class="stat-val" style="color:#b45309">'+d.below+'</div><div class="stat-lbl">Below Target (4wk)</div></div>'
+    +'<div class="stat"><div class="stat-val" style="color:#dc2626">'+d.needs+'</div><div class="stat-lbl">Needs Attention (4wk)</div></div>'
     +'<div class="stat"><div class="stat-val">'+(d.totalSt>0?(d.totalSubs/d.totalSt).toFixed(1)+':1':'&mdash;')+'</div><div class="stat-lbl">Sub&rarr;Start</div></div>'
     +'<div class="stat"><div class="stat-val">'+(d.totalPl>0?Math.round((d.totalSt/d.totalPl)*100)+'%':'&mdash;')+'</div><div class="stat-lbl">Pl&rarr;Start Rate</div></div>'
     +'</div>'
     +'<div class="h2">\uD83D\uDC64 Manager Scorecards</div>'
-    +'<table><thead><tr><th>Manager</th><th>Team</th><th>Subs</th><th>IVs</th><th>Placements</th><th>Starts</th><th>Sub&rarr;Start</th><th>On Target</th><th>Top Performer</th></tr></thead><tbody>'
+    +'<table><thead><tr><th>Manager</th><th>Team</th><th>Subs</th><th>IVs</th><th>Placements</th><th>Starts</th><th>Sub&rarr;Start</th><th>On Target (4wk)</th><th>Top Performer</th></tr></thead><tbody>'
     +d.mgrSummaries.map(m=>'<tr><td><span class="dot" style="background:'+mc(m.manager)+'"></span><strong>'+m.manager+'</strong></td>'
       +'<td>'+m.team+'</td><td>'+m.subs+'</td><td>'+m.ivs+'</td><td>'+m.placements+'</td><td><strong>'+m.starts+'</strong></td>'
       +'<td>'+(m.starts>0?(m.subs/m.starts).toFixed(1)+':1':'&mdash;')+'</td>'
@@ -2206,7 +2206,7 @@ function generatePDFReport() {
     +'<table><thead><tr><th>Recruiter</th><th>Manager</th><th>Subs</th><th>IVs</th><th>Placements</th><th>Starts</th><th>4-wk Avg</th><th>Status</th></tr></thead><tbody>'
     +d.topPerformers.map(r=>{
       const pc=r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
-      const pl=r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
+      const pl=r.status==='green'?'On Target (4wk)':r.status==='amber'?'Below Target (4wk)':'Needs Attention (4wk)';
       return '<tr><td><strong>'+r.name+'</strong></td><td><span class="dot" style="background:'+mc(r.manager)+'"></span>'+r.manager+'</td>'
         +'<td>'+r.totalSubs+'</td><td>'+r.totalIvs+'</td><td>'+r.totalPlacements+'</td><td><strong>'+r.totalStarts+'</strong></td>'
         +'<td>'+r.avgSub4w.toFixed(1)+'</td><td><span class="pill '+pc+'">'+pl+'</span></td></tr>';
@@ -2250,9 +2250,9 @@ function promptEmailDigest() {
     '  Pl -> Start:   '+(d.totalPl>0?Math.round((d.totalSt/d.totalPl)*100)+'%':'--'),
     '',
     'RECRUITER STATUS',
-    '  On Target:       '+d.onTarget+' recruiters',
-    '  Below Target:    '+d.below+' recruiters',
-    '  Needs Attention: '+d.needs+' recruiters',
+    '  On Target (4wk):       '+d.onTarget+' recruiters',
+    '  Below Target (4wk):    '+d.below+' recruiters',
+    '  Needs Attention (4wk): '+d.needs+' recruiters',
     '',
     '-'.repeat(52),
     'MANAGER SCORECARDS',
@@ -2348,7 +2348,7 @@ function renderOvTable(d){
   const s=[...filtered_d].sort((a,b)=>{const av=a[ovSort],bv=b[ovSort];if(av==null&&bv==null)return 0;if(av==null)return 1;if(bv==null)return -1;return typeof av==='string'?(ovDir==='asc'?av.localeCompare(bv):bv.localeCompare(av)):(ovDir==='asc'?av-bv:bv-av)});
   document.getElementById('ov-body').innerHTML=s.map(r=>{
     const pc=r.status==='green'?'pg':r.status==='amber'?'pa':'pr';
-    const pl=r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention';
+    const pl=r.status==='green'?'On Target (4wk)':r.status==='amber'?'Below Target (4wk)':'Needs Attention (4wk)';
     const mc=MGR_COLORS[r.manager]||'#888';
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.name}${r._isArchived?'<span style="font-size:9px;color:var(--amber);margin-left:5px;padding:1px 4px;border-radius:3px;background:var(--amber-bg)">archived</span>':''  }${rampIcon(r.name)}</td>
@@ -3081,7 +3081,7 @@ function renderRecruiter(){
     }).join('')
     +'<div class="kpi"><div class="kpi-label" style="text-align:center">Manager</div>'
     +'<div class="kpi-val" style="font-size:15px;color:'+mc+';text-align:center">'+r.manager+'</div>'
-    +'<div class="kpi-sub" style="text-align:center"><span class="pill '+(r.status==='green'?'pg':r.status==='amber'?'pa':'pr')+'">'+(r.status==='green'?'On Target':r.status==='amber'?'Below Target':'Needs Attention')+'</span></div></div>'
+    +'<div class="kpi-sub" style="text-align:center"><span class="pill '+(r.status==='green'?'pg':r.status==='amber'?'pa':'pr')+'">'+(r.status==='green'?'On Target (4wk)':r.status==='amber'?'Below Target (4wk)':'Needs Attention (4wk)')+'</span></div></div>'
     +'</div>';
   const mk=(id,data,color,label)=>{if(rCharts[id])rCharts[id].destroy();rCharts[id]=new Chart(document.getElementById(id),{type:'bar',data:{labels:activeWkLabels().slice(0,data.length),datasets:[{data:data.map(v=>(v!=null?v:0)),backgroundColor:color+'88',borderColor:color,borderWidth:1.5,borderRadius:3,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw} ${label}`}}},scales:{x:{ticks:{font:{size:10},maxRotation:45},grid:{display:false}},y:{grid:{color:'rgba(128,128,128,0.12)'},ticks:{font:{size:10},stepSize:1}}}}})};
   mk('rSubsC',r.subs,'#185FA5','subs');mk('rIvsC',r.ivs,'#1D9E75','ivs');mk('rPlC',r.placements||[],'#a855f7','placements');mk('rStartsC',r.starts,'#D4537E','starts');mk('rLeadsC',r.leads,'#EF9F27','leads');
