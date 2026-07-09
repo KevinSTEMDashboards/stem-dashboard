@@ -501,27 +501,25 @@ td.editing{padding:2px 4px!important}
   </div>
   <div class="header-right">
     <div id="auth-controls"></div>
+    <button id="include-archived-btn" onclick="toggleIncludeArchived()" style="height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px">📦 Include Archived</button>
+    <button onclick="openDefinitions()" style="height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--accent);cursor:pointer;white-space:nowrap" title="How every number on this dashboard is calculated">ⓘ Definitions</button>
     <button class="btn theme-btn" id="theme-btn" title="Toggle theme">🌙</button>
   </div>
 </header>
 
 <!-- Filter bar — separate row so it never crowds the auth button -->
 <div class="filter-bar" style="justify-content:center">
-  <select id="mgr-filter"><option value="">All managers</option></select>
-  <select id="metric-select"><option value="subs">Submittals</option><option value="ivs">Interviews</option><option value="placements">Placements</option><option value="starts">Starts</option><option value="leads">Leads</option></select>
-  <input type="text" id="search" placeholder="Search recruiter…">
+  <span id="ov-only-filters" style="display:flex;gap:8px;align-items:center">
+    <select id="mgr-filter"><option value="">All managers</option></select>
+    <select id="metric-select"><option value="subs">Submittals</option><option value="ivs">Interviews</option><option value="placements">Placements</option><option value="starts">Starts</option><option value="leads">Leads</option></select>
+    <input type="text" id="search" placeholder="Search recruiter…">
+  </span>
   <div style="display:flex;align-items:center;gap:6px;margin-left:4px;padding-left:10px;border-left:1px solid var(--border2)">
     <span style="font-size:11px;color:var(--text3);white-space:nowrap;font-weight:600">WEEK RANGE</span>
     <select id="wk-from" title="From week"><option value="0">From: Wk 1</option></select>
     <span style="font-size:11px;color:var(--text3)">→</span>
     <select id="wk-to" title="To week"><option value="all">To: Latest</option></select>
     <button class="btn" id="wk-reset" style="font-size:11px;height:28px;padding:0 8px;color:var(--accent)" title="Reset to full range">✕ Reset</button>
-  </div>
-  <div style="margin-left:4px;padding-left:10px;border-left:1px solid var(--border2)">
-    <button id="include-archived-btn" onclick="toggleIncludeArchived()" style="height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px">📦 Include Archived</button>
-  </div>
-  <div style="margin-left:4px">
-    <button onclick="openDefinitions()" style="height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--accent);cursor:pointer;white-space:nowrap" title="How every number on this dashboard is calculated">ⓘ Definitions</button>
   </div>
 </div>
 
@@ -2097,7 +2095,9 @@ document.querySelectorAll('.tab').forEach(t=>{
     t.classList.add('active');
     document.getElementById('tab-'+t.dataset.tab).classList.add('active');
     // Hide filter bar on leaderboard and GP tab, show on all other tabs
-    document.querySelector('.filter-bar').style.display=(t.dataset.tab==='leaderboard'||t.dataset.tab==='gp')?'none':'';
+    // Per-tab filter visibility: whole bar hides on tabs with their own controls
+    // or no range dependence; Overview-only controls show only on Overview.
+    updateFilterBarFor(t.dataset.tab);
     // Hide global controls on tabs that have their own built-in filters
     const hiddenOnTabs = t.dataset.tab==='weekly' || t.dataset.tab==='trends' || t.dataset.tab==='managers' || t.dataset.tab==='gp';
     const metricSel = document.getElementById('metric-select');
@@ -2564,6 +2564,14 @@ document.getElementById('wk-reset').addEventListener('click',()=>{
   onRangeChange();
 });
 
+// Which tabs use the global filter bar, and which of its controls
+var FILTER_HIDE_TABS={leaderboard:1,gp:1,recap:1,roster:1,orgchart:1,calendar:1,entry:1};
+function updateFilterBarFor(tab){
+  var bar=document.querySelector('.filter-bar');
+  if(bar) bar.style.display=FILTER_HIDE_TABS[tab]?'none':'';
+  var ov=document.getElementById('ov-only-filters');
+  if(ov) ov.style.display=(tab==='overview')?'flex':'none';
+}
 function onRangeChange(){
   updateRangeBadge();
   renderOverview();
@@ -4326,7 +4334,7 @@ function signOut() {
     document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));
     document.querySelector('.tab[data-tab="overview"]').classList.add('active');
     document.getElementById('tab-overview').classList.add('active');
-    document.querySelector('.filter-bar').style.display = '';
+    updateFilterBarFor('overview');
     renderOverview();
   }
   updateAuthUI();
@@ -5789,8 +5797,7 @@ function renderLeaderboard(){
   var win=document.getElementById('lb-window').value;
   var customDiv=document.getElementById('lb-custom-range');
   if(customDiv)customDiv.style.display=win==='custom'?'flex':'none';
-  // Hide the global filter bar on leaderboard tab
-  document.querySelector('.filter-bar').style.display='none';
+  updateFilterBarFor('leaderboard');
 
   var recs=lbGetRangedRecs();
   var winLabel=win==='all'?'Full range':win==='custom'?'Custom range':'Last '+win+' wks';
@@ -6793,7 +6800,7 @@ function goToRecruiter(name) {
   if (t) t.classList.add('active');
   var p = document.getElementById('tab-recruiter');
   if (p) p.classList.add('active');
-  document.querySelector('.filter-bar').style.display = '';
+  updateFilterBarFor('recruiter');
   var sel = document.getElementById('rec-select');
   if (sel) {
     var norm = name.trim().toLowerCase();
