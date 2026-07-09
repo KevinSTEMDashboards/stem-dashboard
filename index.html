@@ -292,6 +292,14 @@ td.editing{padding:2px 4px!important}
 .pf-pctile{font-size:12px;font-weight:700;width:76px;flex-shrink:0}
 .pf-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:860px){.pf-grid2{grid-template-columns:1fr}}
+/* ── Definitions modal ── */
+.defs-sec{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;margin-bottom:12px}
+.defs-title{font-size:12px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.defs-term{display:grid;grid-template-columns:190px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px}
+.defs-term:last-child{border-bottom:none}
+.defs-term b{color:var(--text)}
+.defs-d{color:var(--text2);line-height:1.55}
+@media(max-width:640px){.defs-term{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -511,6 +519,9 @@ td.editing{padding:2px 4px!important}
   </div>
   <div style="margin-left:4px;padding-left:10px;border-left:1px solid var(--border2)">
     <button id="include-archived-btn" onclick="toggleIncludeArchived()" style="height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px">📦 Include Archived</button>
+  </div>
+  <div style="margin-left:4px">
+    <button onclick="openDefinitions()" style="height:28px;padding:0 10px;font-size:11px;font-weight:600;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--accent);cursor:pointer;white-space:nowrap" title="How every number on this dashboard is calculated">ⓘ Definitions</button>
   </div>
 </div>
 
@@ -1160,6 +1171,50 @@ td.editing{padding:2px 4px!important}
   </div>
 </div>
 
+<!-- ── Boot overlay: veils stale baked-in numbers until live Sheets data renders ── -->
+<div id="boot-overlay" style="position:fixed;inset:0;z-index:9000;background:var(--bg3);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+  <div style="font-size:15px;font-weight:800">STEM Recruiter Dashboard</div>
+  <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)"><span style="animation:spin 1s linear infinite;display:inline-block">⟳</span> Loading live data from Google Sheets…</div>
+  <div style="font-size:11px;color:var(--text3)" id="boot-note"></div>
+</div>
+
+<!-- ── Definitions modal ── -->
+<div id="defs-modal" onclick="if(event.target===this)closeDefinitions()" style="display:none;position:fixed;inset:0;z-index:9986;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 10px">
+  <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:18px;width:860px;max-width:96vw;box-shadow:0 8px 32px rgba(0,0,0,0.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Definitions — how every number is calculated</div>
+      <button class="btn" onclick="closeDefinitions()" style="width:28px;height:28px;padding:0;justify-content:center;font-size:16px">×</button>
+    </div>
+    <div style="background:var(--accent-dim);border:1px solid var(--accent);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--text2);margin-bottom:12px">⚖️ <b style="color:var(--text)">The two status systems (read this first):</b> the dashboard deliberately measures pacing two ways. <b style="color:var(--text)">"(4wk)" pills</b> are a rolling early-warning light — what has this person done <i>lately</i>. <b style="color:var(--text)">"On track"</b> is the cumulative report card — are they pacing since hire. A recruiter can be on track but Below Target (4wk): on pace for the year, cold this month. Both being visible is intentional.</div>
+    <div class="defs-sec"><div class="defs-title">Status pills — rolling last 4 weeks</div>
+      <div class="defs-term"><span><span class="pill pg">On Target (4wk)</span></span><span class="defs-d">2 or more starts in the trailing 4 weeks.</span></div>
+      <div class="defs-term"><span><span class="pill pa">Below Target (4wk)</span></span><span class="defs-d">Exactly 1 start in the trailing 4 weeks.</span></div>
+      <div class="defs-term"><span><span class="pill pr">Needs Attention (4wk)</span></span><span class="defs-d">0 starts in the trailing 4 weeks.</span></div>
+    </div>
+    <div class="defs-sec"><div class="defs-title">On track — cumulative since hire</div>
+      <div class="defs-term"><b>The rule</b><span class="defs-d">Cumulative starts ≥ 2 per <i>completed</i> 4-week block since hire. Tenure-aware: a 6-week hire's target is 2; a 26-week veteran's is 12. A strong stretch can cover a weak one. Recruiters under 4 weeks aren't counted against yet.</span></div>
+      <div class="defs-term"><b>Where it appears</b><span class="defs-d">Overview KPI, Team Health, Manager Rollup badges ("6/8 on track"), the profile's on-track pill and pacing chart, Period Recap's on-track count (evaluated as of each period's close).</span></div>
+    </div>
+    <div class="defs-sec"><div class="defs-title">Ranks &amp; cohorts — Recruiter Profile</div>
+      <div class="defs-term"><b>Tenure cohort</b><span class="defs-d">Recruiters hired within ±12 months of this person (widens to ±24, then all actives, if fewer than 4 peers). The fair comparison for ramping hires.</span></div>
+      <div class="defs-term"><b>Three rank columns</b><span class="defs-d">Cohort · All active · Manager's team — same metric, three rooms. 1st is best; ties share a rank (T-2nd). Archived recruiters excluded from all three.</span></div>
+      <div class="defs-term"><b>Per active week (/wk)</b><span class="defs-d">Totals divided by weeks the person was actually active — hired week 20 means weeks 1–19 don't count against them.</span></div>
+      <div class="defs-term"><b>Momentum</b><span class="defs-d">Last-4-week subs average vs the prior 4 weeks: ▲ Heating (+15% or more), → Steady, ▼ Cooling (−15% or worse). Needs 8+ weeks of data.</span></div>
+    </div>
+    <div class="defs-sec"><div class="defs-title">Manager Rollup</div>
+      <div class="defs-term"><b>Rec-wks</b><span class="defs-d">Active recruiter-weeks in the selected window — the "Per recruiter-wk" denominator. A mid-window hire adds only their real weeks; archived recruiters count only the weeks they worked.</span></div>
+      <div class="defs-term"><b>Sub→start ratio</b><span class="defs-d">Submittals per start — lower is better. Managers with under 5 starts in the window are grayed: too little volume to rank fairly.</span></div>
+      <div class="defs-term"><b>4-wk sub average</b><span class="defs-d">Already a per-recruiter average — the Totals / Per recruiter-wk toggle doesn't change it.</span></div>
+    </div>
+    <div class="defs-sec"><div class="defs-title">GP &amp; periods</div>
+      <div class="defs-term"><b>GP matching</b><span class="defs-d">Gross profit joins to recruiters by name. GP rows that don't match a roster name aren't dropped — they're footnoted on the manager's GP tile.</span></div>
+      <div class="defs-term"><b>Periods (5/4/4)</b><span class="defs-d">Each quarter = a 5-week period followed by two 4-week periods. Recap compares closed buckets only — an in-progress period is never a baseline.</span></div>
+      <div class="defs-term"><b>Benchmark guards</b><span class="defs-d">Funnel conversion medians require minimum volume (5 subs / 5 interviews / 3 placements); manager-team comparisons require a team of 3+. Below those, the comparison is hidden rather than shown as noise.</span></div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:4px" id="dash-built"></div>
+  </div>
+</div>
+
 <!-- ── Recruiter Profile modal ── -->
 <div id="profile-modal" onclick="if(event.target===this)closeRecruiterProfile()" style="display:none;position:fixed;inset:0;z-index:9985;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;overflow-y:auto;padding:24px 10px">
   <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:18px;width:1020px;max-width:96vw;box-shadow:0 8px 32px rgba(0,0,0,0.4)">
@@ -1297,6 +1352,21 @@ function parseTab(rows, tabName) {
 // ── Load all tabs and merge into RECRUITERS array ──
 async function loadFromSheets() {
   showLoadingBanner('Loading data from Google Sheets…');
+  // Boot overlay guards: at 8s show a patience note, at 20s reveal baked data
+  // rather than blocking forever (banner keeps showing sync state either way).
+  var _bootNoteTimer=setTimeout(function(){
+    var n=document.getElementById('boot-note');
+    if(n) n.textContent='Still syncing — slow connection. Hang tight…';
+  },8000);
+  var _bootHardTimer=setTimeout(function(){ _hideBootOverlay('timeout'); },20000);
+  function _hideBootOverlay(reason){
+    clearTimeout(_bootNoteTimer); clearTimeout(_bootHardTimer);
+    var o=document.getElementById('boot-overlay');
+    if(o) o.style.display='none';
+    if(reason==='fallback'||reason==='timeout'){
+      showLoadingBanner('⚠️ Showing baked-in data from '+DASH_BUILT+' — live sync '+(reason==='timeout'?'is slow':'failed')+'. <button onclick="location.reload()" style="margin-left:6px;background:var(--accent);color:#fff;border:none;border-radius:6px;height:22px;padding:0 8px;font-size:11px;cursor:pointer">Retry</button>');
+    }
+  }
   try {
     const [subsRows, ivsRows, plRows, stRows, ldRows, gpRows] = await Promise.all([
       readTab(SHEET_TABS.subs),
@@ -1374,6 +1444,7 @@ async function loadFromSheets() {
       hideLoadingBanner();
       showSyncError('Sheet data looks incomplete — verify tab names match exactly: Subs, Interviews, Placements, Starts, Leads');
       renderOverview();
+      _hideBootOverlay('fallback');
       return;
     }
 
@@ -1439,6 +1510,7 @@ async function loadFromSheets() {
     hideLoadingBanner();
     safeSet('stemLastSync', new Date().toISOString());
     renderOverview();
+    _hideBootOverlay('success');
     renderGPIfActive();
     populateWkSelects();
     populateTiSelects();
@@ -1481,6 +1553,7 @@ async function loadFromSheets() {
     console.warn('Google Sheets load failed, using local data:', err);
     // Fall back to BASE_DATA already loaded
     renderOverview();
+    _hideBootOverlay('fallback');
   }
 }
 
@@ -2351,7 +2424,7 @@ function renderOvTable(d){
     const pl=r.status==='green'?'On Target (4wk)':r.status==='amber'?'Below Target (4wk)':'Needs Attention (4wk)';
     const mc=MGR_COLORS[r.manager]||'#888';
     return `<tr>
-      <td style="font-weight:500;white-space:nowrap">${r.name}${r._isArchived?'<span style="font-size:9px;color:var(--amber);margin-left:5px;padding:1px 4px;border-radius:3px;background:var(--amber-bg)">archived</span>':''  }${rampIcon(r.name)}</td>
+      <td style="font-weight:500;white-space:nowrap"><span class="pf-name-link" onclick="openProfileEnc('${encodeURIComponent(r.name)}')" title="Open profile">${r.name}</span>${r._isArchived?'<span style="font-size:9px;color:var(--amber);margin-left:5px;padding:1px 4px;border-radius:3px;background:var(--amber-bg)">archived</span>':''  }${rampIcon(r.name)}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
       <td style="color:var(--c-subs);font-weight:600">${r.avgSub4w.toFixed(1)}</td>
       <td style="color:var(--c-ivs);font-weight:600">${r.ivs4w}</td>
@@ -5568,7 +5641,7 @@ function renderManagers(){
       var bw=Math.min(100,recWindowed.length>0?Math.round((metTot/Math.max(1,recWindowed[0].metTot))*100):0);
       return '<div class="mgr-recruiter-row">'
         +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
+          +'<div class="pf-name-link" onclick="openProfileEnc(\''+encodeURIComponent(r.name)+'\')" title="Open profile" style="font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
           +'<div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:3px">'
             +'<div style="height:3px;background:'+activeMeta.color+';border-radius:2px;width:'+bw+'%;opacity:.75"></div>'
           +'</div>'
@@ -7075,10 +7148,19 @@ var profileRangeMode = 'full'; // 'full' | '12' | '4'
 var _pfCharts = {};
 var _pfLast = null; // stats stash from last render — keeps the 1:1 export in lockstep with the on-screen view
 
+// ── Build date: bump on every delivered build. Cache tiebreaker, not a version scheme —
+// if a user's date doesn't match the latest push, they're on a stale cached copy.
+var DASH_BUILT = 'Jul 9, 2026';
+(function(){ var el=document.getElementById('dash-built'); if(el) el.textContent='Updated '+DASH_BUILT; })();
+function openDefinitions(){ document.getElementById('defs-modal').style.display='flex'; }
+function closeDefinitions(){ document.getElementById('defs-modal').style.display='none'; }
+
 document.addEventListener('keydown', function(e){
   if(e.key === 'Escape'){
     var m = document.getElementById('profile-modal');
-    if(m && m.style.display === 'flex') closeRecruiterProfile();
+    if(m && m.style.display === 'flex'){ closeRecruiterProfile(); return; }
+    var dm = document.getElementById('defs-modal');
+    if(dm && dm.style.display === 'flex') closeDefinitions();
   }
 });
 
