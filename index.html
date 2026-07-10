@@ -942,6 +942,18 @@ td.editing{padding:2px 4px!important}
 <!-- LEADERBOARD -->
 <div class="tab-panel" id="tab-leaderboard">
   <div class="wctrl">
+    <div style="position:relative" id="lb-vert-wrap">
+      <button type="button" id="lb-vert-btn" onclick="toggleLbVertMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:140px;justify-content:space-between">
+        <span id="lb-vert-label">All verticals</span><span style="font-size:10px;opacity:.6">&#9662;</span>
+      </button>
+      <div id="lb-vert-menu" style="display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:500;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.25);padding:8px;min-width:280px;max-height:320px;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding:0 4px 6px;border-bottom:1px solid var(--border)">
+          <span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Filter by vertical</span>
+          <button onclick="setLbVert('')" style="font-size:10px;border:none;background:none;color:var(--accent);cursor:pointer;padding:0">Clear</button>
+        </div>
+        <div id="lb-vert-checks"></div>
+      </div>
+    </div>
     <div style="position:relative" id="lb-mgr-wrap">
       <button type="button" id="lb-mgr-btn" onclick="toggleLbMgrMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:140px;justify-content:space-between">
         <span id="lb-mgr-label">All managers</span><span style="font-size:10px;opacity:.6">&#9662;</span>
@@ -979,6 +991,7 @@ td.editing{padding:2px 4px!important}
       </div>
     </div>
     <input type="hidden" id="lb-window" value="all">
+    <span id="lb-scope-chip" style="display:none;font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:11px;background:var(--accent-dim);color:var(--accent);white-space:nowrap"></span>
     <div id="lb-custom-range" style="display:none;align-items:center;gap:6px">
       <select id="lb-from" style="height:32px;font-size:12px"></select>
       <span style="font-size:11px;color:var(--text3)">→</span>
@@ -5717,6 +5730,7 @@ function lbGetRangedRecs(mgrFilter){
   var win=document.getElementById('lb-window').value;
   // Use full RECRUITERS arrays (not range-sliced) so lb window filter works independently
   var base=RECRUITERS.map(function(r){return compute(r);});
+  base=base.filter(function(r){return _lbVertPass(r.name);});
   var recs;
   if(mgrFilter!==undefined&&mgrFilter!==null&&mgrFilter!==''){
     recs=base.filter(function(r){return r.manager===mgrFilter;});
@@ -5792,6 +5806,15 @@ function renderLeaderboard(){
   // Initialize all managers as selected if not already set
   MGRS.forEach(function(m){ if(lbSelectedMgrs[m]===undefined) lbSelectedMgrs[m]=true; });
   updateLbMgrLabel();
+  // Vertical scope chip — makes exported screenshots self-labeling
+  var chip=document.getElementById('lb-scope-chip');
+  if(chip){
+    if(lbSelectedVert){
+      var vn=RECRUITERS.filter(function(r){return _lbVertPass(r.name);}).length;
+      chip.textContent=(lbSelectedVert==='__none__'?'No vertical set':lbSelectedVert)+' · '+vn+' recruiter'+(vn!==1?'s':'');
+      chip.style.display='inline-block';
+    } else chip.style.display='none';
+  }
   var selectedMgrList=MGRS.filter(function(m){return lbSelectedMgrs[m]!==false;});
   var mgrLabel=selectedMgrList.length===MGRS.length?'All managers':selectedMgrList.length===1?selectedMgrList[0]:selectedMgrList.length+' managers';
   var win=document.getElementById('lb-window').value;
@@ -5841,35 +5864,12 @@ function renderLeaderboard(){
 // ─── LEADERBOARD RECRUITER EXCLUDE FILTER ───
 var lbSelectedRecs = {}; // name -> true (included) / false (excluded)
 
-function initLbMgrChecks(){
-  var wrap=document.getElementById('lb-mgr-checks');
-  if(!wrap)return;
-  wrap.innerHTML='';
-  MGRS.forEach(function(m){
-    if(lbSelectedMgrs[m]===undefined)lbSelectedMgrs[m]=true;
-    var mc=MGR_COLORS[m]||'#888';
-    var row=document.createElement('label');
-    row.style.cssText='display:flex;align-items:center;gap:8px;padding:4px;cursor:pointer;border-radius:4px;font-size:12px';
-    row.onmouseenter=function(){row.style.background='var(--bg2)';};
-    row.onmouseleave=function(){row.style.background='';};
-    row.innerHTML='<input type="checkbox" '+(lbSelectedMgrs[m]?'checked':'')+' style="accent-color:'+mc+';width:14px;height:14px">'
-      +'<span style="width:8px;height:8px;border-radius:50%;background:'+mc+';flex-shrink:0"></span>'
-      +'<span style="color:var(--text)">'+m+'</span>';
-    row.querySelector('input').addEventListener('change',function(e){
-      lbSelectedMgrs[m]=e.target.checked;
-      updateLbMgrLabel();
-      renderLeaderboard();
-    });
-    wrap.appendChild(row);
-  });
-  updateLbMgrLabel();
-}
 
 function initLbRecChecks(query) {
   var wrap = document.getElementById('lb-rec-checks');
   if (!wrap) return;
   var q = (query||'').toLowerCase();
-  var names = [...RECRUITERS].sort((a,b)=>a.name.localeCompare(b.name)).map(r=>r.name);
+  var names = [...RECRUITERS].filter(r=>_lbVertPass(r.name)).sort((a,b)=>a.name.localeCompare(b.name)).map(r=>r.name);
   wrap.innerHTML = '';
   names.forEach(function(name) {
     if (lbSelectedRecs[name] === undefined) lbSelectedRecs[name] = true;
@@ -5944,12 +5944,64 @@ function setLbWindow(val) {
   renderLeaderboard();
 }
 
+// ── Vertical filter: scopes the board by Roster vertical, catching dual-hat
+// producers (e.g. a manager who also carries a desk) regardless of reporting line.
+var lbSelectedVert=''; // '' = all · '__none__' = no vertical set · else exact vertical
+function _lbVertPass(name){
+  if(!lbSelectedVert) return true;
+  var v=getVertical(name);
+  return lbSelectedVert==='__none__' ? !v : v===lbSelectedVert;
+}
+function initLbVertChecks(){
+  var wrap=document.getElementById('lb-vert-checks');
+  if(!wrap) return;
+  var counts={}, noneCount=0;
+  RECRUITERS.forEach(function(r){
+    var v=getVertical(r.name);
+    if(v) counts[v]=(counts[v]||0)+1; else noneCount++;
+  });
+  var row=function(val,lbl,cnt,dim){
+    var on=lbSelectedVert===val;
+    return '<div onclick="setLbVert(\''+val.replace(/'/g,"\\'")+'\')" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;font-size:12px;cursor:pointer;'+(on?'background:var(--accent-dim)':'')+'" onmouseenter="if(!this.style.background)this.style.background=\'var(--bg2)\'" onmouseleave="this.style.background=\''+(on?'var(--accent-dim)':'')+'\'">'
+      +'<span style="width:12px;text-align:center;color:var(--accent);font-weight:800">'+(on?'✓':'')+'</span>'
+      +'<span style="flex:1;color:'+(dim?'var(--text3)':on?'var(--accent)':'var(--text)')+';font-weight:'+(on?'700':'400')+'">'+lbl+'</span>'
+      +'<span style="font-size:10.5px;color:'+(on?'var(--accent)':'var(--text3)')+'">'+cnt+'</span></div>';
+  };
+  var html=row('','All verticals',RECRUITERS.length,false);
+  VERTICALS.forEach(function(v){ html+=row(v,v,counts[v]||0,false); });
+  if(noneCount>0) html+=row('__none__','(No vertical set)',noneCount,true);
+  wrap.innerHTML=html;
+}
+function setLbVert(v){
+  lbSelectedVert=v||'';
+  var lbl=document.getElementById('lb-vert-label');
+  if(lbl) lbl.textContent=!lbSelectedVert?'All verticals':(lbSelectedVert==='__none__'?'(No vertical set)':lbSelectedVert);
+  var btn=document.getElementById('lb-vert-btn');
+  if(btn){
+    btn.style.borderColor=lbSelectedVert?'var(--accent)':'var(--border2)';
+    btn.style.color=lbSelectedVert?'var(--accent)':'var(--text)';
+    btn.style.background=lbSelectedVert?'var(--accent-dim)':'var(--bg2)';
+  }
+  var menu=document.getElementById('lb-vert-menu');
+  if(menu) menu.style.display='none';
+  renderLeaderboard();
+}
+function toggleLbVertMenu(){
+  var menu=document.getElementById('lb-vert-menu');
+  if(!menu) return;
+  ['lb-mgr-menu','lb-rec-menu'].forEach(function(id){var m=document.getElementById(id);if(m)m.style.display='none';});
+  if(menu.style.display!=='none') menu.style.display='none';
+  else { initLbVertChecks(); menu.style.display='block'; }
+}
+
 function toggleLbRecMenu() {
   var menu = document.getElementById('lb-rec-menu');
   if (!menu) return;
-  // Close manager menu if open
+  // Close other menus if open
   var mgrMenu = document.getElementById('lb-mgr-menu');
   if (mgrMenu) mgrMenu.style.display = 'none';
+  var vMenu = document.getElementById('lb-vert-menu');
+  if (vMenu) vMenu.style.display = 'none';
   if (menu.style.display !== 'none') menu.style.display = 'none';
   else { initLbRecChecks(''); menu.style.display = 'block'; }
 }
@@ -5969,7 +6021,10 @@ function initLbMgrChecks(){
   var wrap=document.getElementById('lb-mgr-checks');
   if(!wrap)return;
   wrap.innerHTML='';
-  MGRS.forEach(function(m){
+  var vertMgrs = lbSelectedVert ? MGRS.filter(function(m){
+    return RECRUITERS.some(function(r){return r.manager===m&&_lbVertPass(r.name);});
+  }) : MGRS;
+  vertMgrs.forEach(function(m){
     if(lbSelectedMgrs[m]===undefined)lbSelectedMgrs[m]=true;
     var mc=MGR_COLORS[m]||'#888';
     var row=document.createElement('label');
@@ -6000,6 +6055,8 @@ function updateLbMgrLabel(){
 function toggleLbMgrMenu(){
   var menu=document.getElementById('lb-mgr-menu');
   if(!menu)return;
+  var vMenu=document.getElementById('lb-vert-menu');
+  if(vMenu)vMenu.style.display='none';
   if(menu.style.display!=='none')menu.style.display='none';
   else{initLbMgrChecks();menu.style.display='block';}
 }
@@ -6012,6 +6069,8 @@ document.addEventListener('click',function(e){
   if(recWrap&&!recWrap.contains(e.target)){var m2=document.getElementById('lb-rec-menu');if(m2)m2.style.display='none';}
   var winWrap=document.getElementById('lb-win-wrap');
   if(winWrap&&!winWrap.contains(e.target)){var m3=document.getElementById('lb-win-menu');if(m3)m3.style.display='none';}
+  var vertWrap=document.getElementById('lb-vert-wrap');
+  if(vertWrap&&!vertWrap.contains(e.target)){var m4=document.getElementById('lb-vert-menu');if(m4)m4.style.display='none';}
 });
 document.getElementById('lb-from').addEventListener('change',renderLeaderboard);
 document.getElementById('lb-to').addEventListener('change',renderLeaderboard);
