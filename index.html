@@ -1221,6 +1221,7 @@ td.editing{padding:2px 4px!important}
       <div class="defs-term"><b>GP matching</b><span class="defs-d">Gross profit joins to recruiters by name. GP rows that don't match a roster name aren't dropped — they're footnoted on the manager's GP tile.</span></div>
       <div class="defs-term"><b>Periods (5/4/4)</b><span class="defs-d">Each quarter = a 5-week period followed by two 4-week periods. Recap compares closed buckets only — an in-progress period is never a baseline.</span></div>
       <div class="defs-term"><b>Benchmark guards</b><span class="defs-d">Funnel conversion medians require minimum volume (5 subs / 5 interviews / 3 placements); manager-team comparisons require a team of 3+. Below those, the comparison is hidden rather than shown as noise.</span></div>
+      <div class="defs-term"><b>Week flags</b><span class="defs-d">PTO / Leave / Not yet started annotate a recruiter's metric-weeks; flagged metric-weeks are excluded from averages and available-headcount so absences don't drag stats. A flag on a metric with a value above 0 is ignored — real numbers always display and count.</span></div>
     </div>
     <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:4px" id="dash-built"></div>
   </div>
@@ -2645,12 +2646,12 @@ function saveWeekFlags(d) { safeSet('stemWeekFlags', JSON.stringify(d)); }
 
 // Get flag for a specific metric (or any metric if metric omitted)
 function getFlag(recName, wkIdx, metric) {
+  if (metric) return getFlagForMetric(recName, wkIdx, metric);
   var flags = getWeekFlags();
   var wk = flags[recName] && flags[recName][String(wkIdx)];
   if (!wk) return null;
-  if (metric) return wk[metric] || null;
-  // Return flag if ALL metrics have the same flag (for display in single-flag mode)
-  var vals = ALL_METRICS.map(function(m){ return wk[m] || null; });
+  // Return flag if ALL metrics have the same effective flag (value-wins rule applied)
+  var vals = ALL_METRICS.map(function(m){ return getFlagForMetric(recName, wkIdx, m); });
   var first = vals[0];
   return (first && vals.every(function(v){return v===first;})) ? first : 'mixed';
 }
@@ -2658,7 +2659,16 @@ function getFlag(recName, wkIdx, metric) {
 function getFlagForMetric(recName, wkIdx, metric) {
   var flags = getWeekFlags();
   var wk = flags[recName] && flags[recName][String(wkIdx)];
-  return (wk && wk[metric]) || null;
+  var f = (wk && wk[metric]) || null;
+  if (!f) return null;
+  // Value wins: a flag on a metric-week with a value above 0 is void — the real
+  // number displays AND counts (averages, headcount). Lets "apply to all metrics"
+  // be used safely even when e.g. a start landed during a PTO week, and stays
+  // correct if a value is entered after the week was flagged.
+  var rec = RECRUITERS.find(function(r){ return r.name === recName; });
+  var v = rec && rec[metric] && rec[metric][wkIdx];
+  if (v > 0) return null;
+  return f;
 }
 
 // Set flag for specific metrics (array) or all if metrics omitted
@@ -2739,6 +2749,12 @@ function showFlagMenu(td, recName, wkIdx, metric) {
     };
     menu.appendChild(opt);
   });
+
+  // Value-wins hint — makes the bulk option trustworthy
+  var hint = document.createElement('div');
+  hint.style.cssText = 'padding:3px 12px 5px;font-size:10px;color:var(--text3);font-style:italic';
+  hint.textContent = 'Metrics with a value above 0 ignore the flag and stay counted.';
+  menu.appendChild(hint);
 
   // Divider
   var div2 = document.createElement('div');
