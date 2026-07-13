@@ -4222,6 +4222,26 @@ function submitRegistration() {
 
 let currentUser = null; // null = viewer only
 
+// ── Header ⚙ menu ──
+function toggleHdrMenu(){
+  var m=document.getElementById('hdr-menu');
+  if(m) m.style.display = m.style.display!=='none' ? 'none' : 'block';
+}
+// Items dispatch by function name so the menu HTML stays declarative
+var _hdrMenuFns={generatePDFReport:1,promptEmailDigest:1,exportSettings:1,importSettings:1,exportArchivedForEmbed:1,openUserModal:1,signOut:1};
+function _hdrMenuGo(fn){
+  var m=document.getElementById('hdr-menu');
+  if(m) m.style.display='none';
+  if(_hdrMenuFns[fn] && typeof window[fn]==='function') window[fn]();
+}
+document.addEventListener('click',function(e){
+  var wrap=document.getElementById('hdr-menu-wrap');
+  if(wrap && !wrap.contains(e.target)){
+    var m=document.getElementById('hdr-menu');
+    if(m) m.style.display='none';
+  }
+});
+
 function setSession(user) {
   currentUser = user;
   if (user) sessSet('stemSession', JSON.stringify(user));
@@ -4235,16 +4255,30 @@ function updateAuthUI() {
   const isAdmin = currentUser && currentUser.role === 'admin';
 
   if (isEditor) {
+    var mi = function(icon, lbl, fn, title){
+      return '<div onclick="_hdrMenuGo(\''+fn+'\')" title="'+(title||'')+'" style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:6px;font-size:12.5px;cursor:pointer;color:var(--text)" onmouseenter="this.style.background=\'var(--bg2)\'" onmouseleave="this.style.background=\'\'"><span style="width:16px;text-align:center">'+icon+'</span>'+lbl+'</div>';
+    };
+    var sec = function(lbl){
+      return '<div style="font-size:9.5px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;padding:8px 10px 3px">'+lbl+'</div>';
+    };
     ac.innerHTML = `
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
         <span style="font-size:11px;font-weight:600;color:var(--green);background:var(--green-bg);padding:2px 8px;border-radius:100px;white-space:nowrap">${isAdmin ? '👑 ' : '✏️ '}${currentUser.username}</span>
-        <button class="btn" onclick="generatePDFReport()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Download weekly PDF report">📄 PDF Report</button>
-        <button class="btn" onclick="promptEmailDigest()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Send weekly email digest">✉️ Email Digest</button>
-        <button class="btn" onclick="exportSettings()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Export all settings to a backup file">💾 Export Settings</button>
-        <button class="btn" onclick="exportArchivedForEmbed()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Copy archived list JSON to embed in dashboard file">📋 Copy Archived JSON</button>
-        <button class="btn" onclick="importSettings()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap" title="Restore settings from a backup file">📂 Import Settings</button>
-        ${isAdmin ? `<button class="btn" onclick="openUserModal()" style="font-size:11px;height:26px;padding:0 8px;white-space:nowrap">Manage editors</button>` : ''}
-        <button class="btn" onclick="signOut()" style="font-size:11px;height:26px;padding:0 8px">Sign out</button>
+        <div style="position:relative" id="hdr-menu-wrap">
+          <button class="btn" onclick="toggleHdrMenu()" style="font-size:11px;height:26px;padding:0 10px;white-space:nowrap" title="Reports, settings, and account actions">⚙ Menu <span style="font-size:9px;opacity:.6">&#9662;</span></button>
+          <div id="hdr-menu" style="display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:9200;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.35);padding:6px;min-width:210px">
+            ${sec('Reports')}
+            ${mi('📄','PDF Report','generatePDFReport','Download weekly PDF report')}
+            ${mi('✉️','Email Digest','promptEmailDigest','Send weekly email digest')}
+            ${sec('Data & Settings')}
+            ${mi('💾','Export Settings','exportSettings','Export all settings to a backup file')}
+            ${mi('📂','Import Settings','importSettings','Restore settings from a backup file')}
+            ${mi('📋','Copy Archived JSON','exportArchivedForEmbed','Copy archived list JSON to embed in dashboard file')}
+            ${isAdmin ? sec('Admin')+mi('👥','Manage editors','openUserModal','') : ''}
+            <div style="border-top:1px solid var(--border);margin:6px 4px"></div>
+            ${mi('🚪','Sign out','signOut','')}
+          </div>
+        </div>
       </div>`;
   } else {
     ac.innerHTML = `<button class="btn btn-primary" onclick="showLogin()" style="font-size:12px;height:30px;padding:0 12px;white-space:nowrap">🔓 Sign in</button>`;
