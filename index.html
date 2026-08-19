@@ -1008,7 +1008,8 @@ td.editing{padding:2px 4px!important}
       </div>
     </div>
   </div>
-  <div id="lb-boards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px"></div>
+  <div id="lb-boards-top" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px"></div>
+  <div id="lb-boards-bottom" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:14px"></div>
   <!-- Full ranking modal -->
   <div id="lb-modal" style="display:none;position:fixed;inset:0;z-index:9990;background:rgba(0,0,0,0.6);align-items:center;justify-content:center">
     <div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:20px;width:480px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.3)">
@@ -5835,16 +5836,16 @@ function lbGetRangedRecs(mgrFilter){
 var lbSelectedMgrs={};
 
 var LB_KPIS=[
-  {wkey:'_subs',       label:'Submittals',        color:'var(--c-subs)',   icon:'📋',higher:true, fmt:function(v){return v||0;}},
-  {wkey:'_ivs',        label:'Interviews',         color:'var(--c-ivs)',    icon:'🎯',higher:true, fmt:function(v){return v||0;}},
-  {wkey:'_placements', label:'Placements',         color:'var(--purple)',   icon:'🤝',higher:true, fmt:function(v){return v||0;}},
-  {wkey:'_starts',     label:'Starts',             color:'var(--c-starts)', icon:'🚀',higher:true, fmt:function(v){return v||0;}},
-  {wkey:'_leads',      label:'Leads',              color:'var(--c-leads)',  icon:'💡',higher:true, fmt:function(v){return v||0;}},
-  {wkey:'avgSub4w',    label:'4-wk Sub Avg',       color:'var(--c-subs)',   icon:'📈',higher:true, fmt:function(v){return v!=null?v.toFixed(1):'0';}},
-  {wkey:'sub2iv',      label:'Submittal→Interview', color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2iv'},
-  {wkey:'iv2placement',label:'Interview→Placement',  color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'iv2placement'},
-  {wkey:'pl2start',    label:'Placement→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'pl2start'},
-  {wkey:'sub2start',   label:'Submittal→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2start'}
+  {wkey:'_subs',       label:'Submittals',        color:'var(--c-subs)',   icon:'📋',higher:true, fmt:function(v){return v||0;}, row:1},
+  {wkey:'_ivs',        label:'Interviews',         color:'var(--c-ivs)',    icon:'🎯',higher:true, fmt:function(v){return v||0;}, row:1},
+  {wkey:'_placements', label:'Placements',         color:'var(--purple)',   icon:'🤝',higher:true, fmt:function(v){return v||0;}, row:1},
+  {wkey:'_starts',     label:'Starts',             color:'var(--c-starts)', icon:'🚀',higher:true, fmt:function(v){return v||0;}, row:1},
+  {wkey:'_leads',      label:'Leads',              color:'var(--c-leads)',  icon:'💡',higher:true, fmt:function(v){return v||0;}, row:1},
+  {wkey:'sub2iv',      label:'Submittal→Interview', color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2iv', row:2},
+  {wkey:'iv2placement',label:'Interview→Placement',  color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'iv2placement', row:2},
+  {wkey:'pl2start',    label:'Placement→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'pl2start', row:2},
+  {wkey:'sub2start',   label:'Submittal→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2start', row:2},
+  {wkey:'avgSub4w',    label:'4-wk Sub Avg',       color:'var(--c-subs)',   icon:'📈',higher:true, fmt:function(v){return v!=null?v.toFixed(1):'0';}, row:2}
 ];
 
 function showLbModal(kpiIdx, mgrFilter){
@@ -5907,9 +5908,14 @@ function renderLeaderboard(){
   var recs=lbGetRangedRecs();
   var winLabel=win==='all'?'Full range':win==='custom'?'Custom range':'Last '+win+' wks';
 
-  var html=LB_KPIS.map(function(kpi,kpiIdx){
+  var htmlTop='',htmlBottom='';
+  LB_KPIS.forEach(function(kpi,kpiIdx){
     var valid=recs.filter(function(r){return r[kpi.wkey]!=null&&r[kpi.wkey]>0;});
-    if(!valid.length)return '<div class="lb-card"><div class="lb-card-hdr"><span class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span></div><div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No data</div></div>';
+    if(!valid.length){
+      var emptyCard='<div class="lb-card"><div class="lb-card-hdr"><span class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</span></div><div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No data</div></div>';
+      if(kpi.row===2)htmlBottom+=emptyCard;else htmlTop+=emptyCard;
+      return;
+    }
     var sorted=valid.slice().sort(function(a,b){return kpi.higher?b[kpi.wkey]-a[kpi.wkey]:a[kpi.wkey]-b[kpi.wkey];});
     var top10=sorted.slice(0,lbTopN);
     var maxVal=top10.length?top10.reduce(function(mx,r){return Math.max(mx,r[kpi.wkey]||0);},0):1;
@@ -5933,14 +5939,16 @@ function renderLeaderboard(){
     }).join('');
     var subtitle=winLabel+' · '+mgrLabel;
     var expandBtn=sorted.length>lbTopN?'<div style="padding:8px 14px;border-top:1px solid var(--border)"><button class="btn" onclick="showLbModal('+kpiIdx+',\''+encodeURIComponent(selectedMgrList.length===1?selectedMgrList[0]:'')+'\' )" style="width:100%;font-size:11px;height:28px;color:var(--accent)">View all '+sorted.length+' recruiters →</button></div>':'';
-    return '<div class="lb-card">'
+    var card='<div class="lb-card">'
       +'<div class="lb-card-hdr">'
         +'<div><div class="lb-card-title" style="color:'+kpi.color+'">'+kpi.icon+' '+kpi.label+'</div>'
         +'<div style="font-size:10px;color:var(--text3);margin-top:1px">'+subtitle+'</div></div>'
         +'<div style="font-size:11px;font-weight:700;color:var(--text3)">'+sorted.length+' ranked</div>'
       +'</div>'+rows+expandBtn+'</div>';
-  }).join('');
-  document.getElementById('lb-boards').innerHTML=html;
+    if(kpi.row===2)htmlBottom+=card;else htmlTop+=card;
+  });
+  document.getElementById('lb-boards-top').innerHTML=htmlTop;
+  document.getElementById('lb-boards-bottom').innerHTML=htmlBottom;
 }
 
 // ─── LEADERBOARD RECRUITER EXCLUDE FILTER ───
