@@ -898,9 +898,9 @@ td.editing{padding:2px 4px!important}
       <option value="custom">Custom range…</option>
     </select>
     <div id="gp-custom-range" style="display:none;align-items:center;gap:6px">
-      <select id="gp-wk-from" onchange="renderGP();if(gpActiveSection==='sparklines')renderGpSparklines();" style="height:32px;font-size:12px"></select>
+      <select id="gp-wk-from" onchange="renderGP();if(gpActiveSection==='sparklines')renderGpTrendChart();" style="height:32px;font-size:12px"></select>
       <span style="font-size:11px;color:var(--text3)">→</span>
-      <select id="gp-wk-to" onchange="renderGP();if(gpActiveSection==='sparklines')renderGpSparklines();" style="height:32px;font-size:12px"></select>
+      <select id="gp-wk-to" onchange="renderGP();if(gpActiveSection==='sparklines')renderGpTrendChart();" style="height:32px;font-size:12px"></select>
     </div>
     <button type="button" onclick="resetGpFilters()" style="height:32px;padding:0 12px;font-size:12px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">✕ Reset</button>
       <button type="button" id="gp-rec-btn" onclick="toggleGpRecMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:160px;justify-content:space-between">
@@ -920,7 +920,7 @@ td.editing{padding:2px 4px!important}
   <!-- Section tabs -->
   <div style="display:flex;gap:2px;margin:14px 0 16px;border-bottom:1px solid var(--border2)">
     <button class="gp-sec-btn active" onclick="showGpSection('table')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px">Table View</button>
-    <button class="gp-sec-btn" onclick="showGpSection('sparklines')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">Sparkline Grid</button>
+    <button class="gp-sec-btn" onclick="showGpSection('sparklines')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">GP Trend</button>
   </div>
 
   <div id="gp-section-table">
@@ -936,7 +936,17 @@ td.editing{padding:2px 4px!important}
   </div>
 
   <div id="gp-section-sparklines" style="display:none">
-    <div id="gp-sparklines-wrap" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden"></div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <div style="display:flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+        <button type="button" id="gp-trend-view-weekly" onclick="setGpTrendView('weekly')" style="border:none;padding:0 14px;height:30px;font-size:12px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff">Weekly</button>
+        <button type="button" id="gp-trend-view-cumulative" onclick="setGpTrendView('cumulative')" style="border:none;padding:0 14px;height:30px;font-size:12px;font-weight:600;cursor:pointer;background:var(--bg2);color:var(--text3)">Cumulative</button>
+      </div>
+    </div>
+    <div id="gp-trend-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px"></div>
+    <div id="gp-trend-legend" style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;font-size:11px;color:var(--text3)"></div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;height:340px">
+      <canvas id="gp-trend-canvas"></canvas>
+    </div>
   </div>
 </div>
 
@@ -6234,7 +6244,7 @@ function initGpRecChecks(query) {
       gpSelectedRecs[name] = e.target.checked;
       updateGpRecLabel();
       renderGP();
-      if (gpActiveSection==='sparklines') renderGpSparklines();
+      if (gpActiveSection==='sparklines') renderGpTrendChart();
     });
     wrap.appendChild(row);
   });
@@ -6307,7 +6317,7 @@ function initGpMgrChecks() {
       gpSelectedMgrs[m] = e.target.checked;
       updateGpMgrLabel();
       renderGP();
-      if (gpActiveSection==='sparklines') renderGpSparklines();
+      if (gpActiveSection==='sparklines') renderGpTrendChart();
     });
     wrap.appendChild(row);
   });
@@ -6383,7 +6393,7 @@ function onGpWindowChange() {
     }
   }
   renderGP();
-  if (gpActiveSection==='sparklines') renderGpSparklines();
+  if (gpActiveSection==='sparklines') renderGpTrendChart();
 }
 
 function renderGP() {
@@ -6558,27 +6568,62 @@ function showGpSection(name) {
   document.getElementById('gp-section-sparklines').style.display = name==='sparklines' ? '' : 'none';
   document.querySelectorAll('.gp-sec-btn').forEach(function(btn) {
     var isActive = (name==='table' && btn.textContent.includes('Table')) ||
-                   (name==='sparklines' && btn.textContent.includes('Sparkline'));
+                   (name==='sparklines' && btn.textContent.includes('Trend'));
     btn.style.color = isActive ? 'var(--accent)' : 'var(--text3)';
     btn.style.borderBottomColor = isActive ? 'var(--accent)' : 'transparent';
   });
-  if (name==='sparklines') renderGpSparklines();
+  if (name==='sparklines') renderGpTrendChart();
 }
 
-function renderGpSparklines() {
-  var wrap = document.getElementById('gp-sparklines-wrap');
-  if (!wrap) return;
+var gpTrendView = 'weekly'; // 'weekly' | 'cumulative'
+var gpTrendChartInst = null;
+
+function setGpTrendView(v) {
+  gpTrendView = v;
+  var wBtn = document.getElementById('gp-trend-view-weekly');
+  var cBtn = document.getElementById('gp-trend-view-cumulative');
+  if (wBtn) { wBtn.style.background = v==='weekly' ? 'var(--accent)' : 'var(--bg2)'; wBtn.style.color = v==='weekly' ? '#fff' : 'var(--text3)'; }
+  if (cBtn) { cBtn.style.background = v==='cumulative' ? 'var(--accent)' : 'var(--bg2)'; cBtn.style.color = v==='cumulative' ? '#fff' : 'var(--text3)'; }
+  renderGpTrendChart();
+}
+
+function gpLinRegTrend(data) {
+  var n = data.length;
+  if (n < 2) return data.slice();
+  var xMean = (n-1)/2, yMean = data.reduce(function(a,b){return a+b;},0)/n;
+  var num=0, den=0;
+  data.forEach(function(y,x){ num += (x-xMean)*(y-yMean); den += (x-xMean)*(x-xMean); });
+  var slope = den ? num/den : 0;
+  return data.map(function(_,x){ return yMean + slope*(x-xMean); });
+}
+
+function gpCumulative(data) {
+  var sum=0;
+  return data.map(function(v){ sum+=v; return sum; });
+}
+
+function renderGpTrendChart() {
+  var statsWrap = document.getElementById('gp-trend-stats');
+  var legendWrap = document.getElementById('gp-trend-legend');
+  var canvas = document.getElementById('gp-trend-canvas');
+  if (!statsWrap || !canvas) return;
+
   const archivedNames = archivedRecruiters.map(a=>a.name.trim().toLowerCase());
   const recs = GP_DATA.filter(r =>
     gpSelectedMgrs[r.manager] !== false &&
     gpSelectedRecs[r.name] !== false &&
     !archivedNames.includes(r.name.trim().toLowerCase()) &&
     r.weekly.length > 0
-  ).sort((a,b) => a.name.localeCompare(b.name));
+  );
 
-  if (!recs.length) { wrap.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:13px">No GP data to display.</div>'; return; }
+  if (!recs.length) {
+    statsWrap.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px">No GP data to display.</div>';
+    legendWrap.innerHTML = '';
+    if (gpTrendChartInst) { gpTrendChartInst.destroy(); gpTrendChartInst = null; }
+    return;
+  }
 
-  // Get current week slice from filters
+  // Week slice from the shared GP window/custom-range controls
   const win = (document.getElementById('gp-window')||{}).value || 'all';
   const nW = Math.max(...GP_DATA.map(r=>r.weekly.length), 0);
   let f=0, t=nW-1;
@@ -6591,103 +6636,100 @@ function renderGpSparklines() {
     f = Math.max(0, nW-n);
     t = nW-1;
   }
+  const labels = [];
+  for (let i=f; i<=t; i++) labels.push(wkLabels[i]||'Wk '+(i+1));
 
-  var canvasIds = [];
-  var sparkDataMap = {};
-  var sparkColorMap = {};
+  const weekOf = function(r,i) { return i<r.weekly.length ? (r.weekly[i]||0) : 0; };
 
-  var html = '<div style="display:grid;grid-template-columns:160px 1fr 80px 80px 80px;gap:8px;padding:8px 14px;border-bottom:0.5px solid var(--border);font-size:11px;color:var(--text3)">'
-    +'<div>Recruiter</div><div>Weekly GP</div><div style="text-align:right">2026 GP</div><div style="text-align:right">Change</div><div style="text-align:right">Trend</div>'
-    +'</div>';
-
-  recs.forEach(function(r, idx) {
-    var cid = 'gpsp_'+idx;
-    canvasIds.push(cid);
-    // Slice data to selected range
-    var data = [];
-    for (var i=f; i<=t; i++) data.push(i<r.weekly.length ? (r.weekly[i]||0) : 0);
-    sparkDataMap[cid] = data;
-
-    // Trend: first week in range vs last week in range
-    var firstVal = data.length > 0 ? data[0] : 0;
-    var lastVal  = data.length > 0 ? data[data.length-1] : 0;
-    var trendPct = firstVal ? Math.round((lastVal-firstVal)/Math.abs(firstVal)*100) : null;
-    var trendStr = trendPct===null?'—':trendPct>0?'+'+trendPct+'%':trendPct+'%';
-    var trendCol = trendPct===null?'var(--text3)':trendPct>0?'#3B6D11':trendPct<0?'#A32D2D':'var(--text3)';
-    sparkColorMap[cid] = trendPct>0?'#639922':trendPct<0?'#E24B4A':'#60A5FA';
-    var mc = MGR_COLORS[r.manager]||'#888';
-
-    var gpChange = lastVal - firstVal;
-    var gpChangeStr = gpChange === 0 ? '—' : (gpChange > 0 ? '+' : '') + formatGP(gpChange);
-    var gpChangeCol = gpChange > 0 ? '#3B6D11' : gpChange < 0 ? '#A32D2D' : 'var(--text3)';
-
-    html += '<div style="display:grid;grid-template-columns:160px 1fr 80px 80px 80px;gap:8px;align-items:center;padding:6px 14px;border-bottom:0.5px solid var(--border)">'
-      +'<div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-        +r.name+'<br><span style="font-size:10px;color:'+mc+'">'+r.manager+'</span>'
-      +'</div>'
-      +'<div style="height:60px;position:relative"><canvas id="'+cid+'" style="position:absolute;inset:0;width:100%;height:100%"></canvas></div>'
-      +'<div style="font-size:12px;font-weight:600;text-align:right;color:var(--c-starts)">'+formatGP(r.gp2026)+'</div>'
-      +'<div style="font-size:12px;font-weight:600;text-align:right;color:'+gpChangeCol+'">'+gpChangeStr+'</div>'
-      +'<div style="font-size:12px;font-weight:600;text-align:right;color:'+trendCol+'">'+trendStr+'</div>'
-    +'</div>';
+  // Group selected recruiters by manager
+  const mgrsPresent = [...new Set(recs.map(r=>r.manager))].sort();
+  const byMgr = {};
+  mgrsPresent.forEach(function(m){
+    const team = recs.filter(function(r){ return r.manager===m; });
+    const series = [];
+    for (let i=f; i<=t; i++) series.push(team.reduce(function(s,r){ return s+weekOf(r,i); },0));
+    byMgr[m] = series;
   });
+  const totalSeries = [];
+  for (let i=f; i<=t; i++) totalSeries.push(recs.reduce(function(s,r){ return s+weekOf(r,i); },0));
 
-  wrap.innerHTML = html;
+  const isCum = gpTrendView === 'cumulative';
+  const singleMgr = mgrsPresent.length === 1;
 
-  requestAnimationFrame(function() {
-    canvasIds.forEach(function(cid) {
-      var canvas = document.getElementById(cid);
-      if (!canvas) return;
-      var data = sparkDataMap[cid];
-      var color = sparkColorMap[cid]||'#60A5FA';
-      var labels = data.map(function(_,i){ return wkLabels[f+i]||'Wk'+(f+i+1); });
-      if (canvas._chartInst) canvas._chartInst.destroy();
-      canvas._chartInst = new Chart(canvas, {
-        type:'line',
-        data:{
-          labels:labels,
-          datasets:[{
-            data:data,
-            borderColor:color,
-            borderWidth:2,
-            pointRadius:3,
-            pointHoverRadius:6,
-            pointBackgroundColor:color,
-            pointBorderColor:color,
-            fill:false,
-            tension:.3
-          }]
-        },
-        options:{
-          responsive:false,
-          maintainAspectRatio:false,
-          interaction:{ mode:'index', intersect:false },
-          plugins:{
-            legend:{ display:false },
-            tooltip:{
-              backgroundColor:'rgba(22,24,29,0.95)',
-              titleColor:'#9ba3b8',
-              bodyColor:'#e2e8f0',
-              borderColor:'rgba(255,255,255,0.1)',
-              borderWidth:1,
-              padding:8,
-              callbacks:{
-                title: ctx => ctx[0].label,
-                label: ctx => ' '+formatGP(ctx.parsed.y)
-              }
-            }
-          },
-          scales:{
-            x:{
-              display:true,
-              ticks:{ font:{size:9}, maxRotation:45, color:'#9ba3b8' },
-              grid:{ display:false }
-            },
-            y:{ display:false }
-          }
-        }
-      });
+  var datasets = [];
+  if (singleMgr) {
+    const mc = MGR_COLORS[mgrsPresent[0]]||'#378ADD';
+    const series = isCum ? gpCumulative(byMgr[mgrsPresent[0]]) : byMgr[mgrsPresent[0]];
+    datasets.push({ type:'bar', label:mgrsPresent[0], data:series, backgroundColor:mc, borderRadius:3, order:2 });
+    if (!isCum) {
+      datasets.push({ type:'line', label:'Trend', data:gpLinRegTrend(series), borderColor:'#D85A30', borderWidth:2, pointRadius:0, tension:0, order:1 });
+    }
+    legendWrap.innerHTML = '<span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:'+mc+'"></span>'+mgrsPresent[0]+'</span>'
+      + (!isCum ? '<span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:2px;background:#D85A30"></span>Trend</span>' : '');
+  } else {
+    mgrsPresent.forEach(function(m){
+      const mc = MGR_COLORS[m]||'#888';
+      const series = isCum ? gpCumulative(byMgr[m]) : byMgr[m];
+      datasets.push({ type:'bar', label:m, data:series, backgroundColor:mc, borderRadius:2, stack:'gp' });
     });
+    if (!isCum) {
+      datasets.push({ type:'line', label:'Total trend', data:gpLinRegTrend(totalSeries), borderColor:'#2C2C2A', borderWidth:2, pointRadius:0, tension:0, order:0 });
+    }
+    legendWrap.innerHTML = mgrsPresent.map(function(m){
+      const mc = MGR_COLORS[m]||'#888';
+      return '<span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:'+mc+'"></span>'+m+'</span>';
+    }).join('') + (!isCum ? '<span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:2px;background:#2C2C2A"></span>Total trend</span>' : '');
+  }
+
+  // Stat cards
+  const wLen = totalSeries.length || 1;
+  const ytdTotal = totalSeries.reduce(function(s,v){return s+v;},0);
+  const avgWeekly = ytdTotal / wLen;
+  const trendArr = gpLinRegTrend(totalSeries);
+  const trendPct = (trendArr.length>1 && trendArr[0]) ? ((trendArr[trendArr.length-1]-trendArr[0])/Math.abs(trendArr[0])/trendArr.length*100) : 0;
+  const trendStr = (trendPct>=0?'+':'')+trendPct.toFixed(1)+'% / wk';
+  const trendCol = trendPct>0?'#3B6D11':trendPct<0?'#A32D2D':'var(--text3)';
+  const displayTotal = isCum ? gpCumulative(totalSeries)[totalSeries.length-1] : ytdTotal;
+
+  statsWrap.innerHTML =
+    '<div style="background:var(--bg2);border-radius:8px;padding:12px 14px">'
+      +'<div style="font-size:11px;color:var(--text3);margin-bottom:4px">'+(isCum?'Cumulative GP (range)':'Total GP (range)')+'</div>'
+      +'<div style="font-size:20px;font-weight:700;color:var(--text)">'+formatGP(displayTotal)+'</div>'
+    +'</div>'
+    +'<div style="background:var(--bg2);border-radius:8px;padding:12px 14px">'
+      +'<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Avg weekly GP</div>'
+      +'<div style="font-size:20px;font-weight:700;color:var(--text)">'+formatGP(avgWeekly)+'</div>'
+    +'</div>'
+    +'<div style="background:var(--bg2);border-radius:8px;padding:12px 14px">'
+      +'<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Trend</div>'
+      +'<div style="font-size:20px;font-weight:700;color:'+trendCol+'">'+trendStr+'</div>'
+    +'</div>';
+
+  if (gpTrendChartInst) { gpTrendChartInst.destroy(); gpTrendChartInst = null; }
+  const stacked = !singleMgr;
+  gpTrendChartInst = new Chart(canvas, {
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display:false },
+        tooltip: {
+          backgroundColor:'rgba(22,24,29,0.95)',
+          titleColor:'#9ba3b8',
+          bodyColor:'#e2e8f0',
+          borderColor:'rgba(255,255,255,0.1)',
+          borderWidth:1,
+          padding:8,
+          callbacks: { label: function(c){ return ' '+c.dataset.label+': '+formatGP(c.parsed.y); } }
+        }
+      },
+      scales: {
+        x: { stacked: stacked, grid:{ display:false }, ticks:{ font:{size:10}, maxRotation:45, color:'#9ba3b8', autoSkip:true, maxTicksLimit:16 } },
+        y: { stacked: stacked, grid:{ color:'rgba(255,255,255,0.06)' }, ticks:{ color:'#9ba3b8', callback:function(v){ return formatGP(v); } } }
+      }
+    }
   });
 }
 
@@ -6696,7 +6738,7 @@ function renderGpSparklines() {
 function renderGPIfActive() {
   if (document.getElementById('tab-gp').classList.contains('active')) {
     renderGP();
-    if (gpActiveSection === 'sparklines') renderGpSparklines();
+    if (gpActiveSection === 'sparklines') renderGpTrendChart();
   }
 }
 
