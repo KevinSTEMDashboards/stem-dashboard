@@ -5853,11 +5853,11 @@ var LB_KPIS=[
   {wkey:'_placements', label:'Placements',         color:'var(--purple)',   icon:'🤝',higher:true, fmt:function(v){return v||0;}, row:1},
   {wkey:'_starts',     label:'Starts',             color:'var(--c-starts)', icon:'🚀',higher:true, fmt:function(v){return v||0;}, row:1},
   {wkey:'_leads',      label:'Leads',              color:'var(--c-leads)',  icon:'💡',higher:true, fmt:function(v){return v||0;}, row:1},
+  {wkey:'avgSub4w',    label:'4 Week Sub Average',       color:'var(--c-subs)',   icon:'📈',higher:true, fmt:function(v){return v!=null?v.toFixed(1):'0';}, row:2},
   {wkey:'sub2iv',      label:'Submittal→Interview', color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2iv', row:2},
   {wkey:'iv2placement',label:'Interview→Placement',  color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'iv2placement', row:2},
   {wkey:'pl2start',    label:'Placement→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'pl2start', row:2},
-  {wkey:'sub2start',   label:'Submittal→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2start', row:2},
-  {wkey:'avgSub4w',    label:'4-wk Sub Avg',       color:'var(--c-subs)',   icon:'📈',higher:true, fmt:function(v){return v!=null?v.toFixed(1):'0';}, row:2}
+  {wkey:'sub2start',   label:'Submittal→Start',      color:'var(--amber)',    icon:'⚡',higher:false,fmt:function(v){return v!=null?v.toFixed(1)+':1':'—';},ratioKey:'sub2start', row:2}
 ];
 
 function showLbModal(kpiIdx, mgrFilter){
