@@ -898,9 +898,9 @@ td.editing{padding:2px 4px!important}
       <option value="custom">Custom range…</option>
     </select>
     <div id="gp-custom-range" style="display:none;align-items:center;gap:6px">
-      <select id="gp-wk-from" onchange="renderGP();if(gpActiveSection==='sparklines')renderGpTrendChart();" style="height:32px;font-size:12px"></select>
+      <select id="gp-wk-from" onchange="renderGP();renderGpActiveSection();" style="height:32px;font-size:12px"></select>
       <span style="font-size:11px;color:var(--text3)">→</span>
-      <select id="gp-wk-to" onchange="renderGP();if(gpActiveSection==='sparklines')renderGpTrendChart();" style="height:32px;font-size:12px"></select>
+      <select id="gp-wk-to" onchange="renderGP();renderGpActiveSection();" style="height:32px;font-size:12px"></select>
     </div>
     <button type="button" onclick="resetGpFilters()" style="height:32px;padding:0 12px;font-size:12px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text3);cursor:pointer">✕ Reset</button>
       <div style="position:relative;display:inline-block" id="gp-rec-wrap">
@@ -921,8 +921,10 @@ td.editing{padding:2px 4px!important}
   <div id="gp-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px"></div>
   <!-- Section tabs -->
   <div style="display:flex;gap:2px;margin:14px 0 16px;border-bottom:1px solid var(--border2)">
-    <button class="gp-sec-btn active" onclick="showGpSection('table')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px">Table View</button>
-    <button class="gp-sec-btn" onclick="showGpSection('sparklines')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">GP Trend</button>
+    <button class="gp-sec-btn active" data-sec="table" onclick="showGpSection('table')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px">Table View</button>
+    <button class="gp-sec-btn" data-sec="sparklines" onclick="showGpSection('sparklines')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">GP Trend</button>
+    <button class="gp-sec-btn" data-sec="trip" onclick="showGpSection('trip')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">&#127965; Performance Trip</button>
+    <button class="gp-sec-btn" data-sec="promo" onclick="showGpSection('promo')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">&#127894; Promotion Tracker</button>
   </div>
 
   <div id="gp-section-table">
@@ -948,6 +950,98 @@ td.editing{padding:2px 4px!important}
     <div id="gp-trend-legend" style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;font-size:11px;color:var(--text3)"></div>
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;position:relative;height:340px">
       <canvas id="gp-trend-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- ── PERFORMANCE TRIP TRACKER ── -->
+  <div id="gp-section-trip" style="display:none">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap">Goal
+        <input type="number" id="trip-goal" step="25000" min="0" style="height:32px;font-size:12px;width:120px;padding:0 8px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text)" oninput="onTripSettingChange()">
+      </label>
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap">Weeks in year
+        <input type="number" id="trip-yearwks" min="1" max="60" style="height:32px;font-size:12px;width:70px;padding:0 8px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text)" oninput="onTripSettingChange()">
+      </label>
+      <select id="trip-sort" onchange="renderGpTrip()" style="height:32px;font-size:12px">
+        <option value="pct">Sort: % to goal</option>
+        <option value="gp">Sort: YTD GP</option>
+        <option value="proj">Sort: projected year-end</option>
+        <option value="name">Sort: name</option>
+      </select>
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="trip-hide" onchange="renderGpTrip()" style="width:14px;height:14px"> Hide already-qualified</label>
+      <span style="flex:1"></span>
+      <span id="trip-asof" style="font-size:11px;color:var(--text3)"></span>
+    </div>
+    <div id="trip-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px"></div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px">
+      <div class="card-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span class="card-title">&#127965; Qualified &mdash; trip earned</span>
+        <span id="trip-qual-count" style="font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div id="trip-qualified" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px"></div>
+    </div>
+    <div class="card-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="card-title">Pacing toward goal</span>
+      <span style="font-size:11px;color:var(--text3)">Run rate = trailing 8-week average. Projection = YTD GP + (run rate &times; weeks left).</span>
+    </div>
+    <div class="tbl-wrap">
+      <table class="wow-table">
+        <thead id="trip-thead"></thead>
+        <tbody id="trip-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── PROMOTION TRACKER ── -->
+  <div id="gp-section-promo" style="display:none">
+    <div id="promo-ladder" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap">Review at or above
+        <select id="promo-review" onchange="onPromoSettingChange()" style="height:32px;font-size:12px"></select>
+      </label>
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap">Near-miss within
+        <input type="number" id="promo-near" step="5000" min="0" style="height:32px;font-size:12px;width:95px;padding:0 8px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text)" oninput="onPromoSettingChange()">
+      </label>
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap">Min weeks tenure
+        <input type="number" id="promo-minwks" min="1" max="26" style="height:32px;font-size:12px;width:70px;padding:0 8px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text)" oninput="onPromoSettingChange()">
+      </label>
+      <select id="promo-sort" onchange="renderGpPromo()" style="height:32px;font-size:12px">
+        <option value="gp">Sort: rolling 26wk GP</option>
+        <option value="gap">Sort: closest to next band</option>
+        <option value="name">Sort: name</option>
+        <option value="mgr">Sort: manager</option>
+      </select>
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="promo-only" onchange="renderGpPromo()" style="width:14px;height:14px"> Flagged only</label>
+      <span style="flex:1"></span>
+      <span id="promo-asof" style="font-size:11px;color:var(--text3)"></span>
+    </div>
+    <div id="promo-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px"></div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px">
+      <div class="card-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span class="card-title">Band distribution</span>
+        <span style="font-size:11px;color:var(--text3)">Highest rung cleared on rolling 26-week GP</span>
+      </div>
+      <div id="promo-dist" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px"></div>
+    </div>
+    <div class="tbl-wrap">
+      <table class="wow-table">
+        <thead id="promo-thead"></thead>
+        <tbody id="promo-tbody"></tbody>
+      </table>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;margin-top:18px">
+      <div class="card-title" style="margin-bottom:8px">How the flag works</div>
+      <div style="font-size:11px;color:var(--text3);line-height:1.6">
+        Rolling 26-week GP is the sum of the last 26 weekly columns on the Gross Profit sheet, taken from one shared
+        window across all recruiters so nobody&rsquo;s window drifts. That total is compared against the ladder above,
+        and the highest rung cleared is their <b>band earned</b>.
+        <br><br>
+        Job titles aren&rsquo;t tracked in the dashboard yet, so the flag is threshold-driven: set
+        <b>&ldquo;Review at or above&rdquo;</b> to the band worth a conversation and anyone clearing it turns
+        <b style="color:var(--green)">green</b>. Anyone within the near-miss amount of their next rung turns
+        <b style="color:var(--amber)">amber</b>. Anyone hired too recently to have the minimum tenure is held out as
+        <b>insufficient tenure</b> rather than flagged either way.
+      </div>
     </div>
   </div>
 </div>
@@ -1098,7 +1192,7 @@ td.editing{padding:2px 4px!important}
       </select>
     </div>
 
-    <div class="section-hdr">👥 Active recruiters</div>
+    <div class="section-hdr" id="roster-active-hdr">👥 Active recruiters</div>
     <div class="card" style="margin-bottom:14px">
       <div class="tbl-wrap">
         <table>
@@ -3267,28 +3361,114 @@ function buildBackupPayload() {
 
 // ─── FULL SETTINGS EXPORT / IMPORT ───
 // Exports everything needed to fully restore the dashboard on a new browser/device
+// Copy that reports honestly. The old path called execCommand without checking
+// its return value and alerted success either way, so a failed copy looked
+// identical to a successful one — an empty clipboard with a green checkmark.
+function copyToClipboard(text, successMsg) {
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (e) { copied = false; }
+    document.body.removeChild(ta);
+    if (copied) alert(successMsg);
+    else showCopyFallback(text);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function(){ alert(successMsg); }).catch(fallback);
+  } else {
+    fallback();
+  }
+}
+
+// Last resort: show the text in a selectable textarea so it can be copied by
+// hand rather than silently losing it.
+function showCopyFallback(text) {
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:16px;max-width:760px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.45)';
+  box.innerHTML = '<div style="font-size:13px;font-weight:700;margin-bottom:6px">Automatic copy was blocked</div>'
+    + '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">The text is selected below — press Ctrl+C (Cmd+C on Mac) to copy it.</div>';
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'width:100%;height:280px;font-family:monospace;font-size:11px;padding:8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg2);color:var(--text)';
+  var btn = document.createElement('button');
+  btn.className = 'btn';
+  btn.textContent = 'Close';
+  btn.style.cssText = 'margin-top:10px;float:right';
+  btn.onclick = function(){ document.body.removeChild(ov); };
+  box.appendChild(ta); box.appendChild(btn); ov.appendChild(box);
+  document.body.appendChild(ov);
+  ta.focus(); ta.select();
+}
+
+// Export every Roster-tab value that lives only in localStorage, in a form that
+// can be baked back into this file. Covers active AND archived people.
+function exportRosterPresets() {
+  const hireDates = getHireDates();
+  const birthdays = getBirthdays();
+  const verticals = getVerticals();
+
+  // Only keep names still known to the dashboard, so dead keys don't accumulate
+  const known = {};
+  RECRUITERS.forEach(function(r){ known[r.name] = true; });
+  archivedRecruiters.forEach(function(a){ known[a.name] = true; });
+  function prune(map) {
+    const out = {};
+    Object.keys(map).sort().forEach(function(k){ if (known[k] && map[k]) out[k] = map[k]; });
+    return out;
+  }
+  const hd = prune(hireDates), bd = prune(birthdays), vt = prune(verticals);
+
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    label: 'STEM Dashboard roster presets (hire dates, birthdays, verticals)',
+    counts: { hireDates: Object.keys(hd).length, birthdays: Object.keys(bd).length, verticals: Object.keys(vt).length },
+    hireDates: hd, birthdays: bd, verticals: vt
+  };
+
+  // Download a real file — more reliable than the clipboard, and attachable.
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  const stamp = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  a.download = 'stem_roster_presets_' + stamp + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+
+  // Also offer the paste-ready JS for the three PRESET maps
+  const js = 'const PRESET_HIRE_DATES = ' + JSON.stringify(hd, null, 2) + ';\n\n'
+           + 'const PRESET_BIRTHDAYS = '  + JSON.stringify(bd, null, 2) + ';\n\n'
+           + 'const PRESET_VERTICALS = '  + JSON.stringify(vt, null, 2) + ';';
+  copyToClipboard(js,
+    '\u2705 Roster presets copied and downloaded!\n\n'
+    + Object.keys(hd).length + ' hire dates, '
+    + Object.keys(bd).length + ' birthdays, '
+    + Object.keys(vt).length + ' verticals.\n\n'
+    + 'The .json file is in your Downloads folder.');
+}
+
 function exportArchivedForEmbed() {
   // Include hire dates and birthdays so they survive rebuilds
   const hireDates = getHireDates();
   const birthdays = getBirthdays();
+  const verticals = getVerticals();
   const enriched = archivedRecruiters.map(function(a) {
     return Object.assign({}, a, {
       hireDate: hireDates[a.name] || a.hireDate || '',
-      birthday: birthdays[a.name] || a.birthday || ''
+      birthday: birthdays[a.name] || a.birthday || '',
+      vertical: verticals[a.name] || a.vertical || ''
     });
   });
   const json = JSON.stringify(enriched, null, 2);
-  navigator.clipboard.writeText(json).then(function() {
-    alert('✅ Archived list copied to clipboard!\n\nIncludes hire dates and birthdays.\nPaste into PRESET_ARCHIVED = [] in your next dashboard update.');
-  }).catch(function() {
-    const ta = document.createElement('textarea');
-    ta.value = json;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    alert('✅ Archived list copied!\n\nIncludes hire dates and birthdays.\nPaste into PRESET_ARCHIVED = [] in your next update.');
-  });
+  copyToClipboard(json, '✅ Archived list copied to clipboard!\n\nIncludes hire dates, birthdays, and verticals.\nPaste into PRESET_ARCHIVED = [] in your next dashboard update.');
 }
 
 function exportSettings() {
@@ -4280,7 +4460,7 @@ function toggleHdrMenu(){
   if(m) m.style.display = m.style.display!=='none' ? 'none' : 'block';
 }
 // Items dispatch by function name so the menu HTML stays declarative
-var _hdrMenuFns={generatePDFReport:1,promptEmailDigest:1,exportSettings:1,importSettings:1,exportArchivedForEmbed:1,openUserModal:1,signOut:1};
+var _hdrMenuFns={generatePDFReport:1,promptEmailDigest:1,exportSettings:1,importSettings:1,exportArchivedForEmbed:1,exportRosterPresets:1,openUserModal:1,signOut:1};
 function _hdrMenuGo(fn){
   var m=document.getElementById('hdr-menu');
   if(m) m.style.display='none';
@@ -4326,6 +4506,7 @@ function updateAuthUI() {
             ${mi('💾','Export Settings','exportSettings','Export all settings to a backup file')}
             ${mi('📂','Import Settings','importSettings','Restore settings from a backup file')}
             ${mi('📋','Copy Archived JSON','exportArchivedForEmbed','Copy archived list JSON to embed in dashboard file')}
+            ${mi('🧬','Copy Roster Presets','exportRosterPresets','Download + copy hire dates, birthdays and verticals to bake into the dashboard file')}
             ${isAdmin ? sec('Admin')+mi('👥','Manage editors','openUserModal','') : ''}
             <div style="border-top:1px solid var(--border);margin:6px 4px"></div>
             ${mi('🚪','Sign out','signOut','')}
@@ -4721,7 +4902,13 @@ function saveEditModal() {
 // newRecruiters: [{name, manager, addedOn, startWeekIndex}] — added after BASE_DATA, stored in localStorage
 // PRESET_ARCHIVED — baked in so archived list survives dashboard updates
 // To update: export your current archived list and paste the JSON here
-const PRESET_ARCHIVED = [{"name":"Heather McRae","manager":"Noah","archivedOn":"6/4/2026","endedOn":"05/08/2026","subs":[6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],"ivs":[1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],"placements":[0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],"hireDate":"2014-07-07","birthday":""},{"name":"Helen Phillips","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/19/2026","subs":[2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],"ivs":[1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],"placements":[0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],"starts":[1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],"leads":[0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],"hireDate":"2003-02-07","birthday":"06/30"},{"name":"John Gorsuch","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/10/2026","subs":[5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],"ivs":[1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],"starts":[0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],"leads":[0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],"hireDate":"2022-09-12","birthday":""},{"name":"Jason Beir","manager":"Kevin","archivedOn":"6/8/2026","endedOn":"06/05/2026","subs":[4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],"ivs":[3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],"placements":[0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2020-10-01","birthday":""},{"name":"Jessica Paden","manager":"Brett","archivedOn":"6/9/2026","endedOn":"06/08/2026","subs":[6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],"ivs":[2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],"placements":[2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],"starts":[0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],"leads":[0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],"hireDate":"2024-01-29","birthday":"06/30"},{"name":"Stephen Pemberton","manager":"Joe","archivedOn":"6/23/2026","endedOn":"06/22/2026","subs":[5,3,6,5,5,7,5,6,6,5,4,10,6,7,5,10,7,5,5,5,4,5,10,3],"ivs":[0,0,1,0,1,0,1,3,0,1,0,1,1,0,2,0,3,2,2,2,0,0,0,0],"placements":[0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0],"starts":[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0],"leads":[1,0,0,0,5,2,1,0,3,2,0,1,0,2,0,1,0,0,0,0,1,1,0,2],"hireDate":"2025-12-15","birthday":"07/20"},{"name":"Taylor Durrill","manager":"Noah","archivedOn":"7/15/2026","endedOn":"07/15/2026","subs":[5,7,6,7,4,6,6,6,6,null,null,null,null,null,null,null,null,null,null,null,0,0,4,2,3,3,5],"ivs":[0,2,0,2,0,1,1,1,2,1,null,1,null,null,null,null,0,0,0,0,0,0,0,0,0,3,1],"placements":[0,0,0,0,1,0,0,0,0,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0,0,0],"starts":[0,0,0,0,0,0,1,0,0,null,null,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,1,1,1,1,3,null,null,null,null,null,null,null,null,null,0,null,0,0,0,1,0,2,0],"hireDate":"2024-03-26","birthday":"01/18"}];
+const PRESET_ARCHIVED = [{"name":"Heather McRae","manager":"Noah","archivedOn":"6/4/2026","endedOn":"05/08/2026","subs":[6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],"ivs":[1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],"placements":[0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],"hireDate":"2014-07-07","birthday":""},{"name":"Helen Phillips","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/19/2026","subs":[2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],"ivs":[1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],"placements":[0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],"starts":[1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],"leads":[0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],"hireDate":"2003-02-07","birthday":"06/30"},{"name":"John Gorsuch","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/10/2026","subs":[5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],"ivs":[1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],"starts":[0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],"leads":[0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],"hireDate":"2022-09-12","birthday":""},{"name":"Jason Beir","manager":"Kevin","archivedOn":"6/8/2026","endedOn":"06/05/2026","subs":[4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],"ivs":[3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],"placements":[0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2020-10-01","birthday":""},{"name":"Jessica Paden","manager":"Brett","archivedOn":"6/9/2026","endedOn":"06/08/2026","subs":[6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],"ivs":[2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],"placements":[2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],"starts":[0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],"leads":[0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],"hireDate":"2024-01-29","birthday":"06/30"},{"name":"Stephen Pemberton","manager":"Joe","archivedOn":"6/23/2026","endedOn":"06/22/2026","subs":[5,3,6,5,5,7,5,6,6,5,4,10,6,7,5,10,7,5,5,5,4,5,10,3],"ivs":[0,0,1,0,1,0,1,3,0,1,0,1,1,0,2,0,3,2,2,2,0,0,0,0],"placements":[0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0],"starts":[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0],"leads":[1,0,0,0,5,2,1,0,3,2,0,1,0,2,0,1,0,0,0,0,1,1,0,2],"hireDate":"2025-12-15","birthday":"07/20"},{"name":"Taylor Durrill","manager":"Noah","archivedOn":"7/15/2026","endedOn":"07/15/2026","subs":[5,7,6,7,4,6,6,6,6,null,null,null,null,null,null,null,null,null,null,null,0,0,4,2,3,3,5],"ivs":[0,2,0,2,0,1,1,1,2,1,null,1,null,null,null,null,0,0,0,0,0,0,0,0,0,3,1],"placements":[0,0,0,0,1,0,0,0,0,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0,0,0],"starts":[0,0,0,0,0,0,1,0,0,null,null,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,1,1,1,1,3,null,null,null,null,null,null,null,null,null,0,null,0,0,0,1,0,2,0],"hireDate":"2024-03-26","birthday":"01/18"},{"name":"Aidan (AJ) Smith","manager":"Rachel","archivedOn":"8/20/2026","endedOn":"08/17/2026","subs":[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5,7,0,0,4,5,7,6,3,4,6,5,5,6,3],"ivs":[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3,0,0,0,0,1,0,3,1,5,0,0,2,3,0],"placements":[0,1,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0],"starts":[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0,0,0,0,0,1,0,0,1,1,0,0,3,0,0],"hireDate":"2025-07-14","birthday":"01/31"}];
+
+// PRESET_VERTICALS — baked in to survive dashboard updates.
+// Empty until populated from "Copy Roster Presets" in the menu. Until then,
+// verticals live only in this browser's localStorage and do NOT follow the file
+// to another machine. Regenerate and paste after editing verticals.
+const PRESET_VERTICALS = {};
 
 // PRESET_BIRTHDAYS — baked in to survive dashboard updates
 const PRESET_BIRTHDAYS = {"Aidan (AJ) Smith": "01/31", "Amanda Panizzut": "07/04", "Amy Orndorff": "03/26", "Andraea Hagadorn": "05/19", "Andy Dalmau": "11/13", "Anthony Ginnis": "08/18", "Barry Andis": "11/16", "Benjamin Grover": "07/13", "Brett Schuber": "03/22", "Briana Moglia": "04/22", "Briana Siler": "03/10", "Brittany Youlden": "03/19", "Drew Barker": "05/01", "Erin Cadden": "11/08", "Felipe Parra": "09/17", "Gary Prestipino": "05/14", "Heather Stevens": "12/22", "Helen Phillips": "06/30", "Henry Schibli": "11/11", "Jared Pliskow": "08/12", "Jessica Mema": "06/21", "Jessica Paden": "06/30", "Jillian Dunn": "02/18", "Joseph Paolozzi": "01/15", "Justin LaSorsa": "01/08", "Kaitlyn Moreschi": "08/24", "Kyle McMahon": "04/17", "Lazaro Calderin": "03/26", "Logan Rayburn": "10/06", "Madison Garra": "06/10", "Megan Curtis": "09/11", "Michael Brennan": "08/25", "Michael Sheahan": "01/11", "Noah Simon": "05/05", "Paige Atkinson": "05/18", "Peter Costello": "02/20", "Rachel Hewitt": "02/05", "Rebecca Schopfer": "07/13", "Sam Royall": "11/01", "Samuel Simon": "04/18", "Sitara Ramessar": "12/07", "Stephen Pemberton": "07/20", "Taylor Durrill": "01/18", "Tiffany Silgas": "03/01", "Tyler Rostad": "03/01", "William Payton": "06/13", "Zachary Jacobson": "11/20", "Corey Phillips": "04/13", "Dan Van Gemert": "12/06", "Molly Burton": "09/06", "Matt Grimes": "04/16", "Jonathan Robertson": "04/15", "Sean McDivitt": "11/09", "Caitlin Choy": "07/10", "Hannah Murphy": "06/05", "Courtney Ricci": "09/05"};
@@ -4740,17 +4927,24 @@ let archivedRecruiters = (function() {
   setTimeout(function() {
     const hireDates = getHireDates();
     const birthdays = getBirthdays();
+    // Declared before first use — assigning inside the seeding loop below while
+    // these were still in the temporal dead zone threw a ReferenceError, which
+    // silently killed hire-date and birthday seeding for any new name.
+    let hdChanged = false, bdChanged = false;
     // Seed from PRESET_BIRTHDAYS
     Object.keys(PRESET_BIRTHDAYS).forEach(function(name){
       if (!birthdays[name]) { birthdays[name] = PRESET_BIRTHDAYS[name]; bdChanged = true; }
     });
-    let hdChanged = false, bdChanged = false;
+    const vExisting = getVerticals();
+    let vtChanged = false;
     merged.forEach(function(a) {
       if (a.hireDate && !hireDates[a.name]) { hireDates[a.name] = a.hireDate; hdChanged = true; }
       if (a.birthday && !birthdays[a.name]) { birthdays[a.name] = a.birthday; bdChanged = true; }
+      if (a.vertical && !vExisting[a.name]) { vExisting[a.name] = a.vertical; vtChanged = true; }
     });
     if (hdChanged) saveHireDates(hireDates);
     if (bdChanged) saveBirthdays(birthdays);
+    if (vtChanged) saveVerticals(vExisting);
   }, 500);
   return merged;
 })();
@@ -5042,14 +5236,26 @@ function getHireDates() { return JSON.parse(safeGet('stemHireDates') || '{}'); }
 function saveHireDates(d) { safeSet('stemHireDates', JSON.stringify(d)); }
 function getHireDate(name) { return getHireDates()[name] || ''; }
 
+// Open a date input's native calendar. showPicker() needs a user gesture and
+// isn't in every browser, so failures fall back to the input's own calendar icon
+// rather than breaking the edit.
+function openDatePicker(inp) {
+  if (!inp) return;
+  try { if (typeof inp.showPicker === 'function') inp.showPicker(); } catch (e) { /* not supported / no gesture */ }
+}
+
 function editHireDate(name, td) {
   if (!currentUser) return;
   const current = getHireDate(name);
   const safeId = name.replace(/[^a-zA-Z0-9]/g,'_');
-  td.innerHTML = '<input type="date" id="hd_inp_'+safeId+'" value="'+(current||'')+'" style="height:26px;font-size:11px;width:130px;padding:0 4px" />';
+  td.innerHTML = '<input type="date" id="hd_inp_'+safeId+'" value="'+(current||'')+'" style="height:26px;font-size:11px;width:140px;padding:0 4px;cursor:pointer" />';
   const inp = td.querySelector('input');
   if (inp) {
     inp.focus();
+    openDatePicker(inp);
+    // Clicking the field again re-opens the calendar instead of dropping into
+    // the day/month segments.
+    inp.addEventListener('click', function(){ openDatePicker(inp); });
     inp.addEventListener('blur', function() { saveHireDate(name, inp.value, td); });
     inp.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') inp.blur();
@@ -5148,6 +5354,17 @@ const VERTICALS = [
 function getVerticals() { return JSON.parse(safeGet('stemVerticals') || '{}'); }
 function saveVerticals(d) { safeSet('stemVerticals', JSON.stringify(d)); }
 function getVertical(name) { return getVerticals()[name] || ''; }
+
+// Seed PRESET_VERTICALS — localStorage always wins, so a user's own edit is
+// never overwritten by the baked-in value.
+(function() {
+  var verticals = getVerticals();
+  var changed = false;
+  Object.keys(PRESET_VERTICALS).forEach(function(name) {
+    if (!verticals[name]) { verticals[name] = PRESET_VERTICALS[name]; changed = true; }
+  });
+  if (changed) saveVerticals(verticals);
+})();
 
 function editVertical(name, td) {
   if (!currentUser) return;
@@ -5335,8 +5552,25 @@ function renderRoster() {
 
   // Active recruiters table
   const tbody = document.getElementById('roster-active-body');
+
+  // Header count. RECRUITERS already has archived people spliced out by
+  // applyArchives(), so its length is the true active headcount. The visible
+  // rows can differ: filters narrow them, and "include archived" can add
+  // archived people back into this table, so those are excluded from the count.
+  const rosterHdr = document.getElementById('roster-active-hdr');
+  if (rosterHdr) {
+    const archNames = archivedRecruiters.map(function(a){ return (a.name||'').trim().toLowerCase(); });
+    const shown = all.filter(function(r) {
+      return !r._isArchived && archNames.indexOf((r.name||'').trim().toLowerCase()) < 0;
+    }).length;
+    const totalActive = RECRUITERS.length;
+    rosterHdr.textContent = (shown === totalActive)
+      ? '\uD83D\uDC65 Active recruiters (' + totalActive + ')'
+      : '\uD83D\uDC65 Active recruiters (' + shown + ' of ' + totalActive + ')';
+  }
+
   if (!all.length && RECRUITERS.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text3)">Loading recruiters… if this persists, try clicking ⟳ Sync above.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:var(--text3)">Loading recruiters… if this persists, try clicking ⟳ Sync above.</td></tr>`;
     return;
   }
   tbody.innerHTML = all.map(r => {
@@ -5357,7 +5591,7 @@ function renderRoster() {
       <td>${r.totalLeads}</td>
       <td id="vert_${safeId}" data-name="${r.name.replace(/"/g,'&quot;')}" onclick="editVertical(this.dataset.name, this)" style="cursor:pointer;min-width:140px;font-size:11px" title="Click to set vertical"><span style="color:${getVertical(r.name)?'var(--text)':'var(--text3)'};font-style:${getVertical(r.name)?'normal':'italic'}">${getVertical(r.name)||'Click to set'}</span></td>
       <td id="bday_${safeId}" data-name="${r.name.replace(/"/g,'&quot;')}" onclick="editBirthday(this.dataset.name, this)" style="cursor:pointer;min-width:80px;font-size:11px" title="Click to set birthday (MM/DD)"><span style="color:${getBirthday(r.name)?'var(--text)':'var(--text3)'};font-style:${getBirthday(r.name)?'normal':'italic'}">${getBirthday(r.name)||'Click to set'}</span></td>
-      <td id="dh_${safeId}" onclick="editHireDate('${r.name.replace(/'/g,"\\'")}', this)" style="cursor:pointer;min-width:110px;color:${hireDate?'var(--text)':'var(--text3)'}" title="Click to edit date hired">${hireDateDisplay}</td>
+      <td id="dh_${safeId}" onclick="editHireDate('${r.name.replace(/'/g,"\\'")}', this)" style="cursor:pointer;min-width:110px;color:${hireDate?'var(--text)':'var(--text3)'}" title="Click to pick date hired from a calendar">${hireDateDisplay}</td>
       <td style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">${tenureDisplay}</td>
       <td style="font-size:12px;font-weight:600;color:${annivColor};white-space:nowrap">${annivDisplay}</td>
       <td style="text-align:right;white-space:nowrap">
@@ -6246,7 +6480,7 @@ function initGpRecChecks(query) {
       gpSelectedRecs[name] = e.target.checked;
       updateGpRecLabel();
       renderGP();
-      if (gpActiveSection==='sparklines') renderGpTrendChart();
+      renderGpActiveSection();
     });
     wrap.appendChild(row);
   });
@@ -6319,7 +6553,7 @@ function initGpMgrChecks() {
       gpSelectedMgrs[m] = e.target.checked;
       updateGpMgrLabel();
       renderGP();
-      if (gpActiveSection==='sparklines') renderGpTrendChart();
+      renderGpActiveSection();
     });
     wrap.appendChild(row);
   });
@@ -6367,6 +6601,7 @@ function resetGpFilters() {
   updateGpMgrLabel();
   updateGpRecLabel();
   renderGP();
+  renderGpActiveSection();
 }
 
 document.addEventListener('click', function(e) {
@@ -6395,7 +6630,7 @@ function onGpWindowChange() {
     }
   }
   renderGP();
-  if (gpActiveSection==='sparklines') renderGpTrendChart();
+  renderGpActiveSection();
 }
 
 function renderGP() {
@@ -6561,20 +6796,39 @@ function renderGP() {
 
 var gpActiveSection = 'table';
 
+var GP_SECTIONS = ['table','sparklines','trip','promo'];
+
 function showGpSection(name) {
   // Only act if GP tab is active
   const gpTab = document.getElementById('tab-gp');
   if (!gpTab || !gpTab.classList.contains('active')) return;
+  if (GP_SECTIONS.indexOf(name) < 0) name = 'table';
   gpActiveSection = name;
-  document.getElementById('gp-section-table').style.display = name==='table' ? '' : 'none';
-  document.getElementById('gp-section-sparklines').style.display = name==='sparklines' ? '' : 'none';
+  GP_SECTIONS.forEach(function(sec) {
+    var el = document.getElementById('gp-section-'+sec);
+    if (el) el.style.display = (sec===name) ? '' : 'none';
+  });
   document.querySelectorAll('.gp-sec-btn').forEach(function(btn) {
-    var isActive = (name==='table' && btn.textContent.includes('Table')) ||
-                   (name==='sparklines' && btn.textContent.includes('Trend'));
+    var isActive = btn.getAttribute('data-sec') === name;
     btn.style.color = isActive ? 'var(--accent)' : 'var(--text3)';
     btn.style.borderBottomColor = isActive ? 'var(--accent)' : 'transparent';
   });
-  if (name==='sparklines') renderGpTrendChart();
+  // The week-window control only governs Table View and GP Trend. The trip
+  // tracker is YTD-based and the promotion tracker uses a fixed rolling 26-week
+  // window, so hide it there rather than implying it applies.
+  var usesWindow = (name==='table' || name==='sparklines');
+  var winSel = document.getElementById('gp-window');
+  var cr = document.getElementById('gp-custom-range');
+  if (winSel) winSel.style.display = usesWindow ? '' : 'none';
+  if (cr) cr.style.display = (usesWindow && winSel && winSel.value==='custom') ? 'flex' : 'none';
+  renderGpActiveSection();
+}
+
+// Single dispatcher so filter changes re-render whichever section is showing
+function renderGpActiveSection() {
+  if (gpActiveSection==='sparklines') renderGpTrendChart();
+  else if (gpActiveSection==='trip')  renderGpTrip();
+  else if (gpActiveSection==='promo') renderGpPromo();
 }
 
 var gpTrendView = 'weekly'; // 'weekly' | 'cumulative'
@@ -6737,10 +6991,396 @@ function renderGpTrendChart() {
 
 
 
+
+// ═══════════ PERFORMANCE TRIP + PROMOTION TRACKER ═══════════
+// Promotion ladder — rolling 26-week GP thresholds per level.
+const GP_BANDS = [
+  {t:'Associate Recruiter',   v:75000},
+  {t:'Technical Recruiter 1', v:125000},
+  {t:'Technical Recruiter 2', v:187500},
+  {t:'Senior Recruiter 1',    v:250000},
+  {t:'Senior Recruiter 2',    v:375000},
+  {t:'Principal Recruiter 1', v:500000},
+  {t:'Principal Recruiter 2', v:550000},
+  {t:'Executive Recruiter 1', v:625000},
+  {t:'Executive Recruiter 2', v:750000}
+];
+const PROMO_ROLL_WKS = 26;
+
+// Settings (persisted)
+var TRIP_GOAL_DEFAULT = 750000, TRIP_YEARWKS_DEFAULT = 52;
+var PROMO_REVIEW_DEFAULT = 3, PROMO_NEAR_DEFAULT = 25000, PROMO_MINWKS_DEFAULT = 26;
+
+function gpNumSetting(key, def) {
+  var v = parseFloat(safeGet(key));
+  return isFinite(v) ? v : def;
+}
+
+// Sum a shared-timeline window. GP_DATA arrays are truncated at each recruiter's
+// last non-zero week, so a quiet recent stretch leaves a SHORT array. Indexing
+// past the end must read as zero, not shift the window — otherwise a recruiter
+// with a slow August would silently be measured over an earlier, better period.
+function gpWindowSum(arr, f, t) {
+  var s = 0;
+  arr = arr || [];
+  for (var i = Math.max(0, f); i <= t; i++) s += (i < arr.length ? (arr[i]||0) : 0);
+  return s;
+}
+
+// Total weeks on the shared GP timeline
+function gpTotalWeeks() {
+  return Math.max.apply(null, [0].concat(GP_DATA.map(function(r){ return r.weekly.length; })));
+}
+
+// Trailing n-week average across the shared window (missing tail counts as zero)
+function gpTrailingAvg(weekly, n, nW) {
+  if (nW <= 0) return 0;
+  var span = Math.min(n, nW);
+  return gpWindowSum(weekly, nW - span, nW - 1) / span;
+}
+
+// Weeks of tenure inside the rolling window, from hire date. GP weekly cells are
+// zero-filled for pre-hire weeks (parseCurrency turns blanks into 0), so the GP
+// array alone cannot distinguish "not hired yet" from "no GP that week".
+function gpTenureWeeksInWindow(name, rollWks) {
+  var hd = getHireDate(name);
+  if (!hd) return rollWks; // unknown hire date — treat as fully tenured
+  var hired = new Date(hd + 'T00:00:00');
+  if (isNaN(hired.getTime())) return rollWks;
+  var wks = Math.floor((new Date() - hired) / (1000*60*60*24*7));
+  if (!isFinite(wks) || wks < 0) wks = 0;
+  return Math.min(rollWks, wks);
+}
+
+// Highest band index cleared by a GP total; -1 if below the entry band
+function gpBandEarned(gp) {
+  var earned = -1;
+  for (var i = 0; i < GP_BANDS.length; i++) if (gp >= GP_BANDS[i].v) earned = i;
+  return earned;
+}
+
+function gpFilteredRecs() {
+  var archivedNames = archivedRecruiters.map(function(a){ return a.name.trim().toLowerCase(); });
+  return GP_DATA.filter(function(r) {
+    return gpSelectedMgrs[r.manager] !== false &&
+           gpSelectedRecs[r.name] !== false &&
+           !archivedNames.includes(r.name.trim().toLowerCase());
+  });
+}
+
+function gpKpiCard(label, val, color, sub) {
+  return '<div style="background:var(--bg2);border-radius:10px;padding:12px 14px;border:1px solid var(--border)">'
+    + '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">'+label+'</div>'
+    + '<div style="font-size:22px;font-weight:700;color:'+(color||'var(--text)')+'">'+val+'</div>'
+    + (sub ? '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+sub+'</div>' : '')
+    + '</div>';
+}
+
+function gpBar(pct, color) {
+  var w = Math.max(0, Math.min(100, pct));
+  return '<div style="height:7px;background:var(--bg4);border-radius:20px;overflow:hidden;min-width:90px">'
+    + '<span style="display:block;height:100%;border-radius:20px;width:'+w+'%;background:'+color+'"></span></div>';
+}
+
+function gpMgrChip(m) {
+  var c = MGR_COLORS[m] || '#888';
+  return '<span class="mgr" style="background:'+c+'22;color:'+c+'">'+m+'</span>';
+}
+
+function gpEmptyMsg() {
+  return '<div style="color:var(--text3);font-size:13px;padding:20px">No GP data — make sure the "Gross Profit" tab exists in your Sheet and sync.</div>';
+}
+
+// ─── Settings init + persistence ───
+function initGpTrackerSettings() {
+  var g = document.getElementById('trip-goal');
+  if (g && !g.value) g.value = gpNumSetting('stemTripGoal', TRIP_GOAL_DEFAULT);
+  var y = document.getElementById('trip-yearwks');
+  if (y && !y.value) y.value = gpNumSetting('stemTripYearWks', TRIP_YEARWKS_DEFAULT);
+  var sel = document.getElementById('promo-review');
+  if (sel && !sel.options.length) {
+    GP_BANDS.forEach(function(b, i) {
+      var o = document.createElement('option');
+      o.value = i; o.textContent = b.t + ' (' + formatGP(b.v) + ')';
+      sel.appendChild(o);
+    });
+    sel.value = gpNumSetting('stemPromoReviewBand', PROMO_REVIEW_DEFAULT);
+  }
+  var n = document.getElementById('promo-near');
+  if (n && !n.value) n.value = gpNumSetting('stemPromoNear', PROMO_NEAR_DEFAULT);
+  var mw = document.getElementById('promo-minwks');
+  if (mw && !mw.value) mw.value = gpNumSetting('stemPromoMinWks', PROMO_MINWKS_DEFAULT);
+  var ladder = document.getElementById('promo-ladder');
+  if (ladder && !ladder.innerHTML) {
+    ladder.innerHTML = '<span style="font-size:10.5px;padding:5px 10px;border-radius:20px;background:var(--bg4);border:1px solid var(--border2);color:var(--text2)"><b style="color:var(--text)">Ladder</b></span>'
+      + GP_BANDS.map(function(b) {
+          return '<span style="font-size:10.5px;padding:5px 10px;border-radius:20px;background:var(--bg2);border:1px solid var(--border2);color:var(--text2)">'
+            + b.t + ' &middot; <b style="color:var(--text)">' + formatGP(b.v) + '</b></span>';
+        }).join('');
+  }
+}
+
+function onTripSettingChange() {
+  var g = document.getElementById('trip-goal');
+  var y = document.getElementById('trip-yearwks');
+  if (g) safeSet('stemTripGoal', g.value);
+  if (y) safeSet('stemTripYearWks', y.value);
+  renderGpTrip();
+}
+
+function onPromoSettingChange() {
+  var r = document.getElementById('promo-review');
+  var n = document.getElementById('promo-near');
+  var m = document.getElementById('promo-minwks');
+  if (r) safeSet('stemPromoReviewBand', r.value);
+  if (n) safeSet('stemPromoNear', n.value);
+  if (m) safeSet('stemPromoMinWks', m.value);
+  renderGpPromo();
+}
+
+// ─── PERFORMANCE TRIP TRACKER ───
+function computeTripRows(recs, goal, nW, weeksLeft) {
+  return recs.map(function(r) {
+    var gp   = r.ytdGP || 0;
+    var rate = gpTrailingAvg(r.weekly, 8, nW);
+    var proj = gp + rate * weeksLeft;
+    var pct  = goal > 0 ? gp / goal * 100 : 0;
+    var gap  = Math.max(0, goal - gp);
+    var need = weeksLeft > 0 ? gap / weeksLeft : 0;
+    var status, scol;
+    if (gp >= goal)              { status = 'Qualified'; scol = 'var(--green)'; }
+    else if (proj >= goal)       { status = 'On pace';   scol = 'var(--teal)'; }
+    else if (proj >= goal*0.85)  { status = 'Close';     scol = 'var(--amber)'; }
+    else                         { status = 'Behind';    scol = 'var(--red)'; }
+    return {r:r, gp:gp, rate:rate, proj:proj, pct:pct, gap:gap, need:need, status:status, scol:scol};
+  });
+}
+
+function renderGpTrip() {
+  var gpTab = document.getElementById('tab-gp');
+  if (!gpTab || !gpTab.classList.contains('active')) return;
+  var tbody = document.getElementById('trip-tbody');
+  if (!tbody) return;
+  initGpTrackerSettings();
+
+  var goal     = gpNumSetting('stemTripGoal', TRIP_GOAL_DEFAULT);
+  var gEl      = document.getElementById('trip-goal');
+  if (gEl && gEl.value !== '') goal = parseFloat(gEl.value) || 0;
+  var yearWks  = gpNumSetting('stemTripYearWks', TRIP_YEARWKS_DEFAULT);
+  var yEl      = document.getElementById('trip-yearwks');
+  if (yEl && yEl.value !== '') yearWks = parseInt(yEl.value) || TRIP_YEARWKS_DEFAULT;
+  var sort     = (document.getElementById('trip-sort')||{}).value || 'pct';
+  var hideQual = !!(document.getElementById('trip-hide')||{}).checked;
+
+  var nW = gpTotalWeeks();
+  var weeksLeft = Math.max(0, yearWks - nW);
+  var asof = document.getElementById('trip-asof');
+  if (asof) asof.textContent = nW ? ('Wk ' + nW + ' of ' + yearWks + ' \u00b7 ' + weeksLeft + ' weeks left in the year') : '';
+
+  var recs = gpFilteredRecs();
+  if (!recs.length) {
+    document.getElementById('trip-kpis').innerHTML = gpEmptyMsg();
+    document.getElementById('trip-qualified').innerHTML = '';
+    document.getElementById('trip-qual-count').textContent = '';
+    document.getElementById('trip-thead').innerHTML = '';
+    tbody.innerHTML = '';
+    return;
+  }
+
+  var rows = computeTripRows(recs, goal, nW, weeksLeft);
+  var qualified = rows.filter(function(x){ return x.status==='Qualified'; });
+  var onPace    = rows.filter(function(x){ return x.status==='On pace'; });
+  var close     = rows.filter(function(x){ return x.status==='Close'; });
+  var behind    = rows.filter(function(x){ return x.status==='Behind'; });
+  var projQual  = rows.filter(function(x){ return x.proj >= goal; }).length;
+  var avgPct    = rows.reduce(function(s,x){ return s+x.pct; }, 0) / rows.length;
+
+  document.getElementById('trip-kpis').innerHTML =
+      gpKpiCard('Qualified', qualified.length, 'var(--green)', 'Hit ' + formatGP(goal) + ' already')
+    + gpKpiCard('On pace', onPace.length, 'var(--teal)', 'Projected to clear the bar')
+    + gpKpiCard('Close', close.length, 'var(--amber)', 'Within 15% of goal at current rate')
+    + gpKpiCard('Behind', behind.length, 'var(--red)', 'Would need a step change')
+    + gpKpiCard('Projected qualifiers', projQual + ' / ' + rows.length, 'var(--accent)', 'At year-end on trailing 8wk rate')
+    + gpKpiCard('Avg. progress', avgPct.toFixed(0) + '%', 'var(--text)', 'Team average toward ' + formatGP(goal));
+
+  document.getElementById('trip-qual-count').textContent = qualified.length + ' of ' + rows.length + ' recruiters';
+  document.getElementById('trip-qualified').innerHTML = qualified.length
+    ? qualified.slice().sort(function(a,b){ return b.gp-a.gp; }).map(function(x) {
+        return '<div style="background:linear-gradient(140deg,var(--green-bg),transparent);border:1px solid var(--green);border-radius:10px;padding:12px 14px">'
+          + '<div style="font-size:13px;font-weight:700;margin-bottom:2px">'+x.r.name+'</div>'
+          + '<div style="margin-bottom:6px">'+gpMgrChip(x.r.manager)+'</div>'
+          + '<div style="font-size:19px;font-weight:700;color:var(--green)">'+formatGP(x.gp)+'</div>'
+          + '<div style="font-size:11px;color:var(--text3)">'+formatGP(x.gp-goal)+' over goal \u00b7 '+x.pct.toFixed(0)+'%</div></div>';
+      }).join('')
+    : '<div style="font-size:12px;color:var(--text3)">Nobody has cleared '+formatGP(goal)+' yet.</div>';
+
+  var view = hideQual ? rows.filter(function(x){ return x.status!=='Qualified'; }) : rows.slice();
+  view.sort(function(a,b) {
+    if (sort==='name') return a.r.name.localeCompare(b.r.name);
+    if (sort==='gp')   return b.gp - a.gp;
+    if (sort==='proj') return b.proj - a.proj;
+    return b.pct - a.pct;
+  });
+
+  document.getElementById('trip-thead').innerHTML = '<tr>'
+    + '<th style="min-width:34px">#</th><th class="sticky-col-1" style="min-width:140px">Recruiter</th><th class="sticky-col-2">Mgr</th>'
+    + '<th style="text-align:right">YTD GP</th><th style="text-align:right">% of goal</th>'
+    + '<th style="min-width:120px">Progress</th><th style="text-align:right">Gap</th>'
+    + '<th style="text-align:right">Run rate/wk</th><th style="text-align:right">Needed/wk</th>'
+    + '<th style="text-align:right">Proj. year-end</th><th>Pace</th></tr>';
+
+  tbody.innerHTML = view.map(function(x, i) {
+    return '<tr'+(x.status==='Qualified'?' style="background:var(--green-bg)"':'')+'>'
+      + '<td style="color:var(--text3)">'+(i+1)+'</td>'
+      + '<td class="sticky-col-1" style="font-weight:500;white-space:nowrap">'+x.r.name+rampIcon(x.r.name)+'</td>'
+      + '<td class="sticky-col-2">'+gpMgrChip(x.r.manager)+'</td>'
+      + '<td style="text-align:right;font-weight:600">'+formatGP(x.gp)+'</td>'
+      + '<td style="text-align:right;font-weight:600;color:'+x.scol+'">'+x.pct.toFixed(0)+'%</td>'
+      + '<td>'+gpBar(x.pct, x.scol)+'</td>'
+      + '<td style="text-align:right;color:var(--text3)">'+(x.gap?formatGP(x.gap):'\u2014')+'</td>'
+      + '<td style="text-align:right">'+formatGP(Math.round(x.rate))+'</td>'
+      + '<td style="text-align:right;color:var(--text2)">'+(x.gap?formatGP(Math.round(x.need)):'\u2014')+'</td>'
+      + '<td style="text-align:right;font-weight:600;color:'+x.scol+'">'+formatGP(Math.round(x.proj))+'</td>'
+      + '<td><span class="pill" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+x.scol+'22;color:'+x.scol+'">'+x.status+'</span></td>'
+      + '</tr>';
+  }).join('');
+}
+
+// ─── PROMOTION TRACKER ───
+function computePromoRows(recs, nW, reviewIdx, near, minWks) {
+  var f = Math.max(0, nW - PROMO_ROLL_WKS);
+  var t = nW - 1;
+  return recs.map(function(r) {
+    var gp      = gpWindowSum(r.weekly, f, t);
+    var earned  = gpBandEarned(gp);
+    var nextIdx = (earned + 1 < GP_BANDS.length) ? earned + 1 : null;
+    var gapNext = nextIdx !== null ? GP_BANDS[nextIdx].v - gp : 0;
+    var pctNext = nextIdx !== null ? (GP_BANDS[nextIdx].v ? gp / GP_BANDS[nextIdx].v * 100 : 0) : 100;
+    var tenure  = gpTenureWeeksInWindow(r.name, PROMO_ROLL_WKS);
+    var enough  = tenure >= minWks;
+    var status, scol, flagged = false, isReview = false;
+    if (!enough) {
+      status = 'Insufficient tenure (' + tenure + ' wks)'; scol = 'var(--text3)';
+    } else if (earned >= reviewIdx) {
+      status = 'Review for promotion'; scol = 'var(--green)'; flagged = true; isReview = true;
+    } else if (nextIdx !== null && gapNext <= near) {
+      status = 'Near next band'; scol = 'var(--amber)'; flagged = true;
+    } else if (earned < 0) {
+      status = 'Below entry band'; scol = 'var(--red)';
+    } else {
+      status = 'Tracking'; scol = 'var(--text3)';
+    }
+    return {r:r, gp:gp, earned:earned, nextIdx:nextIdx, gapNext:gapNext, pctNext:pctNext,
+            tenure:tenure, enough:enough, status:status, scol:scol, flagged:flagged, isReview:isReview};
+  });
+}
+
+function renderGpPromo() {
+  var gpTab = document.getElementById('tab-gp');
+  if (!gpTab || !gpTab.classList.contains('active')) return;
+  var tbody = document.getElementById('promo-tbody');
+  if (!tbody) return;
+  initGpTrackerSettings();
+
+  var reviewIdx = gpNumSetting('stemPromoReviewBand', PROMO_REVIEW_DEFAULT);
+  var rEl = document.getElementById('promo-review');
+  if (rEl && rEl.value !== '') reviewIdx = parseInt(rEl.value);
+  if (!(reviewIdx >= 0 && reviewIdx < GP_BANDS.length)) reviewIdx = PROMO_REVIEW_DEFAULT;
+  var near = gpNumSetting('stemPromoNear', PROMO_NEAR_DEFAULT);
+  var nEl = document.getElementById('promo-near');
+  if (nEl && nEl.value !== '') near = parseFloat(nEl.value) || 0;
+  var minWks = gpNumSetting('stemPromoMinWks', PROMO_MINWKS_DEFAULT);
+  var mEl = document.getElementById('promo-minwks');
+  if (mEl && mEl.value !== '') minWks = parseInt(mEl.value) || PROMO_MINWKS_DEFAULT;
+  var sort = (document.getElementById('promo-sort')||{}).value || 'gp';
+  var onlyFlagged = !!(document.getElementById('promo-only')||{}).checked;
+
+  var nW = gpTotalWeeks();
+  var asof = document.getElementById('promo-asof');
+  if (asof) {
+    var f = Math.max(0, nW - PROMO_ROLL_WKS);
+    asof.textContent = nW
+      ? (nW >= PROMO_ROLL_WKS
+          ? 'Rolling window: weeks ' + (f+1) + '\u2013' + nW + ' of ' + nW
+          : '\u26a0 Only ' + nW + ' weeks of GP data \u2014 window is short of 26')
+      : '';
+    asof.style.color = (nW && nW < PROMO_ROLL_WKS) ? 'var(--amber)' : 'var(--text3)';
+  }
+
+  var recs = gpFilteredRecs();
+  if (!recs.length) {
+    document.getElementById('promo-kpis').innerHTML = gpEmptyMsg();
+    document.getElementById('promo-dist').innerHTML = '';
+    document.getElementById('promo-thead').innerHTML = '';
+    tbody.innerHTML = '';
+    return;
+  }
+
+  var rows       = computePromoRows(recs, nW, reviewIdx, near, minWks);
+  var reviewRows = rows.filter(function(x){ return x.isReview; });
+  var nearRows   = rows.filter(function(x){ return x.flagged && !x.isReview; });
+  var noTenure   = rows.filter(function(x){ return !x.enough; });
+  var belowEntry = rows.filter(function(x){ return x.enough && x.earned < 0; });
+  var topBand    = rows.filter(function(x){ return x.enough && x.earned === GP_BANDS.length-1; }).length;
+  var avg        = rows.reduce(function(s,x){ return s+x.gp; }, 0) / rows.length;
+
+  document.getElementById('promo-kpis').innerHTML =
+      gpKpiCard('Review for promotion', reviewRows.length, 'var(--green)', 'Cleared ' + GP_BANDS[reviewIdx].t)
+    + gpKpiCard('Near next band', nearRows.length, 'var(--amber)', 'Within ' + formatGP(near) + ' of next rung')
+    + gpKpiCard('At top band', topBand, 'var(--purple)', 'Cleared ' + formatGP(GP_BANDS[GP_BANDS.length-1].v))
+    + gpKpiCard('Below entry band', belowEntry.length, 'var(--red)', 'Under ' + formatGP(GP_BANDS[0].v))
+    + gpKpiCard('Insufficient tenure', noTenure.length, 'var(--text3)', 'Under ' + minWks + ' wks since hire')
+    + gpKpiCard('Avg rolling 26wk', formatGP(Math.round(avg)), 'var(--text)', rows.length + ' recruiters');
+
+  var noneN = rows.filter(function(x){ return x.enough && x.earned < 0; }).length;
+  document.getElementById('promo-dist').innerHTML =
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 11px">'
+    + '<div style="font-size:18px;font-weight:700;color:var(--text3)">'+noneN+'</div>'
+    + '<div style="font-size:10px;color:var(--text3);line-height:1.35;margin-top:2px">No band<br>under '+formatGP(GP_BANDS[0].v)+'</div></div>'
+    + GP_BANDS.map(function(b, i) {
+        var n  = rows.filter(function(x){ return x.enough && x.earned === i; }).length;
+        var on = i >= reviewIdx;
+        return '<div style="background:var(--bg2);border:1px solid '+(on?'var(--green)':'var(--border)')+';border-radius:8px;padding:9px 11px">'
+          + '<div style="font-size:18px;font-weight:700;color:'+(on?'var(--green)':'var(--text2)')+'">'+n+'</div>'
+          + '<div style="font-size:10px;color:var(--text3);line-height:1.35;margin-top:2px">'+b.t+'<br>'+formatGP(b.v)+'+</div></div>';
+      }).join('');
+
+  var view = onlyFlagged ? rows.filter(function(x){ return x.flagged; }) : rows.slice();
+  view.sort(function(a,b) {
+    if (sort==='name') return a.r.name.localeCompare(b.r.name);
+    if (sort==='mgr')  return a.r.manager.localeCompare(b.r.manager) || b.gp - a.gp;
+    if (sort==='gap')  return (a.nextIdx===null?Infinity:a.gapNext) - (b.nextIdx===null?Infinity:b.gapNext);
+    return b.gp - a.gp;
+  });
+
+  document.getElementById('promo-thead').innerHTML = '<tr>'
+    + '<th style="min-width:34px">#</th><th class="sticky-col-1" style="min-width:140px">Recruiter</th><th class="sticky-col-2">Mgr</th>'
+    + '<th style="text-align:right">Rolling 26wk GP</th><th>Band earned</th><th>Next band</th>'
+    + '<th style="min-width:130px">Progress to next</th><th style="text-align:right">Gap to next</th><th>Status</th></tr>';
+
+  tbody.innerHTML = view.map(function(x, i) {
+    var col = !x.enough ? 'var(--text3)' : x.isReview ? 'var(--green)' : x.flagged ? 'var(--amber)' : 'var(--text)';
+    var earnedTxt = x.earned < 0
+      ? '<span style="color:var(--text3)">\u2014 none</span>'
+      : '<span class="pill" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+(x.isReview?'var(--green-bg)':'var(--bg4)')+';color:'+(x.isReview?'var(--green)':'var(--text3)')+'">'+GP_BANDS[x.earned].t+'</span>';
+    return '<tr'+(x.isReview?' style="background:var(--green-bg)"':'')+'>'
+      + '<td style="color:var(--text3)">'+(i+1)+'</td>'
+      + '<td class="sticky-col-1" style="font-weight:500;white-space:nowrap">'+x.r.name+rampIcon(x.r.name)+'</td>'
+      + '<td class="sticky-col-2">'+gpMgrChip(x.r.manager)+'</td>'
+      + '<td style="text-align:right;font-weight:700;color:'+col+'">'+formatGP(x.gp)+'</td>'
+      + '<td>'+earnedTxt+'</td>'
+      + '<td style="color:var(--text2)">'+(x.nextIdx!==null?GP_BANDS[x.nextIdx].t:'<span style="font-size:11px;color:var(--text3)">top of ladder</span>')+'</td>'
+      + '<td>'+(x.nextIdx!==null ? gpBar(x.pctNext, col)+'<span style="font-size:10px;color:var(--text3)">'+x.pctNext.toFixed(0)+'% of '+formatGP(GP_BANDS[x.nextIdx].v)+'</span>' : '\u2014')+'</td>'
+      + '<td style="text-align:right;color:var(--text2)">'+(x.nextIdx!==null?formatGP(x.gapNext):'\u2014')+'</td>'
+      + '<td><span class="pill" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+x.scol+'22;color:'+x.scol+'">'+x.status+'</span></td>'
+      + '</tr>';
+  }).join('');
+}
+
 function renderGPIfActive() {
   if (document.getElementById('tab-gp').classList.contains('active')) {
     renderGP();
-    if (gpActiveSection === 'sparklines') renderGpTrendChart();
+    renderGpActiveSection();
   }
 }
 
