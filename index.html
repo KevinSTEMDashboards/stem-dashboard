@@ -759,6 +759,35 @@ td.editing{padding:2px 4px!important}
         <select id="entry-mgr" style="height:32px;font-size:13px"><option value="">All managers</option></select>
       </div>
     </div>
+    <!-- ── IMPORT RAW EXPORT ── -->
+    <div style="border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:14px;background:var(--bg2)">
+      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:600">&#128228; Import raw export</span>
+        <label class="btn" style="font-size:11px;cursor:pointer;height:28px;display:inline-flex;align-items:center">
+          Choose .xlsx or .csv
+          <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" style="display:none">
+        </label>
+        <button class="btn" id="imp-clear" style="font-size:11px;height:28px;display:none">&#10005; Clear import</button>
+        <span id="imp-fname" style="font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div id="imp-status" style="display:none;margin-top:10px"></div>
+      <div id="imp-issues" style="display:none;margin-top:10px"></div>
+      <div id="imp-actions" style="display:none;margin-top:11px;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="imp-apply" style="font-size:11px;height:28px">&#8595; Fill the form below</button>
+        <span style="font-size:11px;color:var(--text3)">Review the numbers, then press &#128190; Save week as usual.</span>
+      </div>
+      <div id="repl-panel" style="display:none;margin-top:12px;border:1px solid var(--amber);border-radius:10px;padding:12px;background:var(--amber-bg)">
+        <div style="font-size:12px;font-weight:700;color:var(--amber);margin-bottom:6px">&#9888; This week is already in the Sheet</div>
+        <div id="repl-intro" style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:9px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn" id="repl-dry" style="font-size:11px;height:28px">&#128269; Dry run &mdash; check without writing</button>
+          <button class="btn" id="repl-go" style="font-size:11px;height:28px;background:var(--red);border-color:var(--red);color:#fff" disabled>&#9888; Overwrite this week</button>
+          <button class="btn" id="repl-undo" style="font-size:11px;height:28px;display:none">&#8617; Undo last overwrite</button>
+        </div>
+        <div id="repl-out" style="margin-top:10px"></div>
+      </div>
+    </div>
+
     <div style="display:grid;grid-template-columns:190px 90px 60px 60px 60px 60px 60px;gap:6px;padding:5px 0;border-bottom:0.5px solid var(--border2);margin-bottom:3px">
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">Recruiter</div>
       <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">Manager</div>
@@ -1578,13 +1607,50 @@ async function loadFromSheets() {
 
     const pad = arr => { const a = [...(arr||[])]; while(a.length < nW) a.push(0); return a.slice(0, nW); };
 
+    // Which week did this person actually start? The Sheet sends 0 for every
+    // pre-hire week, which is indistinguishable from a genuinely empty week, so
+    // those weeks get counted in averages and the "not started" state never
+    // shows. Prefer the explicit startWeekIndex captured when a recruiter was
+    // added; otherwise derive it from the hire date.
+    const startWeekFromHire = function(name) {
+      const nr = newRecruiters.find(function(x){ return norm(x.name) === norm(name); });
+      if (nr && typeof nr.startWeekIndex === 'number') return Math.max(0, Math.min(nr.startWeekIndex, nW));
+      const hd = getHireDate(name);
+      if (!hd) return 0;
+      const hired = new Date(hd + 'T00:00:00');
+      if (isNaN(hired.getTime())) return 0;
+      const wksSince = Math.floor((Date.now() - hired.getTime()) / (1000*60*60*24*7));
+      if (!isFinite(wksSince) || wksSince < 0) return nW;   // future hire date
+      return Math.max(0, Math.min(nW, nW - wksSince));
+    };
+
+    // Blank out pre-hire weeks so they drop out of averages (getWindow filters
+    // nulls). Guarded: if any metric has a real number before the computed
+    // start week, the hire date is wrong or the person worked earlier, so the
+    // data is left alone rather than destroyed.
+    const applyStartWeek = function(rec, startIdx) {
+      rec.startWeekIndex = startIdx;
+      if (!startIdx || startIdx <= 0) return rec;
+      const arrs = [rec.subs, rec.ivs, rec.placements, rec.starts, rec.leads];
+      for (let i = 0; i < startIdx; i++) {
+        for (let a = 0; a < arrs.length; a++) {
+          const v = arrs[a] && arrs[a][i];
+          if (v !== 0 && v !== null && v !== undefined) return rec;  // real data — abort
+        }
+      }
+      for (let i = 0; i < startIdx; i++) {
+        arrs.forEach(function(arr){ if (arr) arr[i] = null; });
+      }
+      return rec;
+    };
+
     // First pass: BASE_DATA names (canonical) — look up Sheet data by fuzzy match
     const usedSheetNames = new Set();
     BASE_DATA.forEach(base => {
       const key = norm(base.name);
       const sheet = sheetLookup[key];
       if (sheet) usedSheetNames.add(norm(sheet.name));
-      RECRUITERS.push({
+      RECRUITERS.push(applyStartWeek({
         name: base.name, // always use BASE_DATA canonical name
         manager: (sheet && sheet.manager) || base.manager,
         subs:       sheet ? pad(sheet.subs)       : pad(base.subs),
@@ -1592,7 +1658,7 @@ async function loadFromSheets() {
         placements: sheet ? pad(sheet.placements) : pad(base.placements||[]),
         starts:     sheet ? pad(sheet.starts)     : pad(base.starts),
         leads:      sheet ? pad(sheet.leads)      : pad(base.leads)
-      });
+      }, startWeekFromHire(base.name)));
     });
 
     // Second pass: add any Sheet recruiters not in BASE_DATA (newly added)
@@ -1600,12 +1666,12 @@ async function loadFromSheets() {
       if (usedSheetNames.has(norm(sheetName))) return;
       const d = sheetLookup[norm(sheetName)];
       if (!d || !d.manager) return;
-      RECRUITERS.push({
+      RECRUITERS.push(applyStartWeek({
         name: sheetName, manager: d.manager,
         subs: pad(d.subs), ivs: pad(d.ivs),
         placements: pad(d.placements), starts: pad(d.starts), leads: pad(d.leads),
         isNew: true
-      });
+      }, startWeekFromHire(sheetName)));
     });
 
     // Re-apply base edits and extra weeks on top
@@ -1730,6 +1796,192 @@ function getOAuthToken() {
       }
     }, 300);
   });
+}
+
+
+// ═══════════ REPLACE A SAVED WEEK ═══════════
+// The only destructive write in the dashboard. Three safeguards, in order:
+//   1. preflight  — read and validate all five tabs before touching anything
+//   2. snapshot   — keep the old values so the write can be undone
+//   3. all-or-nothing — write only if every tab and every name checks out
+const REPL_TABS = {subs:'Subs', ivs:'Interviews', placements:'Placements', starts:'Starts', leads:'Leads'};
+const REPL_FIRST_WEEK_COL = 4;   // A=Recruiter B=Manager C=Total D=YTD Weekly Average
+
+// Locate the "Week #" row that sits above the Recruiter header
+function replFindWeekNumRow(rows) {
+  for (let i = 0; i < Math.min(rows.length, 6); i++)
+    for (let j = 0; j < (rows[i] || []).length; j++)
+      if (String(rows[i][j] || '').toLowerCase().replace(/\s/g, '') === 'week#') return i;
+  return -1;
+}
+function replFindHeaderRow(rows) {
+  for (let i = 0; i < Math.min(rows.length, 6); i++)
+    if (String((rows[i] || [])[0] || '').toLowerCase().includes('recruiter')) return i;
+  return -1;
+}
+// Find a week by its number in the Week # row. Never by scanning for data: that
+// scan runs per tab and lands on the wrong column whenever a metric happens to
+// be all zeros for the week (a week with no leads, say).
+function replResolveWeekCol(rows, weekNum) {
+  const wr = replFindWeekNumRow(rows);
+  if (wr < 0) return {col:-1, why:'no "Week #" row'};
+  const wrow = rows[wr] || [];
+  for (let ci = REPL_FIRST_WEEK_COL; ci < wrow.length; ci++)
+    if (String(wrow[ci] || '').trim() === String(weekNum))
+      return {col:ci, weekRow:wr, why:'matched Week # ' + weekNum};
+  return {col:-1, why:'week ' + weekNum + ' not in the Week # row'};
+}
+
+function replSnapKey(weekNum) { return 'stemWeekSnapshot_' + weekNum; }
+function replGetSnapshot(weekNum) {
+  try { return JSON.parse(safeGet(replSnapKey(weekNum)) || 'null'); } catch(e) { return null; }
+}
+function replSaveSnapshot(weekNum, snap) { safeSet(replSnapKey(weekNum), JSON.stringify(snap)); }
+
+// ── SAFEGUARD 1: preflight ──
+// Reads every tab, resolves the column, and confirms each name in weekData maps
+// to a real row. Returns a snapshot of current values. Writes nothing.
+async function replPreflight(weekNum, weekData) {
+  const out = {ok:true, errors:[], warnings:[], tabs:{}, col:null, date:null,
+               plan:[], snapshot:{}, unmatched:[], sheetOnly:[]};
+  const cols = {};
+  const wdLower = {};
+  Object.keys(weekData || {}).forEach(function(k){ wdLower[k.trim().toLowerCase()] = weekData[k]; });
+  let archivedNm = [];
+  try { archivedNm = JSON.parse(safeGet('stemArchived') || '[]').map(function(a){ return (a.name||'').trim().toLowerCase(); }); } catch(e) {}
+
+  for (const metric of Object.keys(REPL_TABS)) {
+    const tabName = REPL_TABS[metric];
+    try {
+      const url = SHEETS_BASE + '/' + SHEET_ID + '/values/' + encodeURIComponent(tabName) + '?key=' + API_KEY;
+      const res = await fetch(url);
+      if (!res.ok) { out.errors.push(tabName + ': read HTTP ' + res.status); continue; }
+      const rows = (await res.json()).values || [];
+      if (!rows.length) { out.errors.push(tabName + ': empty sheet response'); continue; }
+
+      const hr = replFindHeaderRow(rows);
+      if (hr < 0) { out.errors.push(tabName + ': no "Recruiter" header row'); continue; }
+      const r = replResolveWeekCol(rows, weekNum);
+      if (r.col < 0) { out.errors.push(tabName + ': ' + r.why); continue; }
+      if (r.col < REPL_FIRST_WEEK_COL) { out.errors.push(tabName + ': resolved into a label/formula column'); continue; }
+
+      cols[tabName] = r.col;
+      out.date = String((rows[hr] || [])[r.col] || '');
+
+      // map sheet rows -> recruiter names
+      const seen = {}, snap = {}, plan = [];
+      for (let ri = hr + 1; ri < rows.length; ri++) {
+        const nm = String((rows[ri] || [])[0] || '').trim();
+        if (!nm) continue;
+        const lo = nm.toLowerCase();
+        if (['total','avg','average','recruiter'].some(function(x){ return lo === x || lo.includes(x); })) continue;
+        if (archivedNm.indexOf(lo) >= 0) continue;
+        seen[lo] = true;
+        const rd = wdLower[lo];
+        if (!rd) { if (out.sheetOnly.indexOf(nm) < 0) out.sheetOnly.push(nm); continue; }
+        snap[nm] = Number(rows[ri][r.col] || 0);
+        plan.push({range: tabName + '!' + colToLetter(r.col) + (ri + 1), value: rd[metric] || 0, name: nm});
+      }
+      // names the dashboard wants to write that have no row on this tab
+      Object.keys(wdLower).forEach(function(lo) {
+        if (!seen[lo]) {
+          const disp = Object.keys(weekData).find(function(k){ return k.trim().toLowerCase() === lo; }) || lo;
+          if (out.unmatched.indexOf(disp) < 0) out.unmatched.push(disp);
+        }
+      });
+
+      out.tabs[tabName] = {col:r.col, rows:plan.length};
+      out.snapshot[tabName] = snap;
+      out.plan = out.plan.concat(plan);
+    } catch (e) {
+      out.errors.push(tabName + ': ' + e.message);
+    }
+  }
+
+  const colVals = Object.keys(cols).map(function(t){ return cols[t]; });
+  const uniq = colVals.filter(function(v,i,a){ return a.indexOf(v) === i; });
+  if (Object.keys(cols).length !== Object.keys(REPL_TABS).length)
+    out.errors.push('Could not resolve every tab \u2014 refusing to write a partial week.');
+  else if (uniq.length !== 1)
+    out.errors.push('Tabs disagree on the target column (' + JSON.stringify(cols) + ').');
+  else out.col = uniq[0];
+
+  if (out.unmatched.length)
+    out.errors.push('No sheet row for: ' + out.unmatched.join(', ') + '. Replacing now would leave them on their old values while everyone else changed.');
+  if (!out.plan.length) out.errors.push('Nothing to write \u2014 no recruiter rows matched.');
+  out.ok = out.errors.length === 0;
+  return out;
+}
+
+// ── SAFEGUARD 3: all-or-nothing write ──
+// pre must be a successful preflight. Writes every tab in one batchUpdate so a
+// mid-flight token expiry cannot leave three tabs replaced and two stale.
+async function replApply(weekNum, pre, opts) {
+  opts = opts || {};
+  if (!pre || !pre.ok) return {ok:false, err:'preflight did not pass'};
+  if (opts.dryRun) {
+    return {ok:true, dryRun:true, count:pre.plan.length, col:pre.col, date:pre.date,
+            sample:pre.plan.slice(0, 12).map(function(p){ return p.range + ' = ' + p.value; })};
+  }
+  let token;
+  try { token = await getOAuthToken(); }
+  catch(e) { return {ok:false, err:'Google sign-in required: ' + e.message}; }
+
+  // SAFEGUARD 2: keep the old values before overwriting
+  replSaveSnapshot(weekNum, {weekNum:weekNum, date:pre.date, col:pre.col,
+                             savedAt:new Date().toISOString(), values:pre.snapshot});
+
+  const data = pre.plan.map(function(p){ return {range:p.range, values:[[p.value]]}; });
+  try {
+    const res = await fetch(SHEETS_BASE + '/' + SHEET_ID + '/values:batchUpdate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + token},
+      body: JSON.stringify({valueInputOption:'RAW', data:data})
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      if (res.status === 401) { safeSet('stemOAuthToken',''); safeSet('stemOAuthExpiry','0'); }
+      return {ok:false, err:res.status + ': ' + err};
+    }
+    return {ok:true, count:data.length, col:pre.col, date:pre.date};
+  } catch(e) {
+    return {ok:false, err:e.message};
+  }
+}
+
+// ── SAFEGUARD 2 (the other half): undo ──
+async function replRestore(weekNum) {
+  const snap = replGetSnapshot(weekNum);
+  if (!snap) return {ok:false, err:'no snapshot stored for week ' + weekNum};
+  let token;
+  try { token = await getOAuthToken(); }
+  catch(e) { return {ok:false, err:'Google sign-in required: ' + e.message}; }
+
+  const data = [];
+  for (const tabName of Object.keys(snap.values)) {
+    const url = SHEETS_BASE + '/' + SHEET_ID + '/values/' + encodeURIComponent(tabName) + '?key=' + API_KEY;
+    const res = await fetch(url);
+    if (!res.ok) return {ok:false, err:tabName + ': read HTTP ' + res.status};
+    const rows = (await res.json()).values || [];
+    const hr = replFindHeaderRow(rows);
+    const r = replResolveWeekCol(rows, weekNum);
+    if (hr < 0 || r.col < 0) return {ok:false, err:tabName + ': cannot locate week ' + weekNum + ' to restore into'};
+    for (let ri = hr + 1; ri < rows.length; ri++) {
+      const nm = String((rows[ri] || [])[0] || '').trim();
+      if (!nm || !(nm in snap.values[tabName])) continue;
+      data.push({range: tabName + '!' + colToLetter(r.col) + (ri + 1), values: [[snap.values[tabName][nm]]]});
+    }
+  }
+  if (!data.length) return {ok:false, err:'snapshot held no restorable cells'};
+  try {
+    const res = await fetch(SHEETS_BASE + '/' + SHEET_ID + '/values:batchUpdate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + token},
+      body: JSON.stringify({valueInputOption:'RAW', data:data})
+    });
+    if (!res.ok) return {ok:false, err:res.status + ': ' + (await res.text())};
+    return {ok:true, count:data.length};
+  } catch(e) { return {ok:false, err:e.message}; }
 }
 
 async function writeWeekToSheet(weekData, weekLabel) {
@@ -3322,6 +3574,481 @@ function renderRecruiter(){
 document.getElementById('rec-select').addEventListener('change',renderRecruiter);
 
 // ─── DATA ENTRY ───
+
+// ═══════════ WEEKLY EXPORT IMPORTER ═══════════
+// Fills the entry form from a raw ATS export. Deliberately does NOT save —
+// the existing "Save week" button remains the only path to Google Sheets.
+const IMP_COLS = [
+  {header:'Total Subs',       metric:'subs'},
+  {header:'Total Interviews', metric:'ivs'},
+  {header:'Total Placements', metric:'placements'},
+  {header:'Total Starts',     metric:'starts'},
+  {header:'Total Leads',      metric:'leads'}
+];
+var impParsed = null;      // last successful parse
+var impSourceWeek = null;  // e.g. "34-2026", read from the export footer
+
+function impNum(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+  return isFinite(n) ? Math.round(n) : 0;
+}
+// Ignore case, spaces and punctuation so "Nicolas DellaTorre" matches
+// "Nicolas Della Torre" without needing a manual mapping.
+function impNorm(x) { return String(x || '').toLowerCase().replace(/[^a-z]/g, ''); }
+
+function impLev(a, b) {
+  const m = [];
+  for (let i = 0; i <= a.length; i++) { m[i] = [i]; }
+  for (let j = 0; j <= b.length; j++) { m[0][j] = j; }
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      m[i][j] = Math.min(m[i-1][j]+1, m[i][j-1]+1, m[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+  return m[a.length][b.length];
+}
+function impSuggest(name) {
+  const n = impNorm(name);
+  let best = null, bd = 99;
+  RECRUITERS.forEach(function(r) { const d = impLev(n, impNorm(r.name)); if (d < bd) { bd = d; best = r.name; } });
+  return bd <= 3 ? best : null;
+}
+
+// Remembered name mappings, so a given spelling is only resolved once
+function impGetAliases() { try { return JSON.parse(safeGet('stemImportAliases') || '{}'); } catch(e) { return {}; } }
+function impSaveAliases(a) { safeSet('stemImportAliases', JSON.stringify(a)); }
+
+// Source weeks already imported, for the duplicate guard
+function impGetDoneWeeks() { try { return JSON.parse(safeGet('stemImportedWeeks') || '[]'); } catch(e) { return []; } }
+function rememberImportedWeek(w) {
+  const list = impGetDoneWeeks();
+  if (list.indexOf(w) < 0) { list.push(w); safeSet('stemImportedWeeks', JSON.stringify(list)); }
+}
+
+// SheetJS is only needed for .xlsx, so it loads on demand rather than on every
+// page view. CSV is handled natively and still works if this never loads.
+function impLoadSheetJS() {
+  return new Promise(function(resolve, reject) {
+    if (window.XLSX) return resolve(window.XLSX);
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    sc.onload = function() { window.XLSX ? resolve(window.XLSX) : reject(new Error('Spreadsheet reader failed to initialise.')); };
+    sc.onerror = function() { reject(new Error('Could not load the spreadsheet reader (network blocked?). Re-save the file as CSV and try again.')); };
+    document.head.appendChild(sc);
+  });
+}
+
+function impParseCSV(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i+1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    }
+    else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); cur = ''; rows.push(row); row = []; }
+    else if (c !== '\r') cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+function impParseGrid(grid) {
+  let hdrRow = -1, nameCol = -1;
+  for (let i = 0; i < Math.min(grid.length, 10) && hdrRow < 0; i++) {
+    for (let j = 0; j < (grid[i] || []).length; j++) {
+      const v = String(grid[i][j] == null ? '' : grid[i][j]).trim().toLowerCase();
+      if (v === 'username' || v === 'name' || v === 'recruiter') { hdrRow = i; nameCol = j; break; }
+    }
+  }
+  if (hdrRow < 0) return {error:'Could not find a "UserName" column in the first 10 rows.'};
+
+  const hdr = (grid[hdrRow] || []).map(function(h){ return String(h == null ? '' : h).trim(); });
+  const idx = {}, missingCols = [];
+  IMP_COLS.forEach(function(c) {
+    // Exact header match. "Total Subs" must never grab "Total Internal Subs",
+    // which sits in the adjacent column of this export.
+    const i = hdr.findIndex(function(h){ return h.toLowerCase() === c.header.toLowerCase(); });
+    if (i < 0) missingCols.push(c.header); else idx[c.metric] = i;
+  });
+  if (missingCols.length) return {error:'Missing column(s): ' + missingCols.join(', ')};
+
+  const rows = [], skipped = [];
+  let totalRow = null, weekTag = null;
+  for (let i = hdrRow + 1; i < grid.length; i++) {
+    const raw = String((grid[i] || [])[nameCol] == null ? '' : grid[i][nameCol]).trim();
+    if (!raw) continue;
+    if (/^applied filters/i.test(raw)) {
+      const m = raw.match(/Date is\s*(\d+)\s*-\s*(\d{4})/i);
+      if (m) weekTag = m[1] + '-' + m[2];
+      skipped.push('filter footer');
+      continue;
+    }
+    if (/^(total|totals|grand total|averages?)$/i.test(raw)) {
+      totalRow = {};
+      IMP_COLS.forEach(function(c){ totalRow[c.metric] = impNum(grid[i][idx[c.metric]]); });
+      skipped.push(raw);
+      continue;
+    }
+    const vals = {};
+    IMP_COLS.forEach(function(c){ vals[c.metric] = impNum(grid[i][idx[c.metric]]); });
+    rows.push({name:raw, vals:vals});
+  }
+  if (!rows.length) return {error:'No recruiter rows found under the header.'};
+  return {rows:rows, skipped:skipped, totalRow:totalRow, weekTag:weekTag,
+          hasInternal: hdr.some(function(h){ return /internal/i.test(h); })};
+}
+
+// Split parsed rows into matched vs needs-a-decision
+function impResolve() {
+  if (!impParsed) return {matched:[], issues:[]};
+  const aliases = impGetAliases();
+  const exact = {};
+  RECRUITERS.forEach(function(r){ exact[impNorm(r.name)] = r.name; });
+  const matched = [], issues = [];
+  impParsed.rows.forEach(function(r) {
+    const hit = exact[impNorm(r.name)];
+    if (hit) { matched.push({to:hit, from:r.name, vals:r.vals, how:'exact'}); return; }
+    const a = aliases[r.name];
+    if (a === '__skip__') { issues.push({name:r.name, vals:r.vals, why:'ignored', choice:'__skip__'}); return; }
+    if (a && exact[impNorm(a)]) {
+      matched.push({to:exact[impNorm(a)], from:r.name, vals:r.vals, how:'mapped'});
+      issues.push({name:r.name, vals:r.vals, why:'mapped', choice:a});
+      return;
+    }
+    const sg = impSuggest(r.name);
+    issues.push({name:r.name, vals:r.vals, choice:'', sugg:sg,
+                 why: sg ? 'looks like "' + sg + '"' : 'not on the roster'});
+  });
+  // Anything not matched is excluded from the import. Split by reason: an
+  // ignored row is a decision, an unresolved one is an oversight.
+  const ignored = issues.filter(function(i){ return i.choice === '__skip__'; });
+  const unresolved = issues.filter(function(i){ return !i.choice; });
+  const excluded = ignored.concat(unresolved);
+  const totals = {inFile:{}, excluded:{}, importing:{}};
+  IMP_COLS.forEach(function(c) {
+    totals.inFile[c.metric] = 0; totals.excluded[c.metric] = 0;
+  });
+  impParsed.rows.forEach(function(r){ IMP_COLS.forEach(function(c){ totals.inFile[c.metric] += r.vals[c.metric]; }); });
+  excluded.forEach(function(r){ IMP_COLS.forEach(function(c){ totals.excluded[c.metric] += r.vals[c.metric]; }); });
+  IMP_COLS.forEach(function(c){ totals.importing[c.metric] = totals.inFile[c.metric] - totals.excluded[c.metric]; });
+
+  return {matched:matched, issues:issues, ignored:ignored, unresolved:unresolved,
+          excluded:excluded, totals:totals};
+}
+
+function impEsc(x){ return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function impPill(txt, color, bg){ return '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+bg+';color:'+color+'">'+txt+'</span>'; }
+
+function clearImportUI() {
+  impParsed = null;
+  ['imp-status','imp-issues','imp-actions'].forEach(function(id){
+    const el = document.getElementById(id);
+    if (el) { el.style.display='none'; el.innerHTML=''; }
+  });
+  const c = document.getElementById('imp-clear'); if (c) c.style.display='none';
+  const rp = document.getElementById('repl-panel'); if (rp) rp.style.display='none';
+  replPre = null; replWeekNum = null;
+  const f = document.getElementById('imp-fname'); if (f) f.textContent='';
+  const inp = document.getElementById('imp-file'); if (inp) inp.value='';
+}
+
+function impShowError(msg) {
+  const st = document.getElementById('imp-status');
+  st.style.display = 'block';
+  st.innerHTML = '<div style="color:var(--red);font-size:12px;font-weight:600">\u2715 ' + impEsc(msg) + '</div>';
+  document.getElementById('imp-issues').style.display = 'none';
+  document.getElementById('imp-actions').style.display = 'none';
+  document.getElementById('imp-clear').style.display = '';
+}
+
+function impRender() {
+  const p = impParsed;
+  if (!p) return;
+  const r = impResolve();
+  const st = document.getElementById('imp-status');
+
+  // Reconciliation against the export's own Total row
+  const sums = {}; IMP_COLS.forEach(function(c){ sums[c.metric] = 0; });
+  p.rows.forEach(function(x){ IMP_COLS.forEach(function(c){ sums[c.metric] += x.vals[c.metric]; }); });
+  let recOK = true, recHtml = '';
+  if (p.totalRow) {
+    const offs = IMP_COLS.filter(function(c){ return p.totalRow[c.metric] !== sums[c.metric]; });
+    recOK = offs.length === 0;
+    recHtml = recOK
+      ? '<div style="font-size:12px;font-weight:600;color:var(--green)">\u2713 Reconciles against the file\u2019s Total row (' + sums.subs + ' subs, ' + sums.ivs + ' interviews, ' + sums.placements + ' placements, ' + sums.starts + ' starts, ' + sums.leads + ' leads)</div>'
+      : '<div style="font-size:12px;font-weight:600;color:var(--red)">\u2715 Does not match the file\u2019s Total row \u2014 ' + offs.map(function(c){ return c.header + ' off by ' + (sums[c.metric] - p.totalRow[c.metric]); }).join(', ') + '. Check the export before importing.</div>';
+  } else {
+    recHtml = '<div style="font-size:11px;color:var(--text3)">No Total row found \u2014 reconciliation check skipped.</div>';
+  }
+
+  let extra = '';
+  if (p.weekTag) {
+    const dup = impGetDoneWeeks().indexOf(p.weekTag) >= 0;
+    impSourceWeek = p.weekTag;
+    extra += '<div style="margin-top:7px;font-size:11px;color:' + (dup ? 'var(--amber)' : 'var(--text3)') + '">'
+      + (dup ? '\u26a0 <b>Week ' + impEsc(p.weekTag) + ' has already been imported once.</b> Saving again would append a second copy \u2014 use Overwrite below instead.'
+             : 'Source week detected: <b style="color:var(--text2)">' + impEsc(p.weekTag) + '</b>')
+      + '</div>';
+    replShowPanel(dup, p.weekTag);
+  } else {
+    impSourceWeek = null;
+  }
+  if (p.hasInternal) extra += '<div style="margin-top:5px;font-size:11px;color:var(--text3)">Ignoring the <b>Total Internal Subs</b> column \u2014 columns are matched by header name, not position.</div>';
+  if (p.skipped.length) extra += '<div style="margin-top:5px;font-size:11px;color:var(--text3)">Skipped ' + p.skipped.length + ' non-recruiter row(s): ' + impEsc(p.skipped.join(', ')) + '</div>';
+
+  const unresolved = r.unresolved.length;
+  const inFile = {}; r.matched.forEach(function(m){ inFile[m.to] = true; });
+  const missing = RECRUITERS.filter(function(x){ return !inFile[x.name]; }).map(function(x){ return x.name; });
+
+  extra += '<div style="margin-top:9px;font-size:11px;color:var(--text2)">'
+    + '<b>' + r.matched.length + '</b> matched \u00b7 '
+    + '<b style="color:' + (unresolved ? 'var(--amber)' : 'var(--text2)') + '">' + unresolved + '</b> needing a decision \u00b7 '
+    + '<b>' + r.ignored.length + '</b> ignored \u00b7 '
+    + '<b>' + missing.length + '</b> on the roster but absent from the file (saved as 0)'
+    + '</div>';
+  if (missing.length) {
+    extra += '<div style="margin-top:5px;font-size:11px;color:var(--text3)">Will be zero: ' + missing.map(impEsc).join(', ') + '</div>';
+  }
+
+  // Import ledger. The check above proves the FILE adds up; this shows what is
+  // actually going into the form. They differ whenever a row is ignored or left
+  // unresolved — an account manager who logged a placement, say — and that gap
+  // has to be visible rather than hidden behind a green tick.
+  const t = r.totals;
+  const anyExcluded = IMP_COLS.some(function(c){ return t.excluded[c.metric] !== 0; });
+  extra += '<div style="margin-top:11px;border:1px solid ' + (anyExcluded ? 'var(--amber)' : 'var(--border)') + ';border-radius:8px;overflow:hidden">'
+    + '<div style="padding:6px 9px;background:var(--bg);font-size:11px;font-weight:700;color:' + (anyExcluded ? 'var(--amber)' : 'var(--text2)') + '">'
+    + (anyExcluded ? '\u26a0 Importing less than the file total' : 'Import ledger \u2014 everything in the file is being imported')
+    + '</div>'
+    + '<table style="border-collapse:collapse;width:100%;font-size:11px">'
+    + '<thead><tr>'
+    + ['', 'Subs', 'IVs', 'Placements', 'Starts', 'Leads'].map(function(h,i){
+        return '<th style="background:var(--bg);color:var(--text3);font-size:10px;font-weight:700;padding:5px 9px;text-align:' + (i?'right':'left') + ';border-bottom:1px solid var(--border)">' + h + '</th>'; }).join('')
+    + '</tr></thead><tbody>'
+    + '<tr><td style="padding:5px 9px;color:var(--text3)">In file</td>'
+    + IMP_COLS.map(function(c){ return '<td style="padding:5px 9px;text-align:right;color:var(--text3)">' + t.inFile[c.metric] + '</td>'; }).join('') + '</tr>'
+    + '<tr><td style="padding:5px 9px;color:var(--amber)">Not imported</td>'
+    + IMP_COLS.map(function(c){ return '<td style="padding:5px 9px;text-align:right;color:' + (t.excluded[c.metric] ? 'var(--amber)' : 'var(--text3)') + '">' + (t.excluded[c.metric] ? '\u2212' + t.excluded[c.metric] : '0') + '</td>'; }).join('') + '</tr>'
+    + '<tr><td style="padding:5px 9px;font-weight:700;border-top:1px solid var(--border2)">Going into the form</td>'
+    + IMP_COLS.map(function(c){ return '<td style="padding:5px 9px;text-align:right;font-weight:700;border-top:1px solid var(--border2)">' + t.importing[c.metric] + '</td>'; }).join('') + '</tr>'
+    + '</tbody></table></div>';
+
+  if (r.excluded.length) {
+    extra += '<div style="margin-top:6px;font-size:11px;color:var(--text3)">Excluded rows: '
+      + r.excluded.map(function(x) {
+          const tot = IMP_COLS.reduce(function(a,c){ return a + x.vals[c.metric]; }, 0);
+          return '<b style="color:' + (x.choice === '__skip__' ? 'var(--text2)' : 'var(--amber)') + '">' + impEsc(x.name) + '</b>'
+                 + ' (' + (x.choice === '__skip__' ? 'ignored' : 'undecided') + (tot ? ', ' + tot + ' activity' : ', no activity') + ')';
+        }).join(', ')
+      + '</div>';
+  }
+
+  st.style.display = 'block';
+  st.innerHTML = recHtml + extra;
+
+  // Rows needing a decision
+  const iss = document.getElementById('imp-issues');
+  if (r.issues.length) {
+    const opts = RECRUITERS.slice().sort(function(a,b){ return a.name.localeCompare(b.name); });
+    iss.style.display = 'block';
+    iss.innerHTML = '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Names in the file that don\u2019t match the roster. Anything left unset is not imported. Choices are remembered.</div>'
+      + '<div style="overflow:auto;max-height:230px;border:1px solid var(--border);border-radius:8px">'
+      + '<table style="border-collapse:collapse;width:100%;font-size:11px">'
+      + '<thead><tr>'
+      + ['Name in file','Why','Subs','IVs','Pl','St','Ld','Send to'].map(function(h,i){
+          return '<th style="background:var(--bg);color:var(--text3);font-size:10px;font-weight:700;text-transform:uppercase;padding:6px 8px;text-align:' + (i>=2&&i<=6?'right':'left') + ';white-space:nowrap;border-bottom:1px solid var(--border2)">' + h + '</th>'; }).join('')
+      + '</tr></thead><tbody>'
+      + r.issues.map(function(i) {
+          const sel = '<select onchange="impSetAlias(this.getAttribute(\'data-n\'), this.value)" data-n="' + impEsc(i.name) + '" style="height:24px;font-size:11px;max-width:190px;border-radius:6px;border:1px solid var(--border2);background:var(--bg2);color:var(--text)">'
+            + '<option value="">\u2014 choose \u2014</option>'
+            + opts.map(function(o){ return '<option value="' + impEsc(o.name) + '"' + (i.choice === o.name ? ' selected' : '') + '>' + impEsc(o.name) + '</option>'; }).join('')
+            + '<option value="__skip__"' + (i.choice === '__skip__' ? ' selected' : '') + '>\u2a2f Ignore this row</option>'
+            + '</select>';
+          const quick = (i.sugg && !i.choice)
+            ? ' <button class="btn" style="height:22px;font-size:10px;padding:0 6px" onclick="impSetAlias(this.getAttribute(\'data-n\'), this.getAttribute(\'data-t\'))" data-n="' + impEsc(i.name) + '" data-t="' + impEsc(i.sugg) + '">use</button>'
+            : '';
+          const bg = i.choice ? 'background:var(--green-bg);' : '';
+          return '<tr style="' + bg + '">'
+            + '<td style="padding:5px 8px;font-weight:600;border-bottom:1px solid var(--border)">' + impEsc(i.name) + '</td>'
+            + '<td style="padding:5px 8px;border-bottom:1px solid var(--border)">' + impPill(impEsc(i.why), i.choice?'var(--green)':'var(--amber)', i.choice?'var(--green-bg)':'var(--amber-bg)') + '</td>'
+            + IMP_COLS.map(function(c){ return '<td style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--border);' + (i.vals[c.metric]?'':'color:var(--text3)') + '">' + i.vals[c.metric] + '</td>'; }).join('')
+            + '<td style="padding:5px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + sel + quick + '</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  } else {
+    iss.style.display = 'none';
+    iss.innerHTML = '';
+  }
+
+  const act = document.getElementById('imp-actions');
+  act.style.display = 'flex';
+  document.getElementById('imp-apply').disabled = !recOK;
+  document.getElementById('imp-clear').style.display = '';
+}
+
+function impSetAlias(from, to) {
+  const a = impGetAliases();
+  if (to) a[from] = to; else delete a[from];
+  impSaveAliases(a);
+  impRender();
+}
+
+
+// ── Replace-week UI ──
+var replWeekNum = null, replPre = null;
+
+function replShowPanel(isDup, weekTag) {
+  const panel = document.getElementById('repl-panel');
+  if (!panel) return;
+  const m = String(weekTag || '').match(/^(\d+)/);
+  replWeekNum = m ? parseInt(m[1]) : null;
+  replPre = null;
+  if (!isDup || !replWeekNum) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  document.getElementById('repl-intro').innerHTML =
+    'Week <b>' + impEsc(weekTag) + '</b> is already saved. Overwriting replaces that week\u2019s column in place on all five '
+    + 'activity tabs, rather than adding a new one. Run the dry run first \u2014 it validates every tab and every name and writes nothing.';
+  document.getElementById('repl-go').disabled = true;
+  document.getElementById('repl-out').innerHTML = '';
+  document.getElementById('repl-undo').style.display = replGetSnapshot(replWeekNum) ? '' : 'none';
+}
+
+function replBuildWeekData() {
+  // Same shape writeWeekToSheet expects, from the staged import
+  const r = impResolve();
+  const wd = {};
+  RECRUITERS.forEach(function(x){ wd[x.name] = {subs:0, ivs:0, placements:0, starts:0, leads:0}; });
+  r.matched.forEach(function(mm) {
+    if (!wd[mm.to]) wd[mm.to] = {subs:0, ivs:0, placements:0, starts:0, leads:0};
+    IMP_COLS.forEach(function(c){ wd[mm.to][c.metric] = mm.vals[c.metric]; });
+  });
+  return wd;
+}
+
+function replMsg(html) { document.getElementById('repl-out').innerHTML = html; }
+function replBox(kind, html) {
+  const c = kind === 'ok' ? 'var(--green)' : kind === 'warn' ? 'var(--amber)' : 'var(--red)';
+  const b = kind === 'ok' ? 'var(--green-bg)' : kind === 'warn' ? 'var(--amber-bg)' : 'var(--red-bg)';
+  return '<div style="border:1px solid ' + c + ';background:' + b + ';border-radius:8px;padding:10px 12px;font-size:11px;line-height:1.6;color:var(--text2)">' + html + '</div>';
+}
+
+async function replRunDry() {
+  if (!replWeekNum) return;
+  if (!impParsed) { replMsg(replBox('bad', 'Load an export first.')); return; }
+  replMsg('<div style="font-size:11px;color:var(--text3)">Reading all five tabs\u2026</div>');
+  const wd = replBuildWeekData();
+  let pre;
+  try { pre = await replPreflight(replWeekNum, wd); }
+  catch(e) { replMsg(replBox('bad', 'Preflight failed: ' + impEsc(e.message))); return; }
+  replPre = pre;
+
+  if (!pre.ok) {
+    document.getElementById('repl-go').disabled = true;
+    replMsg(replBox('bad', '<b>Refusing to write.</b><ul style="margin:6px 0 0 16px">'
+      + pre.errors.map(function(e){ return '<li>' + impEsc(e) + '</li>'; }).join('') + '</ul>'));
+    return;
+  }
+  const res = await replApply(replWeekNum, pre, {dryRun:true});
+  document.getElementById('repl-go').disabled = false;
+  replMsg(replBox('ok',
+    '<b>\u2713 Dry run passed \u2014 nothing was written.</b><br>'
+    + 'Week ' + replWeekNum + ' resolves to column <b>' + colToLetter(pre.col) + '</b> (' + impEsc(pre.date || '') + ') on all five tabs.<br>'
+    + '<b>' + res.count + '</b> cells would be written.'
+    + (pre.sheetOnly.length ? '<br>Rows on the Sheet with no dashboard match, left untouched: ' + impEsc(pre.sheetOnly.join(', ')) : '')
+    + '<div style="margin-top:7px;font-family:monospace;font-size:10.5px;color:var(--text3)">'
+    + res.sample.map(impEsc).join('<br>') + (res.count > res.sample.length ? '<br>\u2026 and ' + (res.count - res.sample.length) + ' more' : '')
+    + '</div>'));
+}
+
+async function replRunApply() {
+  if (!replPre || !replPre.ok) { replMsg(replBox('bad', 'Run the dry run first.')); return; }
+  if (!confirm('Overwrite week ' + replWeekNum + ' (' + (replPre.date || '') + ') in place?\n\n'
+      + replPre.plan.length + ' cells across 5 tabs.\n\nThe current values are saved first, so this can be undone from here.')) return;
+  replMsg('<div style="font-size:11px;color:var(--text3)">Writing\u2026</div>');
+  const res = await replApply(replWeekNum, replPre, {});
+  if (!res.ok) { replMsg(replBox('bad', '<b>Write failed.</b> ' + impEsc(res.err) + '<br>Nothing was changed \u2014 the write is a single batch.')); return; }
+  document.getElementById('repl-undo').style.display = '';
+  document.getElementById('repl-go').disabled = true;
+  replMsg(replBox('ok', '<b>\u2713 Week ' + replWeekNum + ' overwritten.</b> ' + res.count
+    + ' cells written to column ' + colToLetter(res.col) + '. Previous values are stored \u2014 use Undo if this was wrong. Sync to refresh the dashboard.'));
+}
+
+async function replRunUndo() {
+  if (!replWeekNum) return;
+  const snap = replGetSnapshot(replWeekNum);
+  if (!snap) { replMsg(replBox('bad', 'No snapshot stored for week ' + replWeekNum + '.')); return; }
+  if (!confirm('Restore week ' + replWeekNum + ' to the values saved at '
+      + new Date(snap.savedAt).toLocaleString() + '?')) return;
+  replMsg('<div style="font-size:11px;color:var(--text3)">Restoring\u2026</div>');
+  const res = await replRestore(replWeekNum);
+  replMsg(res.ok
+    ? replBox('ok', '<b>\u2713 Restored.</b> ' + res.count + ' cells returned to their previous values. Sync to refresh.')
+    : replBox('bad', '<b>Restore failed.</b> ' + impEsc(res.err)));
+}
+
+// Stage the resolved numbers and repaint the entry grid
+function impApply() {
+  const r = impResolve();
+  const staged = {};
+  // Every recruiter starts at zero, so anyone absent from the file saves as 0
+  RECRUITERS.forEach(function(x) { staged[x.name] = {subs:0, ivs:0, placements:0, starts:0, leads:0}; });
+  r.matched.forEach(function(m) {
+    if (!staged[m.to]) staged[m.to] = {subs:0, ivs:0, placements:0, starts:0, leads:0};
+    IMP_COLS.forEach(function(c){ staged[m.to][c.metric] = m.vals[c.metric]; });
+  });
+  pendingImport = staged;
+  renderEntry();
+  const n = r.matched.length;
+  const msg = document.getElementById('imp-status');
+  if (msg) {
+    msg.innerHTML += '<div style="margin-top:8px;font-size:12px;font-weight:600;color:var(--green)">\u2713 Filled the form with ' + n + ' recruiter(s). Review below, then press \uD83D\uDCBE Save week.</div>';
+  }
+  const rows = document.getElementById('entry-rows');
+  if (rows) rows.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function impHandleFile(f) {
+  if (!f) return;
+  const isCSV = /\.csv$/i.test(f.name);
+  const rd = new FileReader();
+  rd.onerror = function(){ impShowError('Could not read that file.'); };
+  rd.onload = function(e) {
+    try {
+      if (isCSV) {
+        const grid = impParseCSV(String(e.target.result));
+        impFinish(impParseGrid(grid));
+      } else {
+        impLoadSheetJS().then(function(XLSX) {
+          const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const grid = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
+          impFinish(impParseGrid(grid));
+        }).catch(function(err){ impShowError(err.message); });
+      }
+    } catch (err) { impShowError('Could not read that file: ' + err.message); }
+  };
+  if (isCSV) rd.readAsText(f); else rd.readAsArrayBuffer(f);
+}
+
+function impFinish(res) {
+  if (res.error) { impShowError(res.error); impParsed = null; return; }
+  impParsed = res;
+  impRender();
+}
+
+// Values staged by the importer, keyed by recruiter name. Held outside the DOM
+// because the entry grid only renders the selected manager's rows — reading
+// values back off the inputs alone would drop everyone currently filtered out.
+var pendingImport = null;
+function impVal(name, metric) {
+  if (!pendingImport) return 0;
+  const d = pendingImport[name];
+  return d ? (d[metric] || 0) : 0;
+}
+
 function renderEntry(){
   const mgr=document.getElementById('entry-mgr').value;
   const recs=RECRUITERS.filter(r=>!mgr||r.manager===mgr).slice().sort((a,b)=>a.name.localeCompare(b.name));
@@ -3330,16 +4057,36 @@ function renderEntry(){
     <div class="entry-row-item">
       <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.name}">${r.name}</div>
       <span style="font-size:11px;color:${MGR_COLORS[r.manager]||'#888'};font-weight:600">${r.manager}</span>
-      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="subs">
-      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="ivs">
-      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="placements">
-      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="starts">
-      <input type="number" min="0" value="0" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="leads">
+      <input type="number" min="0" value="${impVal(r.name,'subs')}" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="subs">
+      <input type="number" min="0" value="${impVal(r.name,'ivs')}" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="ivs">
+      <input type="number" min="0" value="${impVal(r.name,'placements')}" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="placements">
+      <input type="number" min="0" value="${impVal(r.name,'starts')}" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="starts">
+      <input type="number" min="0" value="${impVal(r.name,'leads')}" data-rec="${r.name.replace(/"/g,'&quot;')}" data-m="leads">
     </div>`).join('');
   renderSavedList();
 }
 
 document.getElementById('entry-mgr').addEventListener('change',renderEntry);
+
+(function() {
+  const f = document.getElementById('imp-file');
+  if (f) f.addEventListener('change', function(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    document.getElementById('imp-fname').textContent = file.name;
+    impHandleFile(file);
+  });
+  const c = document.getElementById('imp-clear');
+  if (c) c.addEventListener('click', function(){ pendingImport=null; impSourceWeek=null; clearImportUI(); renderEntry(); });
+  const a = document.getElementById('imp-apply');
+  if (a) a.addEventListener('click', impApply);
+  const rd = document.getElementById('repl-dry');
+  if (rd) rd.addEventListener('click', replRunDry);
+  const rg = document.getElementById('repl-go');
+  if (rg) rg.addEventListener('click', replRunApply);
+  const ru = document.getElementById('repl-undo');
+  if (ru) ru.addEventListener('click', replRunUndo);
+})();
 
 // ─── BACKUP HELPERS ───
 function buildBackupPayload() {
@@ -3563,6 +4310,14 @@ function autoBackup() {
 document.getElementById('save-btn').addEventListener('click', async ()=>{
   const label='Week '+(wkLabels.length+1);
   const data={};
+  // Seed from the staged import first so recruiters hidden by the manager
+  // filter keep their imported numbers, then let visible inputs win.
+  if (pendingImport) {
+    Object.keys(pendingImport).forEach(function(n){
+      const d = pendingImport[n];
+      data[n] = {subs:d.subs||0, ivs:d.ivs||0, placements:d.placements||0, starts:d.starts||0, leads:d.leads||0};
+    });
+  }
   document.querySelectorAll('#entry-rows input[type=number]').forEach(inp=>{
     const rec=inp.dataset.rec,met=inp.dataset.m;
     if(!data[rec])data[rec]={subs:0,ivs:0,placements:0,starts:0,leads:0};
@@ -3573,6 +4328,9 @@ document.getElementById('save-btn').addEventListener('click', async ()=>{
   safeSet('stemXW', JSON.stringify(extraWeeks));
   wkLabels.push(label);
   const m=document.getElementById('smsg');m.style.display='inline';setTimeout(()=>m.style.display='none',3500);
+  if (impSourceWeek) { rememberImportedWeek(impSourceWeek); impSourceWeek=null; }
+  pendingImport = null;
+  clearImportUI();
   renderSavedList();renderOverview();
   populateWkSelects();
   autoBackup();
@@ -3598,7 +4356,10 @@ document.getElementById('save-btn').addEventListener('click', async ()=>{
   }
 });
 
-document.getElementById('clear-btn').addEventListener('click',()=>{document.querySelectorAll('#entry-rows input[type=number]').forEach(i=>i.value=0)});
+document.getElementById('clear-btn').addEventListener('click',()=>{
+  pendingImport=null; impSourceWeek=null; clearImportUI();
+  document.querySelectorAll('#entry-rows input[type=number]').forEach(i=>i.value=0);
+});
 
 document.getElementById('export-btn').addEventListener('click',()=>{
   const payload = JSON.stringify(buildBackupPayload(), null, 2);
@@ -3643,7 +4404,7 @@ document.getElementById('import-file').addEventListener('change', function() {
         if (!RECRUITERS.find(r => r.name === nr.name)) {
           const pad = Array(Math.max(0, Math.min(nr.startWeekIndex||0, BASE_WEEKS))).fill(null);
           const active = Array(Math.max(0, BASE_WEEKS - (nr.startWeekIndex||0))).fill(0);
-          RECRUITERS.push({name:nr.name,manager:nr.manager,subs:[...pad,...active],ivs:[...pad,...active],starts:[...pad,...active],leads:[...pad,...active],isNew:true,addedOn:nr.addedOn,startWeekIndex:nr.startWeekIndex||0});
+          RECRUITERS.push({name:nr.name,manager:nr.manager,subs:[...pad,...active],ivs:[...pad,...active],placements:[...pad,...active],starts:[...pad,...active],leads:[...pad,...active],isNew:true,addedOn:nr.addedOn,startWeekIndex:nr.startWeekIndex||0});
         }
       });
 
@@ -4905,13 +5666,59 @@ function saveEditModal() {
 const PRESET_ARCHIVED = [{"name":"Heather McRae","manager":"Noah","archivedOn":"6/4/2026","endedOn":"05/08/2026","subs":[6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],"ivs":[1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],"placements":[0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],"hireDate":"2014-07-07","birthday":""},{"name":"Helen Phillips","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/19/2026","subs":[2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],"ivs":[1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],"placements":[0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],"starts":[1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],"leads":[0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],"hireDate":"2003-02-07","birthday":"06/30"},{"name":"John Gorsuch","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/10/2026","subs":[5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],"ivs":[1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],"starts":[0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],"leads":[0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],"hireDate":"2022-09-12","birthday":""},{"name":"Jason Beir","manager":"Kevin","archivedOn":"6/8/2026","endedOn":"06/05/2026","subs":[4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],"ivs":[3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],"placements":[0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2020-10-01","birthday":""},{"name":"Jessica Paden","manager":"Brett","archivedOn":"6/9/2026","endedOn":"06/08/2026","subs":[6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],"ivs":[2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],"placements":[2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],"starts":[0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],"leads":[0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],"hireDate":"2024-01-29","birthday":"06/30"},{"name":"Stephen Pemberton","manager":"Joe","archivedOn":"6/23/2026","endedOn":"06/22/2026","subs":[5,3,6,5,5,7,5,6,6,5,4,10,6,7,5,10,7,5,5,5,4,5,10,3],"ivs":[0,0,1,0,1,0,1,3,0,1,0,1,1,0,2,0,3,2,2,2,0,0,0,0],"placements":[0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0],"starts":[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0],"leads":[1,0,0,0,5,2,1,0,3,2,0,1,0,2,0,1,0,0,0,0,1,1,0,2],"hireDate":"2025-12-15","birthday":"07/20"},{"name":"Taylor Durrill","manager":"Noah","archivedOn":"7/15/2026","endedOn":"07/15/2026","subs":[5,7,6,7,4,6,6,6,6,null,null,null,null,null,null,null,null,null,null,null,0,0,4,2,3,3,5],"ivs":[0,2,0,2,0,1,1,1,2,1,null,1,null,null,null,null,0,0,0,0,0,0,0,0,0,3,1],"placements":[0,0,0,0,1,0,0,0,0,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0,0,0],"starts":[0,0,0,0,0,0,1,0,0,null,null,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,1,1,1,1,3,null,null,null,null,null,null,null,null,null,0,null,0,0,0,1,0,2,0],"hireDate":"2024-03-26","birthday":"01/18"},{"name":"Aidan (AJ) Smith","manager":"Rachel","archivedOn":"8/20/2026","endedOn":"08/17/2026","subs":[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5,7,0,0,4,5,7,6,3,4,6,5,5,6,3],"ivs":[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3,0,0,0,0,1,0,3,1,5,0,0,2,3,0],"placements":[0,1,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0],"starts":[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0,0,0,0,0,1,0,0,1,1,0,0,3,0,0],"hireDate":"2025-07-14","birthday":"01/31"}];
 
 // PRESET_VERTICALS — baked in to survive dashboard updates.
-// Empty until populated from "Copy Roster Presets" in the menu. Until then,
-// verticals live only in this browser's localStorage and do NOT follow the file
-// to another machine. Regenerate and paste after editing verticals.
-const PRESET_VERTICALS = {};
+// Snapshot from the roster preset export of 2026-08-30. localStorage always
+// wins, so a later edit in the browser is never overwritten by these values.
+// After changing verticals, re-run "Copy Roster Presets" and paste the result
+// here, or the change lives only in that one browser.
+const PRESET_VERTICALS = {
+  "Aidan (AJ) Smith": "BFSI, Tech, Retail & FMCG & Business Services", "Aidan McMahon": "Energy, Oil, Gas & Utilities", "Amanda Panizzut": "Life Sciences",
+  "Amy Orndorff": "T&M: Airline & Heavy Equipment", "Andraea Hagadorn": "BFSI, Tech, Retail & FMCG & Business Services", "Andy Dalmau": "Telecom",
+  "Anthony Ginnis": "Telecom", "Barry Andis": "Energy, Oil, Gas & Utilities", "Benjamin Grover": "T&M: Auto",
+  "Brandon Fitzgerald": "T&M: Auto", "Brandon Jeter": "Energy, Oil, Gas & Utilities", "Brett Schuber": "Telecom",
+  "Briana Moglia": "T&M: Airline & Heavy Equipment", "Briana Siler": "T&M: Airline & Heavy Equipment", "Brittany Youlden": "Life Sciences",
+  "Chase Whitaker": "T&M: Auto", "Cole Schultz": "Life Sciences", "Corey Phillips": "Data Centers & InfraOps",
+  "Dan Van Gemert": "Data Centers & InfraOps", "Drew Barker": "Telecom", "Erin Cadden": "BFSI, Tech, Retail & FMCG & Business Services",
+  "Fadia Ferrari": "T&M: Auto", "Felipe Parra": "Telecom", "Gary Prestipino": "Telecom",
+  "Heather McRae": "Energy, Oil, Gas & Utilities", "Heather Stevens": "Energy, Oil, Gas & Utilities", "Helen Phillips": "T&M: Auto",
+  "Henry Schibli": "Life Sciences", "Jared Pliskow": "T&M: Airline & Heavy Equipment", "Jason Beir": "Telecom",
+  "Jenna Katz": "Life Sciences", "Jessica Mema": "T&M: Airline & Heavy Equipment", "Jessica Paden": "Telecom",
+  "Jillian Dunn": "T&M: Auto", "John Gorsuch": "T&M: Auto", "Jonathan Robertson": "Energy, Oil, Gas & Utilities",
+  "Joseph Paolozzi": "T&M: Airline & Heavy Equipment", "Justin LaSorsa": "BFSI, Tech, Retail & FMCG & Business Services", "Kaitlyn Moreschi": "BFSI, Tech, Retail & FMCG & Business Services",
+  "Kyle McMahon": "Energy, Oil, Gas & Utilities", "Lazaro Calderin": "BFSI, Tech, Retail & FMCG & Business Services", "Logan Rayburn": "Energy, Oil, Gas & Utilities",
+  "Madison Garra": "BFSI, Tech, Retail & FMCG & Business Services", "Marisa Harthun": "T&M: Auto", "Matt Grimes": "Data Centers & InfraOps",
+  "Megan Curtis": "T&M: Auto", "Mia Shields": "BFSI, Tech, Retail & FMCG & Business Services", "Michael Brennan": "Energy, Oil, Gas & Utilities",
+  "Michael Sheahan": "T&M: Airline & Heavy Equipment", "Molly Burton": "Data Centers & InfraOps", "Mya Hulse": "Life Sciences",
+  "Nicolas Della Torre": "Energy, Oil, Gas & Utilities", "Noah Simon": "Energy, Oil, Gas & Utilities", "Paige Atkinson": "T&M: Airline & Heavy Equipment",
+  "Peter Costello": "Energy, Oil, Gas & Utilities", "Rachael Watkins": "Energy, Oil, Gas & Utilities", "Rachel Hewitt": "BFSI, Tech, Retail & FMCG & Business Services",
+  "Rebecca Schopfer": "Life Sciences", "Ryan Charran": "T&M: Airline & Heavy Equipment", "Sam Royall": "Life Sciences",
+  "Samuel Simon": "BFSI, Tech, Retail & FMCG & Business Services", "Sean McDivitt": "Life Sciences", "Sitara Ramessar": "T&M: Auto",
+  "Stephen Pemberton": "T&M: Auto", "Steven Benni": "Telecom", "Taylor Durrill": "Energy, Oil, Gas & Utilities",
+  "Tiffany Silgas": "Life Sciences", "Tyler Rostad": "Life Sciences", "William Payton": "T&M: Auto",
+  "Zachary Jacobson": "T&M: Airline & Heavy Equipment"
+};
 
 // PRESET_BIRTHDAYS — baked in to survive dashboard updates
-const PRESET_BIRTHDAYS = {"Aidan (AJ) Smith": "01/31", "Amanda Panizzut": "07/04", "Amy Orndorff": "03/26", "Andraea Hagadorn": "05/19", "Andy Dalmau": "11/13", "Anthony Ginnis": "08/18", "Barry Andis": "11/16", "Benjamin Grover": "07/13", "Brett Schuber": "03/22", "Briana Moglia": "04/22", "Briana Siler": "03/10", "Brittany Youlden": "03/19", "Drew Barker": "05/01", "Erin Cadden": "11/08", "Felipe Parra": "09/17", "Gary Prestipino": "05/14", "Heather Stevens": "12/22", "Helen Phillips": "06/30", "Henry Schibli": "11/11", "Jared Pliskow": "08/12", "Jessica Mema": "06/21", "Jessica Paden": "06/30", "Jillian Dunn": "02/18", "Joseph Paolozzi": "01/15", "Justin LaSorsa": "01/08", "Kaitlyn Moreschi": "08/24", "Kyle McMahon": "04/17", "Lazaro Calderin": "03/26", "Logan Rayburn": "10/06", "Madison Garra": "06/10", "Megan Curtis": "09/11", "Michael Brennan": "08/25", "Michael Sheahan": "01/11", "Noah Simon": "05/05", "Paige Atkinson": "05/18", "Peter Costello": "02/20", "Rachel Hewitt": "02/05", "Rebecca Schopfer": "07/13", "Sam Royall": "11/01", "Samuel Simon": "04/18", "Sitara Ramessar": "12/07", "Stephen Pemberton": "07/20", "Taylor Durrill": "01/18", "Tiffany Silgas": "03/01", "Tyler Rostad": "03/01", "William Payton": "06/13", "Zachary Jacobson": "11/20", "Corey Phillips": "04/13", "Dan Van Gemert": "12/06", "Molly Burton": "09/06", "Matt Grimes": "04/16", "Jonathan Robertson": "04/15", "Sean McDivitt": "11/09", "Caitlin Choy": "07/10", "Hannah Murphy": "06/05", "Courtney Ricci": "09/05"};
+const PRESET_BIRTHDAYS = {
+  "Aidan (AJ) Smith": "01/31", "Amanda Panizzut": "07/04", "Amy Orndorff": "03/26",
+  "Andraea Hagadorn": "05/19", "Andy Dalmau": "11/13", "Anthony Ginnis": "08/18",
+  "Barry Andis": "11/16", "Benjamin Grover": "07/13", "Brett Schuber": "03/22",
+  "Briana Moglia": "04/22", "Briana Siler": "03/10", "Brittany Youlden": "03/19",
+  "Corey Phillips": "04/13", "Dan Van Gemert": "12/06", "Drew Barker": "05/01",
+  "Erin Cadden": "11/08", "Felipe Parra": "09/17", "Gary Prestipino": "05/14",
+  "Heather Stevens": "12/22", "Helen Phillips": "06/30", "Henry Schibli": "11/11",
+  "Jared Pliskow": "08/12", "Jenna Katz": "05/02", "Jessica Mema": "06/21",
+  "Jessica Paden": "06/30", "Jillian Dunn": "02/18", "Jonathan Robertson": "04/15",
+  "Joseph Paolozzi": "01/15", "Justin LaSorsa": "01/08", "Kaitlyn Moreschi": "08/24",
+  "Kyle McMahon": "04/17", "Lazaro Calderin": "03/26", "Logan Rayburn": "10/06",
+  "Madison Garra": "06/10", "Marisa Harthun": "06/08", "Matt Grimes": "04/16",
+  "Megan Curtis": "09/11", "Michael Brennan": "08/25", "Michael Sheahan": "01/11",
+  "Molly Burton": "09/06", "Noah Simon": "05/05", "Paige Atkinson": "05/18",
+  "Peter Costello": "02/20", "Rachel Hewitt": "02/05", "Rebecca Schopfer": "07/13",
+  "Sam Royall": "11/01", "Samuel Simon": "04/18", "Sean McDivitt": "11/09",
+  "Sitara Ramessar": "12/07", "Stephen Pemberton": "07/20", "Taylor Durrill": "01/18",
+  "Tiffany Silgas": "03/01", "Tyler Rostad": "03/01", "William Payton": "06/13",
+  "Zachary Jacobson": "11/20"
+};
 
 
 let archivedRecruiters = (function() {
@@ -4960,7 +5767,6 @@ function applyNewRecruiters() {
     // Check if already in RECRUITERS (avoid duplicates on re-render)
     if (RECRUITERS.find(r => r.name === nr.name)) return;
     const startIdx = Math.min(nr.startWeekIndex || 0, totalWks);
-    const zeros = Array(totalWks).fill(0);
     // Pad with nulls before start week, zeros from start week on
     const pad = Array(Math.max(0, startIdx)).fill(null);
     const active = Array(Math.max(0, totalWks - startIdx)).fill(0);
@@ -4969,6 +5775,7 @@ function applyNewRecruiters() {
       manager: nr.manager,
       subs: [...pad, ...active],
       ivs: [...pad, ...active],
+      placements: [...pad, ...active],   // was omitted — left new recruiters with no placements array
       starts: [...pad, ...active],
       leads: [...pad, ...active],
       isNew: true,
@@ -5056,6 +5863,7 @@ function saveNewRecruiter() {
     name, manager: mgr,
     subs: [...pad, ...active],
     ivs: [...pad, ...active],
+    placements: [...pad, ...active],
     starts: [...pad, ...active],
     leads: [...pad, ...active],
     isNew: true,
@@ -5207,24 +6015,30 @@ function restoreRecruiter(name) {
 // ─── HIRE DATE MANAGEMENT ───
 // Pre-populated seniority dates — only set if not already saved by user
 const PRESET_HIRE_DATES = {
-  "Aidan (AJ) Smith":"2025-07-14","Amanda Panizzut":"2025-07-28","Amy Orndorff":"2022-05-02",
-  "Andraea Hagadorn":"2023-01-20","Andy Dalmau":"2016-11-14","Anthony Ginnis":"2022-02-28",
-  "Barry Andis":"2008-02-11","Benjamin Grover":"2017-09-18","Brett Schuber":"2019-01-07",
-  "Briana Moglia":"2021-11-29","Briana Siler":"2021-12-08","Brittany Youlden":"2024-10-21",
-  "Drew Barker":"2022-01-05","Erin Cadden":"2022-08-08","Felipe Parra":"2021-09-13",
-  "Gary Prestipino":"2008-02-25","Heather McRae":"2014-07-07","Heather Stevens":"2022-08-22",
-  "Helen Phillips":"2003-02-07","Henry Schibli":"2025-02-10","Jared Pliskow":"2026-03-16",
-  "Jason Beir":"2020-10-01","Jenna Katz":"2022-06-27","Jessica Mema":"2021-11-01",
-  "Jessica Paden":"2024-01-29","Jessica Parker":"2026-02-16","Jillian Dunn":"2014-08-18",
-  "John Gorsuch":"2022-09-12","Joseph Paolozzi":"2014-06-16","Justin LaSorsa":"2024-02-19",
-  "Kaitlyn Moreschi":"2022-01-31","Kyle McMahon":"2023-05-10","Lazaro Calderin":"2016-10-31",
-  "Logan Rayburn":"2025-07-14","Madison Garra":"2024-03-11","Marisa Harthun":"2022-12-05",
-  "Megan Curtis":"2025-12-01","Michael Brennan":"2020-01-13","Michael Sheahan":"2020-10-12",
-  "Noah Simon":"2021-01-11","Paige Atkinson":"2019-02-11","Peter Costello":"2026-03-30",
-  "Rachel Hewitt":"2026-01-05","Rebecca Schopfer":"2022-06-27","Sam Royall":"2021-08-04",
-  "Samuel Simon":"2021-08-30","Sitara Ramessar":"2022-07-18","Stephen Pemberton":"2025-12-15",
-  "Taylor Durrill":"2024-03-26","Tiffany Silgas":"2026-01-14","Tyler Rostad":"2020-06-15",
-  "William Payton":"2018-07-30","Zachary Jacobson":"2018-04-02"
+  "Aidan (AJ) Smith": "2025-07-14", "Aidan McMahon": "2026-08-24", "Amanda Panizzut": "2025-07-28",
+  "Amy Orndorff": "2022-05-02", "Andraea Hagadorn": "2023-01-20", "Andy Dalmau": "2016-11-14",
+  "Anthony Ginnis": "2022-02-28", "Barry Andis": "2008-02-11", "Benjamin Grover": "2017-09-18",
+  "Brandon Fitzgerald": "2026-08-03", "Brandon Jeter": "2026-08-24", "Brett Schuber": "2019-01-07",
+  "Briana Moglia": "2021-11-29", "Briana Siler": "2021-12-08", "Brittany Youlden": "2024-10-21",
+  "Chase Whitaker": "2026-08-25", "Cole Schultz": "2026-08-24", "Corey Phillips": "2026-02-23",
+  "Dan Van Gemert": "2014-10-29", "Drew Barker": "2022-01-05", "Erin Cadden": "2022-08-08",
+  "Fadia Ferrari": "2026-06-22", "Felipe Parra": "2021-09-13", "Gary Prestipino": "2008-02-25",
+  "Heather McRae": "2014-07-07", "Heather Stevens": "2022-08-22", "Helen Phillips": "2003-02-07",
+  "Henry Schibli": "2025-02-10", "Jared Pliskow": "2026-03-16", "Jason Beir": "2020-10-01",
+  "Jenna Katz": "2022-06-27", "Jessica Mema": "2021-11-01", "Jessica Paden": "2024-01-29",
+  "Jillian Dunn": "2014-08-18", "John Gorsuch": "2022-09-12", "Jonathan Robertson": "2026-05-18",
+  "Joseph Paolozzi": "2014-06-16", "Justin LaSorsa": "2024-02-19", "Kaitlyn Moreschi": "2022-01-31",
+  "Kyle McMahon": "2023-05-10", "Lazaro Calderin": "2016-10-31", "Logan Rayburn": "2025-07-14",
+  "Madison Garra": "2024-03-11", "Marisa Harthun": "2022-12-05", "Matt Grimes": "2010-01-04",
+  "Megan Curtis": "2025-12-01", "Mia Shields": "2026-08-24", "Michael Brennan": "2020-01-13",
+  "Michael Sheahan": "2020-10-12", "Molly Burton": "2019-01-02", "Mya Hulse": "2026-08-24",
+  "Nicolas Della Torre": "2026-08-24", "Noah Simon": "2021-01-11", "Paige Atkinson": "2019-02-11",
+  "Peter Costello": "2026-03-30", "Rachael Watkins": "2026-06-22", "Rachel Hewitt": "2026-01-05",
+  "Rebecca Schopfer": "2022-06-27", "Ryan Charran": "2026-08-24", "Sam Royall": "2021-08-04",
+  "Samuel Simon": "2021-08-30", "Sean McDivitt": "2026-05-19", "Sitara Ramessar": "2022-07-18",
+  "Stephen Pemberton": "2025-12-15", "Steven Benni": "2026-08-24", "Taylor Durrill": "2024-03-26",
+  "Tiffany Silgas": "2026-01-14", "Tyler Rostad": "2020-06-15", "William Payton": "2018-07-30",
+  "Zachary Jacobson": "2018-04-02"
 };
 // Merge presets with any user edits — user edits always win
 (function(){
