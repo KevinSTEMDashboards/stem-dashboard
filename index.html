@@ -1026,7 +1026,7 @@ td.editing{padding:2px 4px!important}
   <div id="gp-section-promo" style="display:none">
     <div id="promo-ladder" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">
-      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap">Review at or above
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap">Review at or above (no ladder title)
         <select id="promo-review" onchange="onPromoSettingChange()" style="height:32px;font-size:12px"></select>
       </label>
       <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap">Near-miss within
@@ -1037,9 +1037,10 @@ td.editing{padding:2px 4px!important}
       </label>
       <select id="promo-sort" onchange="renderGpPromo()" style="height:32px;font-size:12px">
         <option value="gp">Sort: rolling 26wk GP</option>
-        <option value="gap">Sort: closest to next band</option>
+        <option value="gap">Sort: closest to next promotion</option>
         <option value="name">Sort: name</option>
         <option value="mgr">Sort: manager</option>
+        <option value="title">Sort: title</option>
       </select>
       <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap"><input type="checkbox" id="promo-only" onchange="renderGpPromo()" style="width:14px;height:14px"> Flagged only</label>
       <span style="flex:1"></span>
@@ -1066,11 +1067,15 @@ td.editing{padding:2px 4px!important}
         window across all recruiters so nobody&rsquo;s window drifts. That total is compared against the ladder above,
         and the highest rung cleared is their <b>band earned</b>.
         <br><br>
-        Job titles aren&rsquo;t tracked in the dashboard yet, so the flag is threshold-driven: set
-        <b>&ldquo;Review at or above&rdquo;</b> to the band worth a conversation and anyone clearing it turns
-        <b style="color:var(--green)">green</b>. Anyone within the near-miss amount of their next rung turns
-        <b style="color:var(--amber)">amber</b>. Anyone hired too recently to have the minimum tenure is held out as
-        <b>insufficient tenure</b> rather than flagged either way.
+        Titles come from the Roster tab. For anyone on a ladder title, <b>next promotion</b> is the rung above that
+        title. They turn <b style="color:var(--green)">green</b> (ready for review) once the band earned is above their
+        current title, <b style="color:var(--amber)">amber</b> when within the near-miss amount of the next rung, and
+        <b style="color:var(--red)">red</b> when rolling GP sits under their current title&rsquo;s threshold.
+        <br><br>
+        Leadership titles (Recruiting Team Lead, Recruiting Manager) are shown but sit off the ladder. Recruiters with
+        no title, or a title with no rung yet (Technical Recruiter, Sr Technical Recruiter, Lead Technical Recruiter),
+        use the <b>&ldquo;Review at or above&rdquo;</b> setting instead. Anyone hired too recently to have the minimum
+        tenure is held out as <b>insufficient tenure</b> rather than flagged either way.
       </div>
     </div>
   </div>
@@ -1227,7 +1232,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Total Subs</th><th>Total Interviews</th><th>Total Placements</th><th>Total Starts</th><th>Total Leads</th><th>Vertical</th><th>Birthday</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
+            <th>Name</th><th>Manager</th><th>Title</th><th>Total Subs</th><th>Total Interviews</th><th>Total Placements</th><th>Total Starts</th><th>Total Leads</th><th>Vertical</th><th>Birthday</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
           </tr></thead>
           <tbody id="roster-active-body"></tbody>
         </table>
@@ -4252,6 +4257,7 @@ function exportRosterPresets() {
   const hireDates = getHireDates();
   const birthdays = getBirthdays();
   const verticals = getVerticals();
+  const titles = getTitles();
 
   // Only keep names still known to the dashboard, so dead keys don't accumulate
   const known = {};
@@ -4262,14 +4268,14 @@ function exportRosterPresets() {
     Object.keys(map).sort().forEach(function(k){ if (known[k] && map[k]) out[k] = map[k]; });
     return out;
   }
-  const hd = prune(hireDates), bd = prune(birthdays), vt = prune(verticals);
+  const hd = prune(hireDates), bd = prune(birthdays), vt = prune(verticals), tt = prune(titles);
 
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
-    label: 'STEM Dashboard roster presets (hire dates, birthdays, verticals)',
-    counts: { hireDates: Object.keys(hd).length, birthdays: Object.keys(bd).length, verticals: Object.keys(vt).length },
-    hireDates: hd, birthdays: bd, verticals: vt
+    label: 'STEM Dashboard roster presets (hire dates, birthdays, verticals, titles)',
+    counts: { hireDates: Object.keys(hd).length, birthdays: Object.keys(bd).length, verticals: Object.keys(vt).length, titles: Object.keys(tt).length },
+    hireDates: hd, birthdays: bd, verticals: vt, titles: tt
   };
 
   // Download a real file — more reliable than the clipboard, and attachable.
@@ -4282,15 +4288,17 @@ function exportRosterPresets() {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
 
-  // Also offer the paste-ready JS for the three PRESET maps
+  // Also offer the paste-ready JS for the four PRESET maps
   const js = 'const PRESET_HIRE_DATES = ' + JSON.stringify(hd, null, 2) + ';\n\n'
            + 'const PRESET_BIRTHDAYS = '  + JSON.stringify(bd, null, 2) + ';\n\n'
-           + 'const PRESET_VERTICALS = '  + JSON.stringify(vt, null, 2) + ';';
+           + 'const PRESET_VERTICALS = '  + JSON.stringify(vt, null, 2) + ';\n\n'
+           + 'const PRESET_TITLES = '     + JSON.stringify(tt, null, 2) + ';';
   copyToClipboard(js,
     '\u2705 Roster presets copied and downloaded!\n\n'
     + Object.keys(hd).length + ' hire dates, '
     + Object.keys(bd).length + ' birthdays, '
-    + Object.keys(vt).length + ' verticals.\n\n'
+    + Object.keys(vt).length + ' verticals, '
+    + Object.keys(tt).length + ' titles.\n\n'
     + 'The .json file is in your Downloads folder.');
 }
 
@@ -4299,15 +4307,17 @@ function exportArchivedForEmbed() {
   const hireDates = getHireDates();
   const birthdays = getBirthdays();
   const verticals = getVerticals();
+  const titles = getTitles();
   const enriched = archivedRecruiters.map(function(a) {
     return Object.assign({}, a, {
       hireDate: hireDates[a.name] || a.hireDate || '',
       birthday: birthdays[a.name] || a.birthday || '',
-      vertical: verticals[a.name] || a.vertical || ''
+      vertical: verticals[a.name] || a.vertical || '',
+      title: titles[a.name] || a.title || ''
     });
   });
   const json = JSON.stringify(enriched, null, 2);
-  copyToClipboard(json, '✅ Archived list copied to clipboard!\n\nIncludes hire dates, birthdays, and verticals.\nPaste into PRESET_ARCHIVED = [] in your next dashboard update.');
+  copyToClipboard(json, '✅ Archived list copied to clipboard!\n\nIncludes hire dates, birthdays, verticals, and titles.\nPaste into PRESET_ARCHIVED = [] in your next dashboard update.');
 }
 
 function exportSettings() {
@@ -4324,6 +4334,7 @@ function exportSettings() {
     stemHireDates: safeGet('stemHireDates') || '{}',
     stemVerticals:  safeGet('stemVerticals')  || '{}',
     stemBirthdays:  safeGet('stemBirthdays')  || '{}',
+    stemTitles:     safeGet('stemTitles')     || '{}',
     stemWeekFlags:  safeGet('stemWeekFlags')  || '{}',
     // Auth
     stemUsers:     safeGet('stemUsers')     || '[]',
@@ -4357,7 +4368,9 @@ function importSettings() {
         if (!p.version) throw new Error('Not a valid settings file');
 
         // Restore all keys
-        const keys = ['stemXW','stemBaseEdits','stemArchived','stemNewRecs','stemHireDates','stemUsers','stemInvites','stemSession','stemLastSync'];
+        // stemBirthdays, stemWeekFlags and stemTitles are exported, so restore them too
+        // (birthdays and week flags were previously exported but silently skipped).
+        const keys = ['stemXW','stemBaseEdits','stemArchived','stemNewRecs','stemHireDates','stemBirthdays','stemWeekFlags','stemTitles','stemUsers','stemInvites','stemSession','stemLastSync'];
         keys.forEach(function(k) {
           if (p[k] !== undefined && p[k] !== '') safeSet(k, p[k]);
         });
@@ -5359,7 +5372,7 @@ function updateAuthUI() {
             ${mi('💾','Export Settings','exportSettings','Export all settings to a backup file')}
             ${mi('📂','Import Settings','importSettings','Restore settings from a backup file')}
             ${mi('📋','Copy Archived JSON','exportArchivedForEmbed','Copy archived list JSON to embed in dashboard file')}
-            ${mi('🧬','Copy Roster Presets','exportRosterPresets','Download + copy hire dates, birthdays and verticals to bake into the dashboard file')}
+            ${mi('🧬','Copy Roster Presets','exportRosterPresets','Download + copy hire dates, birthdays, verticals and titles to bake into the dashboard file')}
             ${isAdmin ? sec('Admin')+mi('👥','Manage editors','openUserModal','') : ''}
             <div style="border-top:1px solid var(--border);margin:6px 4px"></div>
             ${mi('🚪','Sign out','signOut','')}
@@ -5758,7 +5771,7 @@ function saveEditModal() {
 const PRESET_ARCHIVED = [{"name":"Heather McRae","manager":"Noah","archivedOn":"6/4/2026","endedOn":"05/08/2026","subs":[6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],"ivs":[1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],"placements":[0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],"hireDate":"2014-07-07","birthday":""},{"name":"Helen Phillips","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/19/2026","subs":[2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],"ivs":[1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],"placements":[0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],"starts":[1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],"leads":[0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],"hireDate":"2003-02-07","birthday":"06/30"},{"name":"John Gorsuch","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/10/2026","subs":[5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],"ivs":[1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],"starts":[0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],"leads":[0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],"hireDate":"2022-09-12","birthday":""},{"name":"Jason Beir","manager":"Kevin","archivedOn":"6/8/2026","endedOn":"06/05/2026","subs":[4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],"ivs":[3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],"placements":[0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2020-10-01","birthday":""},{"name":"Jessica Paden","manager":"Brett","archivedOn":"6/9/2026","endedOn":"06/08/2026","subs":[6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],"ivs":[2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],"placements":[2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],"starts":[0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],"leads":[0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],"hireDate":"2024-01-29","birthday":"06/30"},{"name":"Stephen Pemberton","manager":"Joe","archivedOn":"6/23/2026","endedOn":"06/22/2026","subs":[5,3,6,5,5,7,5,6,6,5,4,10,6,7,5,10,7,5,5,5,4,5,10,3],"ivs":[0,0,1,0,1,0,1,3,0,1,0,1,1,0,2,0,3,2,2,2,0,0,0,0],"placements":[0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0],"starts":[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0],"leads":[1,0,0,0,5,2,1,0,3,2,0,1,0,2,0,1,0,0,0,0,1,1,0,2],"hireDate":"2025-12-15","birthday":"07/20"},{"name":"Taylor Durrill","manager":"Noah","archivedOn":"7/15/2026","endedOn":"07/15/2026","subs":[5,7,6,7,4,6,6,6,6,null,null,null,null,null,null,null,null,null,null,null,0,0,4,2,3,3,5],"ivs":[0,2,0,2,0,1,1,1,2,1,null,1,null,null,null,null,0,0,0,0,0,0,0,0,0,3,1],"placements":[0,0,0,0,1,0,0,0,0,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0,0,0],"starts":[0,0,0,0,0,0,1,0,0,null,null,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,1,1,1,1,3,null,null,null,null,null,null,null,null,null,0,null,0,0,0,1,0,2,0],"hireDate":"2024-03-26","birthday":"01/18"},{"name":"Aidan (AJ) Smith","manager":"Rachel","archivedOn":"8/20/2026","endedOn":"08/17/2026","subs":[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5,7,0,0,4,5,7,6,3,4,6,5,5,6,3],"ivs":[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3,0,0,0,0,1,0,3,1,5,0,0,2,3,0],"placements":[0,1,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0],"starts":[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0,0,0,0,0,1,0,0,1,1,0,0,3,0,0],"hireDate":"2025-07-14","birthday":"01/31"}];
 
 // PRESET_VERTICALS — baked in to survive dashboard updates.
-// Snapshot from the roster preset export of 2026-08-30. localStorage always
+// Snapshot from the roster preset export of 2026-09-16. localStorage always
 // wins, so a later edit in the browser is never overwritten by these values.
 // After changing verticals, re-run "Copy Roster Presets" and paste the result
 // here, or the change lives only in that one browser.
@@ -5836,14 +5849,18 @@ let archivedRecruiters = (function() {
     });
     const vExisting = getVerticals();
     let vtChanged = false;
+    const tExisting = getTitles();
+    let ttChanged = false;
     merged.forEach(function(a) {
       if (a.hireDate && !hireDates[a.name]) { hireDates[a.name] = a.hireDate; hdChanged = true; }
       if (a.birthday && !birthdays[a.name]) { birthdays[a.name] = a.birthday; bdChanged = true; }
       if (a.vertical && !vExisting[a.name]) { vExisting[a.name] = a.vertical; vtChanged = true; }
+      if (a.title && !Object.prototype.hasOwnProperty.call(tExisting, a.name)) { tExisting[a.name] = a.title; ttChanged = true; }
     });
     if (hdChanged) saveHireDates(hireDates);
     if (bdChanged) saveBirthdays(birthdays);
     if (vtChanged) saveVerticals(vExisting);
+    if (ttChanged) saveTitles(tExisting);
   }, 500);
   return merged;
 })();
@@ -6325,6 +6342,117 @@ function saveVertical(name, value, td) {
     : '<span style="font-size:11px;color:var(--text3);font-style:italic">Click to set</span>';
 }
 
+// ─── TITLE MANAGEMENT ───
+// Ladder titles map to a GP_BANDS rung by exact name. "Other recruiter titles"
+// are valid roster values with no rung assigned yet, so the Promotion Tracker
+// shows them but falls back to the fixed review threshold. Leadership titles
+// sit off the ladder entirely.
+const TITLE_LEGACY = ['Technical Recruiter', 'Sr Technical Recruiter', 'Lead Technical Recruiter'];
+const TITLE_LEADERSHIP = ['Recruiting Team Lead', 'Recruiting Manager'];
+
+// PRESET_TITLES — baked in from the title list of 2026-09-16. Names that could
+// not be matched with confidence were left out on purpose; set them in the
+// Roster. localStorage always wins, including a deliberate clear.
+// After changing titles, re-run "Copy Roster Presets" and paste the result here.
+const PRESET_TITLES = {
+  "Amy Orndorff": "Technical Recruiter", "Andraea Hagadorn": "Senior Recruiter 1", "Andy Dalmau": "Sr Technical Recruiter",
+  "Anthony Ginnis": "Senior Recruiter 2", "Barry Andis": "Lead Technical Recruiter", "Benjamin Grover": "Recruiting Team Lead",
+  "Brett Schuber": "Recruiting Manager", "Briana Moglia": "Executive Recruiter 1", "Briana Siler": "Principal Recruiter 2",
+  "Brittany Youlden": "Principal Recruiter 1", "Corey Phillips": "Senior Recruiter 1", "Dan Van Gemert": "Principal Recruiter 2",
+  "Drew Barker": "Senior Recruiter 2", "Erin Cadden": "Senior Recruiter 1", "Fadia Ferrari": "Senior Recruiter 1",
+  "Felipe Parra": "Senior Recruiter 2", "Gary Prestipino": "Sr Technical Recruiter", "Heather Stevens": "Technical Recruiter",
+  "Henry Schibli": "Technical Recruiter 2", "Jared Pliskow": "Senior Recruiter 1", "Jenna Katz": "Technical Recruiter",
+  "Jessica Mema": "Technical Recruiter", "Jillian Dunn": "Technical Recruiter", "Jonathan Robertson": "Senior Recruiter 2",
+  "Joseph Paolozzi": "Executive Recruiter 1", "Justin LaSorsa": "Technical Recruiter 1", "Kaitlyn Moreschi": "Senior Recruiter 1",
+  "Kyle McMahon": "Technical Recruiter 2", "Lazaro Calderin": "Principal Recruiter 1", "Logan Rayburn": "Technical Recruiter 1",
+  "Madison Garra": "Senior Recruiter 1", "Marisa Harthun": "Technical Recruiter", "Matt Grimes": "Recruiting Manager",
+  "Megan Curtis": "Senior Recruiter 1", "Michael Brennan": "Principal Recruiter 1", "Michael Sheahan": "Senior Recruiter 2",
+  "Noah Simon": "Recruiting Manager", "Paige Atkinson": "Recruiting Team Lead", "Peter Costello": "Senior Recruiter 1",
+  "Rachael Watkins": "Senior Recruiter 1", "Rachel Hewitt": "Recruiting Manager", "Rebecca Schopfer": "Senior Recruiter 2",
+  "Sam Royall": "Senior Recruiter 1", "Samuel Simon": "Senior Recruiter 2", "Sean McDivitt": "Senior Recruiter 1",
+  "Tiffany Silgas": "Senior Recruiter 2", "Tyler Rostad": "Recruiting Manager", "William Payton": "Recruiting Team Lead",
+  "Zachary Jacobson": "Recruiting Manager"
+};
+
+function getTitles() { try { return JSON.parse(safeGet('stemTitles') || '{}'); } catch (e) { return {}; } }
+function saveTitles(d) { safeSet('stemTitles', JSON.stringify(d)); }
+function getTitle(name) { return getTitles()[name] || ''; }
+
+// Ladder rung for a title: GP_BANDS index, 'lead' for leadership, null if blank or no rung
+function titleRung(title) {
+  if (!title) return null;
+  if (TITLE_LEADERSHIP.indexOf(title) >= 0) return 'lead';
+  for (var i = 0; i < GP_BANDS.length; i++) if (GP_BANDS[i].t === title) return i;
+  return null;
+}
+
+// Seed PRESET_TITLES. hasOwnProperty rather than truthiness, so a title an
+// admin cleared (stored as '') is not re-seeded on the next load.
+(function() {
+  var t = getTitles();
+  var changed = false;
+  Object.keys(PRESET_TITLES).forEach(function(name) {
+    if (!Object.prototype.hasOwnProperty.call(t, name)) { t[name] = PRESET_TITLES[name]; changed = true; }
+  });
+  if (changed) saveTitles(t);
+})();
+
+function titleCellHtml(title) {
+  return title
+    ? '<span style="font-size:11px;color:var(--text)">' + title + '</span>'
+    : '<span style="font-size:11px;color:var(--text3);font-style:italic">Click to set</span>';
+}
+
+function editTitle(name, td) {
+  if (!currentUser) return;
+  if (td.querySelector('.vert-dropdown')) return;
+  const current = getTitle(name);
+  const menu = document.createElement('div');
+  menu.className = 'vert-dropdown';
+  menu.style.cssText = 'position:absolute;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.3);min-width:220px;padding:4px;max-height:320px;overflow-y:auto';
+
+  function addOpt(label, value, muted) {
+    const opt = document.createElement('div');
+    opt.textContent = label;
+    const on = !!value && value === current;
+    opt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;border-radius:4px;' + (on ? 'background:var(--accent-dim);color:var(--accent);font-weight:600' : ('color:' + (muted ? 'var(--text3)' : 'var(--text)')));
+    opt.onmouseenter = function(){ if (!on) opt.style.background = 'var(--bg2)'; };
+    opt.onmouseleave = function(){ opt.style.background = on ? 'var(--accent-dim)' : ''; };
+    opt.onmousedown = function(e){ e.preventDefault(); saveTitle(name, value, td); menu.remove(); };
+    menu.appendChild(opt);
+  }
+  function addGroup(label) {
+    const g = document.createElement('div');
+    g.textContent = label;
+    g.style.cssText = 'padding:8px 12px 3px;font-size:10px;font-weight:700;color:var(--text3)';
+    menu.appendChild(g);
+  }
+  addOpt('Clear', '', true);
+  addGroup('Promotion ladder');
+  GP_BANDS.forEach(function(b){ addOpt(b.t, b.t); });
+  addGroup('Other recruiter titles (no rung yet)');
+  TITLE_LEGACY.forEach(function(t){ addOpt(t, t); });
+  addGroup('Leadership (off ladder)');
+  TITLE_LEADERSHIP.forEach(function(t){ addOpt(t, t); });
+
+  td.style.position = 'relative';
+  td.appendChild(menu);
+  function onOutside(e) {
+    if (!menu.contains(e.target) && e.target !== td) {
+      menu.remove();
+      document.removeEventListener('mousedown', onOutside);
+    }
+  }
+  setTimeout(function(){ document.addEventListener('mousedown', onOutside); }, 0);
+}
+
+function saveTitle(name, value, td) {
+  const t = getTitles();
+  t[name] = value || ''; // keep the key so a clear is not re-seeded from the preset
+  saveTitles(t);
+  if (td) { td.style.position = ''; td.innerHTML = titleCellHtml(value); }
+}
+
 // ─── BIRTHDAY MANAGEMENT ───
 function getBirthdays() { return JSON.parse(safeGet('stemBirthdays') || '{}'); }
 function saveBirthdays(d) { safeSet('stemBirthdays', JSON.stringify(d)); }
@@ -6476,7 +6604,7 @@ function renderRoster() {
   }
 
   if (!all.length && RECRUITERS.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:var(--text3)">Loading recruiters… if this persists, try clicking ⟳ Sync above.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--text3)">Loading recruiters… if this persists, try clicking ⟳ Sync above.</td></tr>`;
     return;
   }
   tbody.innerHTML = all.map(r => {
@@ -6490,6 +6618,7 @@ function renderRoster() {
     return `<tr>
       <td style="font-weight:500;white-space:nowrap">${r.name}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
+      <td id="title_${safeId}" data-name="${r.name.replace(/"/g,'&quot;')}" onclick="editTitle(this.dataset.name, this)" style="cursor:pointer;min-width:130px;font-size:11px;white-space:nowrap" title="Click to set title">${titleCellHtml(getTitle(r.name))}</td>
       <td>${r.totalSubs}</td>
       <td>${r.totalIvs}</td>
       <td style="color:var(--purple)">${r.totalPlacements}</td>
@@ -6504,7 +6633,7 @@ function renderRoster() {
         <button class="btn" onclick="promptArchive('${r.name.replace(/'/g,"\\'")}')" style="font-size:10px;height:24px;padding:0 8px;color:var(--amber)">📦 Archive</button>
       </td>
     </tr>`
-  }).join('') || `<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--text3)">No recruiters match this filter.</td></tr>`;
+  }).join('') || `<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--text3)">No recruiters match this filter.</td></tr>`;
 
   // Archived recruiters table
   const archived = archivedRecruiters.filter(r => (!mgrF || r.manager === mgrF) && (!q || r.name.toLowerCase().includes(q)));
@@ -8153,31 +8282,59 @@ function renderGpTrip() {
 }
 
 // ─── PROMOTION TRACKER ───
+// Promotion row for one recruiter. With a ladder title, the next promotion is
+// the rung above that title and "Ready for review" means the rolling GP band
+// earned is above the current title. Leadership titles sit off the ladder.
+// Blank titles and titles with no rung keep the fixed review-band logic.
+function computePromoRow(r, gp, title, tenure, reviewIdx, near, minWks) {
+  var earned  = gpBandEarned(gp);
+  var rung    = titleRung(title);
+  var mode    = rung === 'lead' ? 'lead' : (typeof rung === 'number' ? 'title' : 'fixed');
+  var nextIdx;
+  if (mode === 'title')      nextIdx = (rung + 1 < GP_BANDS.length) ? rung + 1 : null;
+  else if (mode === 'lead')  nextIdx = null;
+  else                       nextIdx = (earned + 1 < GP_BANDS.length) ? earned + 1 : null;
+  var gapNext = nextIdx !== null ? Math.max(0, GP_BANDS[nextIdx].v - gp) : 0;
+  var pctNext = nextIdx !== null ? (GP_BANDS[nextIdx].v ? gp / GP_BANDS[nextIdx].v * 100 : 0) : 100;
+  var enough  = tenure >= minWks;
+  var status, scol, flagged = false, isReview = false, belowTitle = false;
+  if (mode === 'lead') {
+    status = 'Leadership (off ladder)'; scol = 'var(--text3)';
+  } else if (!enough) {
+    status = 'Insufficient tenure (' + tenure + ' wks)'; scol = 'var(--text3)';
+  } else if (mode === 'title') {
+    belowTitle = earned < rung;
+    if (nextIdx === null) {
+      status = 'Top of ladder'; scol = 'var(--purple)';
+    } else if (earned > rung) {
+      status = 'Ready for review'; scol = 'var(--green)'; flagged = true; isReview = true;
+    } else if (gapNext <= near) {
+      status = 'Near next promotion'; scol = 'var(--amber)'; flagged = true;
+    } else if (belowTitle) {
+      status = 'Below title band'; scol = 'var(--red)';
+    } else {
+      status = 'Tracking'; scol = 'var(--text3)';
+    }
+  } else if (earned >= reviewIdx) {
+    status = 'Review for promotion'; scol = 'var(--green)'; flagged = true; isReview = true;
+  } else if (nextIdx !== null && gapNext <= near) {
+    status = 'Near next band'; scol = 'var(--amber)'; flagged = true;
+  } else if (earned < 0) {
+    status = 'Below entry band'; scol = 'var(--red)';
+  } else {
+    status = 'Tracking'; scol = 'var(--text3)';
+  }
+  return {r:r, gp:gp, earned:earned, nextIdx:nextIdx, gapNext:gapNext, pctNext:pctNext,
+          tenure:tenure, enough:enough, status:status, scol:scol, flagged:flagged, isReview:isReview,
+          title:title, rung:rung, mode:mode, belowTitle:belowTitle};
+}
+
 function computePromoRows(recs, nW, reviewIdx, near, minWks) {
   var f = Math.max(0, nW - PROMO_ROLL_WKS);
   var t = nW - 1;
   return recs.map(function(r) {
-    var gp      = gpWindowSum(r.weekly, f, t);
-    var earned  = gpBandEarned(gp);
-    var nextIdx = (earned + 1 < GP_BANDS.length) ? earned + 1 : null;
-    var gapNext = nextIdx !== null ? GP_BANDS[nextIdx].v - gp : 0;
-    var pctNext = nextIdx !== null ? (GP_BANDS[nextIdx].v ? gp / GP_BANDS[nextIdx].v * 100 : 0) : 100;
-    var tenure  = gpTenureWeeksInWindow(r.name, PROMO_ROLL_WKS);
-    var enough  = tenure >= minWks;
-    var status, scol, flagged = false, isReview = false;
-    if (!enough) {
-      status = 'Insufficient tenure (' + tenure + ' wks)'; scol = 'var(--text3)';
-    } else if (earned >= reviewIdx) {
-      status = 'Review for promotion'; scol = 'var(--green)'; flagged = true; isReview = true;
-    } else if (nextIdx !== null && gapNext <= near) {
-      status = 'Near next band'; scol = 'var(--amber)'; flagged = true;
-    } else if (earned < 0) {
-      status = 'Below entry band'; scol = 'var(--red)';
-    } else {
-      status = 'Tracking'; scol = 'var(--text3)';
-    }
-    return {r:r, gp:gp, earned:earned, nextIdx:nextIdx, gapNext:gapNext, pctNext:pctNext,
-            tenure:tenure, enough:enough, status:status, scol:scol, flagged:flagged, isReview:isReview};
+    return computePromoRow(r, gpWindowSum(r.weekly, f, t), getTitle(r.name),
+      gpTenureWeeksInWindow(r.name, PROMO_ROLL_WKS), reviewIdx, near, minWks);
   });
 }
 
@@ -8225,26 +8382,28 @@ function renderGpPromo() {
   var rows       = computePromoRows(recs, nW, reviewIdx, near, minWks);
   var reviewRows = rows.filter(function(x){ return x.isReview; });
   var nearRows   = rows.filter(function(x){ return x.flagged && !x.isReview; });
-  var noTenure   = rows.filter(function(x){ return !x.enough; });
-  var belowEntry = rows.filter(function(x){ return x.enough && x.earned < 0; });
-  var topBand    = rows.filter(function(x){ return x.enough && x.earned === GP_BANDS.length-1; }).length;
-  var avg        = rows.reduce(function(s,x){ return s+x.gp; }, 0) / rows.length;
+  var ladderRows = rows.filter(function(x){ return x.mode !== 'lead'; });
+  var noTenure   = ladderRows.filter(function(x){ return !x.enough; });
+  var belowEntry = ladderRows.filter(function(x){ return x.enough && x.earned < 0; });
+  var belowTitle = ladderRows.filter(function(x){ return x.enough && x.belowTitle; });
+  var noTitle    = ladderRows.filter(function(x){ return x.mode === 'fixed'; }).length;
+  var avg        = ladderRows.length ? ladderRows.reduce(function(s,x){ return s+x.gp; }, 0) / ladderRows.length : 0;
 
   document.getElementById('promo-kpis').innerHTML =
-      gpKpiCard('Review for promotion', reviewRows.length, 'var(--green)', 'Cleared ' + GP_BANDS[reviewIdx].t)
-    + gpKpiCard('Near next band', nearRows.length, 'var(--amber)', 'Within ' + formatGP(near) + ' of next rung')
-    + gpKpiCard('At top band', topBand, 'var(--purple)', 'Cleared ' + formatGP(GP_BANDS[GP_BANDS.length-1].v))
+      gpKpiCard('Ready for review', reviewRows.length, 'var(--green)', 'Earned a band above their title')
+    + gpKpiCard('Near next promotion', nearRows.length, 'var(--amber)', 'Within ' + formatGP(near) + ' of next rung')
+    + gpKpiCard('Below title band', belowTitle.length, 'var(--red)', 'Rolling GP under their title\'s threshold')
     + gpKpiCard('Below entry band', belowEntry.length, 'var(--red)', 'Under ' + formatGP(GP_BANDS[0].v))
     + gpKpiCard('Insufficient tenure', noTenure.length, 'var(--text3)', 'Under ' + minWks + ' wks since hire')
-    + gpKpiCard('Avg rolling 26wk', formatGP(Math.round(avg)), 'var(--text)', rows.length + ' recruiters');
+    + gpKpiCard('Avg rolling 26wk', formatGP(Math.round(avg)), 'var(--text)', ladderRows.length + ' recruiters' + (noTitle ? ' \u00b7 ' + noTitle + ' without a ladder title' : ''));
 
-  var noneN = rows.filter(function(x){ return x.enough && x.earned < 0; }).length;
+  var noneN = belowEntry.length;
   document.getElementById('promo-dist').innerHTML =
     '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 11px">'
     + '<div style="font-size:18px;font-weight:700;color:var(--text3)">'+noneN+'</div>'
     + '<div style="font-size:10px;color:var(--text3);line-height:1.35;margin-top:2px">No band<br>under '+formatGP(GP_BANDS[0].v)+'</div></div>'
     + GP_BANDS.map(function(b, i) {
-        var n  = rows.filter(function(x){ return x.enough && x.earned === i; }).length;
+        var n  = ladderRows.filter(function(x){ return x.enough && x.earned === i; }).length;
         var on = i >= reviewIdx;
         return '<div style="background:var(--bg2);border:1px solid '+(on?'var(--green)':'var(--border)')+';border-radius:8px;padding:9px 11px">'
           + '<div style="font-size:18px;font-weight:700;color:'+(on?'var(--green)':'var(--text2)')+'">'+n+'</div>'
@@ -8255,13 +8414,18 @@ function renderGpPromo() {
   view.sort(function(a,b) {
     if (sort==='name') return a.r.name.localeCompare(b.r.name);
     if (sort==='mgr')  return a.r.manager.localeCompare(b.r.manager) || b.gp - a.gp;
+    if (sort==='title') {
+      var ra = typeof a.rung === 'number' ? a.rung : (a.mode === 'lead' ? 99 : -1);
+      var rb = typeof b.rung === 'number' ? b.rung : (b.mode === 'lead' ? 99 : -1);
+      return rb - ra || (a.title||'').localeCompare(b.title||'') || b.gp - a.gp;
+    }
     if (sort==='gap')  return (a.nextIdx===null?Infinity:a.gapNext) - (b.nextIdx===null?Infinity:b.gapNext);
     return b.gp - a.gp;
   });
 
   document.getElementById('promo-thead').innerHTML = '<tr>'
     + '<th style="min-width:34px">#</th><th class="sticky-col-1" style="min-width:140px">Recruiter</th><th class="sticky-col-2">Mgr</th>'
-    + '<th style="text-align:right">Rolling 26wk GP</th><th>Band earned</th><th>Next band</th>'
+    + '<th>Title</th><th style="text-align:right">Rolling 26wk GP</th><th>Band earned</th><th>Next promotion</th>'
     + '<th style="min-width:130px">Progress to next</th><th style="text-align:right">Gap to next</th><th>Status</th></tr>';
 
   tbody.innerHTML = view.map(function(x, i) {
@@ -8269,13 +8433,19 @@ function renderGpPromo() {
     var earnedTxt = x.earned < 0
       ? '<span style="color:var(--text3)">\u2014 none</span>'
       : '<span class="pill" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+(x.isReview?'var(--green-bg)':'var(--bg4)')+';color:'+(x.isReview?'var(--green)':'var(--text3)')+'">'+GP_BANDS[x.earned].t+'</span>';
+    var titleTxt = x.title
+      ? '<span style="color:'+(x.mode==='fixed'?'var(--text2)':'var(--text)')+'"'+(x.mode==='fixed'?' title="No ladder rung for this title; using the review band setting"':'')+'>'+x.title+'</span>'
+      : '<span style="color:var(--text3);font-style:italic">Not set</span>';
+    var nextTxt = x.nextIdx !== null ? GP_BANDS[x.nextIdx].t
+      : '<span style="font-size:11px;color:var(--text3)">'+(x.mode==='lead'?'\u2014':'top of ladder')+'</span>';
     return '<tr'+(x.isReview?' style="background:var(--green-bg)"':'')+'>'
       + '<td style="color:var(--text3)">'+(i+1)+'</td>'
       + '<td class="sticky-col-1" style="font-weight:500;white-space:nowrap">'+x.r.name+rampIcon(x.r.name)+'</td>'
       + '<td class="sticky-col-2">'+gpMgrChip(x.r.manager)+'</td>'
+      + '<td style="white-space:nowrap;font-size:12px">'+titleTxt+'</td>'
       + '<td style="text-align:right;font-weight:700;color:'+col+'">'+formatGP(x.gp)+'</td>'
       + '<td>'+earnedTxt+'</td>'
-      + '<td style="color:var(--text2)">'+(x.nextIdx!==null?GP_BANDS[x.nextIdx].t:'<span style="font-size:11px;color:var(--text3)">top of ladder</span>')+'</td>'
+      + '<td style="color:var(--text2)">'+nextTxt+'</td>'
       + '<td>'+(x.nextIdx!==null ? gpBar(x.pctNext, col)+'<span style="font-size:10px;color:var(--text3)">'+x.pctNext.toFixed(0)+'% of '+formatGP(GP_BANDS[x.nextIdx].v)+'</span>' : '\u2014')+'</td>'
       + '<td style="text-align:right;color:var(--text2)">'+(x.nextIdx!==null?formatGP(x.gapNext):'\u2014')+'</td>'
       + '<td><span class="pill" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+x.scol+'22;color:'+x.scol+'">'+x.status+'</span></td>'
@@ -9937,7 +10107,7 @@ var XL_DATASETS = [
       var hd = (typeof hireDates !== 'undefined') ? hireDates : {};
       var rows = recs.map(function(r) {
         return [
-          r.name, r.manager, verts[r.name] || '', hd[r.name] || r.hireDate || '',
+          r.name, r.manager, getTitle(r.name), verts[r.name] || '', hd[r.name] || r.hireDate || '',
           r.totalSubs, r.totalIvs, r.totalPlacements, r.totalStarts, r.totalLeads,
           r.avgSub4w != null ? +r.avgSub4w.toFixed(2) : null,
           r.sub2iv, r.iv2placement, r.pl2start, r.sub2start,
@@ -9951,7 +10121,7 @@ var XL_DATASETS = [
       return {
         name: 'Recruiter summary', title: 'Recruiter summary', bandCol: 1, freezeCols: 1,
         cols: [
-          { h: 'Recruiter', min: 20 }, { h: 'Manager', w: 12 }, { h: 'Vertical', w: 16 },
+          { h: 'Recruiter', min: 20 }, { h: 'Manager', w: 12 }, { h: 'Title', w: 20 }, { h: 'Vertical', w: 16 },
           { h: 'Hire date', w: 12, z: XL_FMT.text },
           { h: 'Submittals', w: 11, z: XL_FMT.int, total: 'sum' },
           { h: 'Interviews', w: 11, z: XL_FMT.int, total: 'sum' },
@@ -10195,7 +10365,7 @@ var XL_DATASETS = [
           if (!isNaN(d.getTime())) tenure = +((now - d) / (365.25 * 24 * 3600 * 1000)).toFixed(1);
         }
         return [
-          r.name, r.manager, verts[r.name] || '', h, tenure, bd[r.name] || '',
+          r.name, r.manager, getTitle(r.name), verts[r.name] || '', h, tenure, bd[r.name] || '',
           r._isArchived ? 'Archived' : 'Active',
           r.archivedOn || '', r.endedOn || ''
         ];
@@ -10203,7 +10373,7 @@ var XL_DATASETS = [
       return {
         name: 'Roster', title: 'Roster', bandCol: 1, freezeCols: 1,
         cols: [
-          { h: 'Recruiter', min: 20 }, { h: 'Manager', w: 12 }, { h: 'Vertical', w: 18 },
+          { h: 'Recruiter', min: 20 }, { h: 'Manager', w: 12 }, { h: 'Title', w: 20 }, { h: 'Vertical', w: 18 },
           { h: 'Hire date', w: 12, z: XL_FMT.text },
           { h: 'Tenure (yrs)', w: 11, z: XL_FMT.dec1 },
           { h: 'Birthday', w: 10, z: XL_FMT.text },
