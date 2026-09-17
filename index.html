@@ -1069,7 +1069,8 @@ td.editing{padding:2px 4px!important}
         <br><br>
         Titles come from the Roster tab. For anyone on a ladder title, <b>next promotion</b> is the rung above that
         title. They turn <b style="color:var(--green)">green</b> (ready for review) once the band earned is above their
-        current title, <b style="color:var(--amber)">amber</b> when within the near-miss amount of the next rung, and
+        current title; next promotion then shows the band they have earned and how many rungs past their title
+        it is, with progress and gap marked <b>eligible now</b>. They turn <b style="color:var(--amber)">amber</b> when within the near-miss amount of the next rung, and
         <b style="color:var(--red)">red</b> when rolling GP sits under their current title&rsquo;s threshold.
         <br><br>
         Leadership titles (Recruiting Team Lead, Recruiting Manager) are shown but sit off the ladder. Recruiters with
@@ -1861,7 +1862,7 @@ async function replPreflight(weekNum, weekData) {
   const wdLower = {};
   Object.keys(weekData || {}).forEach(function(k){ wdLower[k.trim().toLowerCase()] = weekData[k]; });
   let archivedNm = [];
-  try { archivedNm = JSON.parse(safeGet('stemArchived') || '[]').map(function(a){ return (a.name||'').trim().toLowerCase(); }); } catch(e) {}
+  try { archivedNm = JSON.parse(safeGet('stemArchived') || '[]').map(function(a){ return archKey(a.name); }); } catch(e) {}
 
   for (const metric of Object.keys(REPL_TABS)) {
     const tabName = REPL_TABS[metric];
@@ -1888,7 +1889,7 @@ async function replPreflight(weekNum, weekData) {
         if (!nm) continue;
         const lo = nm.toLowerCase();
         if (['total','avg','average','recruiter'].some(function(x){ return lo === x || lo.includes(x); })) continue;
-        if (archivedNm.indexOf(lo) >= 0) continue;
+        if (archivedNm.indexOf(archKey(lo)) >= 0) continue;
         seen[lo] = true;
         const rd = wdLower[lo];
         if (!rd) { if (out.sheetOnly.indexOf(nm) < 0) out.sheetOnly.push(nm); continue; }
@@ -2072,7 +2073,7 @@ async function writeWeekToSheet(weekData, weekLabel) {
 
       // Archived names to skip
       let archivedNm = [];
-      try { archivedNm = JSON.parse(safeGet('stemArchived')||'[]').map(a=>(a.name||'').trim().toLowerCase()); } catch(e){}
+      try { archivedNm = JSON.parse(safeGet('stemArchived')||'[]').map(a=>archKey(a.name)); } catch(e){}
 
       const updates = [];
       for (let ri = headerRowIdx+1; ri < rows.length; ri++) {
@@ -2080,7 +2081,7 @@ async function writeWeekToSheet(weekData, weekLabel) {
         if (!name) continue;
         const lo = name.toLowerCase();
         if (['total','avg','average','recruiter'].some(x=>lo===x||lo.includes(x))) continue;
-        if (archivedNm.indexOf(lo) >= 0) continue;
+        if (archivedNm.indexOf(archKey(lo)) >= 0) continue;
         const rd = wdLower[lo];
         if (!rd) continue;
         const val = rd[metric] || 0;
@@ -2403,6 +2404,7 @@ function toggleIncludeArchived() {
     else if (t==='recruiter') renderRecruiter();
     else if (t==='trends') renderTrends();
     else if (t==='leaderboard') renderLeaderboard();
+    else if (t==='recap') renderRecap();
   }
 }
 
@@ -4330,6 +4332,7 @@ function exportSettings() {
     stemBaseEdits: safeGet('stemBaseEdits') || '{}',
     // Roster
     stemArchived:  safeGet('stemArchived')  || '[]',
+    stemUnarchived: safeGet('stemUnarchived') || '[]',
     stemNewRecs:   safeGet('stemNewRecs')   || '[]',
     stemHireDates: safeGet('stemHireDates') || '{}',
     stemVerticals:  safeGet('stemVerticals')  || '{}',
@@ -4370,7 +4373,7 @@ function importSettings() {
         // Restore all keys
         // stemBirthdays, stemWeekFlags and stemTitles are exported, so restore them too
         // (birthdays and week flags were previously exported but silently skipped).
-        const keys = ['stemXW','stemBaseEdits','stemArchived','stemNewRecs','stemHireDates','stemBirthdays','stemWeekFlags','stemTitles','stemUsers','stemInvites','stemSession','stemLastSync'];
+        const keys = ['stemXW','stemBaseEdits','stemArchived','stemUnarchived','stemNewRecs','stemHireDates','stemBirthdays','stemWeekFlags','stemTitles','stemUsers','stemInvites','stemSession','stemLastSync'];
         keys.forEach(function(k) {
           if (p[k] !== undefined && p[k] !== '') safeSet(k, p[k]);
         });
@@ -4526,10 +4529,7 @@ document.getElementById('import-file').addEventListener('change', function() {
       // Apply archives
       archivedRecruiters.length = 0;
       archived.forEach(a => archivedRecruiters.push(a));
-      archived.forEach(ar => {
-        const idx = RECRUITERS.findIndex(r => r.name === ar.name);
-        if (idx !== -1) RECRUITERS.splice(idx, 1);
-      });
+      applyArchives();
 
       // Persist
       safeSet('stemXW', JSON.stringify(extraWeeks));
@@ -5751,6 +5751,7 @@ function saveEditModal() {
   });
   RECRUITERS.length = 0;
   fresh.forEach(r => RECRUITERS.push(r));
+  applyArchives(); // the rebuild starts from base data, which still lists archived people
   wkLabels.length = BASE_WEEKS;
   extraWeeks.forEach(ew => wkLabels.push(ew.label));
 
@@ -5826,13 +5827,52 @@ const PRESET_BIRTHDAYS = {
 };
 
 
+// ─── ARCHIVE NAME MATCHING ───
+// One key for "is this the same person": case, extra or non-breaking spaces,
+// and a parenthetical nickname are ignored, so "Aidan (AJ) Smith" in the
+// archive matches "Aidan Smith" from the Sheet. Exact-name matching let the
+// Sheet sync put archived people back on the roster under a slightly
+// different spelling, where archiving again could not stick.
+function archKey(s) {
+  return String(s || '')
+    .replace(/[\u00a0\u2000-\u200b\u202f\u205f\u3000\ufeff]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim().toLowerCase();
+}
+function isArchivedName(name) {
+  var k = archKey(name);
+  return (typeof archivedRecruiters !== 'undefined') && archivedRecruiters.some(function(a){ return archKey(a.name) === k; });
+}
+
+// Restored names. PRESET_ARCHIVED is baked into the file, so without this list
+// a restored person was re-added to the archive on the next page load.
+function getUnarchived() { try { return JSON.parse(safeGet('stemUnarchived') || '[]'); } catch (e) { return []; } }
+function saveUnarchived(list) { safeSet('stemUnarchived', JSON.stringify(list)); }
+function markUnarchived(name) {
+  var k = archKey(name), list = getUnarchived();
+  if (list.indexOf(k) < 0) { list.push(k); saveUnarchived(list); }
+}
+function clearUnarchived(name) {
+  var k = archKey(name);
+  saveUnarchived(getUnarchived().filter(function(x){ return x !== k; }));
+}
+
 let archivedRecruiters = (function() {
   const stored = JSON.parse(safeGet('stemArchived') || '[]');
-  // Merge preset with stored — stored wins (has latest end dates etc.)
-  const merged = [...PRESET_ARCHIVED];
+  const restored = getUnarchived();
+  // Merge preset with stored. Stored wins (latest end dates etc.). Restored
+  // names are skipped, and duplicates from archiving the same person more than
+  // once collapse to one entry that keeps any end date already entered.
+  const merged = PRESET_ARCHIVED.filter(function(p){ return restored.indexOf(archKey(p.name)) < 0; });
   stored.forEach(function(s) {
-    const idx = merged.findIndex(function(p){ return p.name === s.name; });
-    if (idx >= 0) merged[idx] = s; // stored version wins
+    if (restored.indexOf(archKey(s.name)) >= 0) return;
+    const idx = merged.findIndex(function(p){ return archKey(p.name) === archKey(s.name); });
+    if (idx >= 0) {
+      const keepEnd = merged[idx].endedOn;
+      merged[idx] = s;
+      if (!s.endedOn && keepEnd) merged[idx].endedOn = keepEnd;
+    }
     else merged.push(s);
   });
   // Restore hire dates and birthdays baked into preset if not already in localStorage
@@ -5896,10 +5936,11 @@ function applyNewRecruiters() {
 
 // Remove archived recruiters from active RECRUITERS array
 function applyArchives() {
-  archivedRecruiters.forEach(ar => {
-    const idx = RECRUITERS.findIndex(r => r.name === ar.name);
-    if (idx !== -1) RECRUITERS.splice(idx, 1);
-  });
+  // Key-based and removes every match, so a Sheet spelling variant of an
+  // archived name is also taken off the active roster.
+  for (let i = RECRUITERS.length - 1; i >= 0; i--) {
+    if (isArchivedName(RECRUITERS[i].name)) RECRUITERS.splice(i, 1);
+  }
 }
 
 // Populate new-rec-mgr select + start week options
@@ -6046,8 +6087,9 @@ function confirmArchive() {
   if (recIdx === -1) { closeArchiveModal(); return; }
   const rec = RECRUITERS[recIdx];
 
-  // Save to archives with full data snapshot
-  archivedRecruiters.push({
+  // Save to archives with full data snapshot. If this person is already in the
+  // archive (under any spelling), refresh that entry instead of adding a duplicate.
+  const snap = {
     name: rec.name,
     manager: rec.manager,
     archivedOn: new Date().toLocaleDateString(),
@@ -6057,19 +6099,31 @@ function confirmArchive() {
     placements: [...(rec.placements||[])],
     starts: [...rec.starts],
     leads: [...rec.leads]
-  });
+  };
+  const existIdx = archivedRecruiters.findIndex(a => archKey(a.name) === archKey(name));
+  if (existIdx !== -1) {
+    const prior = archivedRecruiters[existIdx];
+    snap.name = prior.name;               // keep the archived spelling other data is keyed to
+    snap.endedOn = prior.endedOn || '';
+    archivedRecruiters[existIdx] = snap;
+  } else {
+    archivedRecruiters.push(snap);
+  }
+  clearUnarchived(name);
   saveArchived();
 
-  // Remove from active
-  RECRUITERS.splice(recIdx, 1);
+  // Remove from active (every row that matches, not just the first)
+  applyArchives();
+  if (typeof _bustTenureCache === 'function') _bustTenureCache();
 
   // Remove from newRecruiters if it was a new one
-  const nrIdx = newRecruiters.findIndex(r => r.name === name);
-  if (nrIdx !== -1) { newRecruiters.splice(nrIdx, 1); saveNewRecs(); }
+  const nrBefore = newRecruiters.length;
+  newRecruiters = newRecruiters.filter(r => archKey(r.name) !== archKey(name));
+  if (newRecruiters.length !== nrBefore) saveNewRecs();
 
   // Remove from rec-select dropdown
   const recSelEl = document.getElementById('rec-select');
-  Array.from(recSelEl.options).forEach(o => { if (o.value === name) o.remove(); });
+  Array.from(recSelEl.options).forEach(o => { if (archKey(o.value) === archKey(name)) o.remove(); });
 
   closeArchiveModal();
   renderOverview();
@@ -6091,21 +6145,33 @@ function restoreRecruiter(name) {
     return a.slice(0, totalWks);
   };
 
-  RECRUITERS.push({
-    name: ar.name, manager: ar.manager,
-    subs: pad(ar.subs), ivs: pad(ar.ivs),
-    starts: pad(ar.starts), leads: pad(ar.leads),
-    isNew: true, addedOn: ar.archivedOn
-  });
+  // The Sheet may already be supplying this person (possibly under another
+  // spelling); only add a roster row when nobody matching is there.
+  const onRoster = RECRUITERS.some(r => archKey(r.name) === archKey(ar.name));
+  if (!onRoster) {
+    RECRUITERS.push({
+      name: ar.name, manager: ar.manager,
+      subs: pad(ar.subs), ivs: pad(ar.ivs),
+      placements: pad(ar.placements || []),
+      starts: pad(ar.starts), leads: pad(ar.leads),
+      isNew: true, addedOn: ar.archivedOn
+    });
+  }
 
   // Re-add to newRecruiters so it persists
-  if (!newRecruiters.find(r => r.name === ar.name)) {
+  if (!onRoster && !newRecruiters.find(r => archKey(r.name) === archKey(ar.name))) {
     newRecruiters.push({ name: ar.name, manager: ar.manager, addedOn: ar.archivedOn, startWeekIndex: 0 });
     saveNewRecs();
   }
 
-  archivedRecruiters.splice(arIdx, 1);
+  // Remove every archived entry for this person and remember the restore, so
+  // the baked-in PRESET_ARCHIVED list does not bring them back on reload.
+  for (let i = archivedRecruiters.length - 1; i >= 0; i--) {
+    if (archKey(archivedRecruiters[i].name) === archKey(ar.name)) archivedRecruiters.splice(i, 1);
+  }
+  markUnarchived(ar.name);
   saveArchived();
+  if (typeof _bustTenureCache === 'function') _bustTenureCache();
 
   // Rebuild rec-select sorted alphabetically
   const recSelEl = document.getElementById('rec-select');
@@ -6593,9 +6659,9 @@ function renderRoster() {
   // archived people back into this table, so those are excluded from the count.
   const rosterHdr = document.getElementById('roster-active-hdr');
   if (rosterHdr) {
-    const archNames = archivedRecruiters.map(function(a){ return (a.name||'').trim().toLowerCase(); });
+    const archNames = archivedRecruiters.map(function(a){ return archKey(a.name); });
     const shown = all.filter(function(r) {
-      return !r._isArchived && archNames.indexOf((r.name||'').trim().toLowerCase()) < 0;
+      return !r._isArchived && archNames.indexOf(archKey(r.name)) < 0;
     }).length;
     const totalActive = RECRUITERS.length;
     rosterHdr.textContent = (shown === totalActive)
@@ -7680,12 +7746,12 @@ function renderGP() {
   GP_DATA.forEach(r=>{ if(gpSelectedRecs[r.name]===undefined) gpSelectedRecs[r.name]=true; });
   updateGpRecLabel();
 
-  const archivedNames = archivedRecruiters.map(a=>a.name.trim().toLowerCase());
+  const archivedNames = archivedRecruiters.map(a=>archKey(a.name));
 
   const recs = GP_DATA.filter(r =>
     gpSelectedMgrs[r.manager] !== false &&
     gpSelectedRecs[r.name] !== false &&
-    !archivedNames.includes(r.name.trim().toLowerCase())
+    !archivedNames.includes(archKey(r.name))
   ).sort((a,b) => a.name.localeCompare(b.name));
 
   if (!recs.length) {
@@ -7714,7 +7780,7 @@ function renderGP() {
   const mgrsToShow = mgrsInData.filter(m => gpSelectedMgrs[m] !== false);
   const mgrCards = mgrsToShow.map(mgr => {
     const mc = MGR_COLORS[mgr]||'#888';
-    const team = GP_DATA.filter(r=>r.manager===mgr && !archivedNames.includes(r.name.trim().toLowerCase()));
+    const team = GP_DATA.filter(r=>r.manager===mgr && !archivedNames.includes(archKey(r.name)));
     if (!team.length) return '';
     const totalYTD  = team.reduce((s,r)=>s+r.ytdGP,0);
     const total2026 = team.reduce((s,r)=>s+r.gp2026,0);
@@ -7741,7 +7807,7 @@ function renderGP() {
   document.getElementById('gp-mgr-cards').innerHTML = mgrCards;
 
   // ── Team Summary KPIs ──
-  const allRecs = GP_DATA.filter(r => !archivedNames.includes(r.name.trim().toLowerCase()));
+  const allRecs = GP_DATA.filter(r => !archivedNames.includes(archKey(r.name)));
   const teamYTD    = allRecs.reduce((s,r)=>s+r.ytdGP,0);
   const team2026   = allRecs.reduce((s,r)=>s+r.gp2026,0);
   const teamPrior  = allRecs.reduce((s,r)=>s+r.prior2026,0);
@@ -7899,11 +7965,11 @@ function renderGpTrendChart() {
   var canvas = document.getElementById('gp-trend-canvas');
   if (!statsWrap || !canvas) return;
 
-  const archivedNames = archivedRecruiters.map(a=>a.name.trim().toLowerCase());
+  const archivedNames = archivedRecruiters.map(a=>archKey(a.name));
   const recs = GP_DATA.filter(r =>
     gpSelectedMgrs[r.manager] !== false &&
     gpSelectedRecs[r.name] !== false &&
-    !archivedNames.includes(r.name.trim().toLowerCase()) &&
+    !archivedNames.includes(archKey(r.name)) &&
     r.weekly.length > 0
   );
 
@@ -8095,11 +8161,11 @@ function gpBandEarned(gp) {
 }
 
 function gpFilteredRecs() {
-  var archivedNames = archivedRecruiters.map(function(a){ return a.name.trim().toLowerCase(); });
+  var archivedNames = archivedRecruiters.map(function(a){ return archKey(a.name); });
   return GP_DATA.filter(function(r) {
     return gpSelectedMgrs[r.manager] !== false &&
            gpSelectedRecs[r.name] !== false &&
-           !archivedNames.includes(r.name.trim().toLowerCase());
+           !archivedNames.includes(archKey(r.name));
   });
 }
 
@@ -8324,9 +8390,14 @@ function computePromoRow(r, gp, title, tenure, reviewIdx, near, minWks) {
   } else {
     status = 'Tracking'; scol = 'var(--text3)';
   }
+  // Eligible now: on a ladder title with a band earned above it. rungsPast counts
+  // how far past the title they are, so a skipped rung is visible in the row.
+  var eligibleNow = mode === 'title' && isReview;
+  var rungsPast   = eligibleNow ? earned - rung : 0;
   return {r:r, gp:gp, earned:earned, nextIdx:nextIdx, gapNext:gapNext, pctNext:pctNext,
           tenure:tenure, enough:enough, status:status, scol:scol, flagged:flagged, isReview:isReview,
-          title:title, rung:rung, mode:mode, belowTitle:belowTitle};
+          title:title, rung:rung, mode:mode, belowTitle:belowTitle,
+          eligibleNow:eligibleNow, rungsPast:rungsPast};
 }
 
 function computePromoRows(recs, nW, reviewIdx, near, minWks) {
@@ -8425,8 +8496,8 @@ function renderGpPromo() {
 
   document.getElementById('promo-thead').innerHTML = '<tr>'
     + '<th style="min-width:34px">#</th><th class="sticky-col-1" style="min-width:140px">Recruiter</th><th class="sticky-col-2">Mgr</th>'
-    + '<th>Title</th><th style="text-align:right">Rolling 26wk GP</th><th>Band earned</th><th>Next promotion</th>'
-    + '<th style="min-width:130px">Progress to next</th><th style="text-align:right">Gap to next</th><th>Status</th></tr>';
+    + '<th style="text-align:right">Rolling 26wk GP</th><th>Current title</th><th>Band earned</th><th>Next promotion</th>'
+    + '<th style="min-width:130px">Progress</th><th style="text-align:right">Gap</th><th>Status</th></tr>';
 
   tbody.innerHTML = view.map(function(x, i) {
     var col = !x.enough ? 'var(--text3)' : x.isReview ? 'var(--green)' : x.flagged ? 'var(--amber)' : 'var(--text)';
@@ -8436,18 +8507,28 @@ function renderGpPromo() {
     var titleTxt = x.title
       ? '<span style="color:'+(x.mode==='fixed'?'var(--text2)':'var(--text)')+'"'+(x.mode==='fixed'?' title="No ladder rung for this title; using the review band setting"':'')+'>'+x.title+'</span>'
       : '<span style="color:var(--text3);font-style:italic">Not set</span>';
-    var nextTxt = x.nextIdx !== null ? GP_BANDS[x.nextIdx].t
-      : '<span style="font-size:11px;color:var(--text3)">'+(x.mode==='lead'?'\u2014':'top of ladder')+'</span>';
+    var nextTxt, progTxt, gapTxt;
+    if (x.eligibleNow) {
+      nextTxt = '<span style="color:var(--green);font-weight:600">' + GP_BANDS[x.earned].t + '</span>'
+        + ' <span style="font-size:11px;color:var(--green)">(+' + x.rungsPast + ' rung' + (x.rungsPast === 1 ? '' : 's') + ')</span>';
+      progTxt = '<span style="font-size:11px;font-weight:700;color:var(--green)">Eligible now</span>';
+      gapTxt  = '<span style="font-size:11px;font-weight:700;color:var(--green)">Eligible now</span>';
+    } else {
+      nextTxt = x.nextIdx !== null ? GP_BANDS[x.nextIdx].t
+        : '<span style="font-size:11px;color:var(--text3)">'+(x.mode==='lead'?'\u2014':'top of ladder')+'</span>';
+      progTxt = x.nextIdx !== null ? gpBar(x.pctNext, col)+'<span style="font-size:10px;color:var(--text3)">'+x.pctNext.toFixed(0)+'% of '+formatGP(GP_BANDS[x.nextIdx].v)+'</span>' : '\u2014';
+      gapTxt  = x.nextIdx !== null ? formatGP(x.gapNext) : '\u2014';
+    }
     return '<tr'+(x.isReview?' style="background:var(--green-bg)"':'')+'>'
       + '<td style="color:var(--text3)">'+(i+1)+'</td>'
       + '<td class="sticky-col-1" style="font-weight:500;white-space:nowrap">'+x.r.name+rampIcon(x.r.name)+'</td>'
       + '<td class="sticky-col-2">'+gpMgrChip(x.r.manager)+'</td>'
-      + '<td style="white-space:nowrap;font-size:12px">'+titleTxt+'</td>'
       + '<td style="text-align:right;font-weight:700;color:'+col+'">'+formatGP(x.gp)+'</td>'
+      + '<td style="white-space:nowrap;font-size:12px">'+titleTxt+'</td>'
       + '<td>'+earnedTxt+'</td>'
-      + '<td style="color:var(--text2)">'+nextTxt+'</td>'
-      + '<td>'+(x.nextIdx!==null ? gpBar(x.pctNext, col)+'<span style="font-size:10px;color:var(--text3)">'+x.pctNext.toFixed(0)+'% of '+formatGP(GP_BANDS[x.nextIdx].v)+'</span>' : '\u2014')+'</td>'
-      + '<td style="text-align:right;color:var(--text2)">'+(x.nextIdx!==null?formatGP(x.gapNext):'\u2014')+'</td>'
+      + '<td style="color:var(--text2);white-space:nowrap">'+nextTxt+'</td>'
+      + '<td>'+progTxt+'</td>'
+      + '<td style="text-align:right;color:var(--text2);white-space:nowrap">'+gapTxt+'</td>'
       + '<td><span class="pill" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+x.scol+'22;color:'+x.scol+'">'+x.status+'</span></td>'
       + '</tr>';
   }).join('');
@@ -8610,9 +8691,9 @@ function renderOrgChart() {
   var wrap = document.getElementById('orgchart-wrap');
   if (!wrap) return;
   // Org chart always shows only active recruiters, never archived
-  var archivedNames = archivedRecruiters.map(function(a){ return (a.name||'').trim().toLowerCase(); });
+  var archivedNames = archivedRecruiters.map(function(a){ return archKey(a.name); });
   var all = computedAll().filter(function(r){
-    return !r._isArchived && archivedNames.indexOf((r.name||'').trim().toLowerCase()) < 0;
+    return !r._isArchived && archivedNames.indexOf(archKey(r.name)) < 0;
   });
 
   // Build a set of all manager first names AND full names (lowercase) to detect duplicates
@@ -8764,7 +8845,8 @@ renderOverview();
 updateSyncBadge();
 // ─── PERIOD RECAP ───
 // Period-end rollup: org deltas, on-track shift, manager movement, biggest
-// individual movers. Active roster only (archived excluded — matches the GP tab).
+// individual movers. Active roster by default; the header "Include Archived"
+// toggle adds archived recruiters, each counted only through their last week worked.
 // Built on PERIOD_DEFS / QUARTER_DEFS (5/4/4) with absolute week indices.
 var _recapLast = null;
 
@@ -8803,22 +8885,28 @@ function _recapAgg(def, mx, recs){
   var org={subs:0,ivs:0,pl:0,st:0,gp:0,ot:0,act:0}, mgr={}, rec=[];
   (recs||RECRUITERS).forEach(function(r){
     var fa=_recapFirstAbs(r);
-    var sum=function(arr){var s=0;ws.forEach(function(wi){s+=((arr||[])[wi]||0);});return s;};
+    // Archived recruiters stop at their last week worked (Date Ended), so a
+    // departure mid-period counts partial weeks and one before the period counts none.
+    var endAbs = null;
+    if(r._isArchived && typeof tenureWindow==='function'){ var tw=tenureWindow(r.name); if(tw && tw.end!=null) endAbs=tw.end; }
+    var eR = endAbs!=null ? Math.min(e, endAbs) : e;
+    var inWk=function(wi){return endAbs==null||wi<=endAbs;};
+    var sum=function(arr){var s=0;ws.forEach(function(wi){if(inWk(wi)) s+=((arr||[])[wi]||0);});return s;};
     var s=sum(r.subs), iv=sum(r.ivs), pl=sum(r.placements), st=sum(r.starts);
-    var g=_gpRange(r.name,f,e);
-    var active = fa<=e;
-    var rw = active ? Math.max(0, e-Math.max(f,fa)+1) : 0;
+    var g=eR>=f ? _gpRange(r.name,f,eR) : null;
+    var active = fa<=e && eR>=f;
+    var rw = active ? Math.max(0, eR-Math.max(f,fa)+1) : 0;
     var onT=false;
     if(active){
-      var cum=0; for(var i=fa;i<=e;i++) cum+=((r.starts||[])[i]||0);
-      onT = cum >= onTrackTarget(fa, 0, e);
+      var cum=0; for(var i=fa;i<=eR;i++) cum+=((r.starts||[])[i]||0);
+      onT = cum >= onTrackTarget(fa, 0, eR);
       org.act++; if(onT)org.ot++;
     }
     org.subs+=s; org.ivs+=iv; org.pl+=pl; org.st+=st; if(g!=null)org.gp+=g;
     if(!mgr[r.manager]) mgr[r.manager]={subs:0,st:0,gp:0,rw:0};
     mgr[r.manager].subs+=s; mgr[r.manager].st+=st; if(g!=null)mgr[r.manager].gp+=g;
     mgr[r.manager].rw += rw;
-    rec.push({name:r.name, manager:r.manager, subs:s, st:st, gp:g==null?0:g, rw:rw, onT:onT, active:active});
+    rec.push({name:r.name, manager:r.manager, subs:s, st:st, gp:g==null?0:g, rw:rw, onT:onT, active:active, archived:!!r._isArchived});
   });
   return {org:org, mgr:mgr, rec:rec, f:f, e:e, nWks:ws.length};
 }
@@ -8873,10 +8961,16 @@ function renderRecap(){
     MGRS.forEach(function(m){ var o=document.createElement('option'); o.value=m; o.textContent=m; mgrSel.appendChild(o); });
   }
   var mgrFilter=mgrSel?mgrSel.value:'';
-  var recs = mgrFilter ? RECRUITERS.filter(function(r){return r.manager===mgrFilter;}) : RECRUITERS;
+  var pool = RECRUITERS;
+  var archCount = 0;
+  if (includeArchived && typeof archivedRecruiters !== 'undefined' && archivedRecruiters.length) {
+    pool = RECRUITERS.concat(archivedRecruiters.map(function(a){ return Object.assign({}, a, {_isArchived:true}); }));
+  }
+  var recs = mgrFilter ? pool.filter(function(r){return r.manager===mgrFilter;}) : pool;
   var scopeLbl = mgrFilter ? mgrFilter+"'s team" : 'Org';
 
   var cur=_recapAgg(selEntry.def,mx,recs);
+  archCount = cur.rec.filter(function(r){ return r.archived && r.active; }).length;
   var prev=prevEntry?_recapAgg(prevEntry.def,mx,recs):null;
   var prevLbl=prevEntry?prevEntry.def.label:null;
   var mvKey=document.getElementById('recap-metric').value;
@@ -8968,7 +9062,7 @@ function renderRecap(){
     cur.rec.forEach(function(r){
       var p=pByName[r.name];
       if(!p||!r.active) return;
-      movers.push({name:r.name,manager:r.manager,dSt:r.st-p.st,dSubs:r.subs-p.subs,dGp:r.gp-p.gp,flip:r.onT!==p.onT,onT:r.onT});
+      movers.push({name:r.name,manager:r.manager,dSt:r.st-p.st,dSubs:r.subs-p.subs,dGp:r.gp-p.gp,flip:r.onT!==p.onT,onT:r.onT,archived:r.archived});
     });
     var mA=function(k){return Math.max.apply(null,movers.map(function(x){return Math.abs(x[k]);}).concat([1]));};
     var aSt=mA('dSt'),aSubs=mA('dSubs'),aGp=mA('dGp');
@@ -8986,15 +9080,15 @@ function renderRecap(){
     var row=function(x,cls){
       var mc=MGR_COLORS[x.manager]||'#888';
       return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">'
-        +'<span style="font-size:12.5px;font-weight:600" class="pf-name-link" onclick="openProfileEnc(\''+encodeURIComponent(x.name)+'\')" title="Open profile">'+x.name+' <span style="font-size:10.5px;color:'+mc+'">'+x.manager+'</span></span>'
+        +'<span style="font-size:12.5px;font-weight:600" class="pf-name-link" onclick="openProfileEnc(\''+encodeURIComponent(x.name)+'\')" title="Open profile">'+x.name+(x.archived?' <span style="font-size:10px;color:var(--text3)">(archived)</span>':'')+' <span style="font-size:10.5px;color:'+mc+'">'+x.manager+'</span></span>'
         +'<span class="'+cls+'" style="font-size:11.5px;font-weight:700;text-align:right;flex-shrink:0">'+comp(x)+'</span></div>';
     };
     var ups=movers.filter(function(x){return x.score>0.01;}).slice(0,3);
     var downs=movers.filter(function(x){return x.score<-0.01;}).slice(-3).reverse();
     upHtml=ups.map(function(x){return row(x,'pf-up');}).join('')||'<div style="font-size:12px;color:var(--text3);padding:6px 0">No meaningful gains.</div>';
     downHtml=downs.map(function(x){return row(x,'pf-down');}).join('')||'<div style="font-size:12px;color:var(--text3);padding:6px 0">No meaningful declines.</div>';
-    upList=ups.map(function(x){return x.name+' ('+x.manager+'): '+comp(x);});
-    downList=downs.map(function(x){return x.name+' ('+x.manager+'): '+comp(x);});
+    upList=ups.map(function(x){return x.name+(x.archived?' [archived]':'')+' ('+x.manager+'): '+comp(x);});
+    downList=downs.map(function(x){return x.name+(x.archived?' [archived]':'')+' ('+x.manager+'): '+comp(x);});
   }
 
   var noCmp=!prev?'<div style="font-size:12px;color:var(--text3);margin-bottom:12px">No closed comparison bucket available'+(vs==='lastq'?' (same period last quarter hasn\'t closed or doesn\'t exist)':'')+' — showing totals only.</div>':'';
@@ -9025,9 +9119,14 @@ function renderRecap(){
       +'<div style="font-size:11px;color:var(--text3);margin-top:10px">Ranked by a blended Δ across starts, subs, and GP. Names open the Recruiter Profile.</div>'
     +'</div>'
   +'</div>':'')
-  +'<div style="font-size:11px;color:var(--text3);margin-top:14px;padding:0 4px">Active roster only — archived recruiters excluded (matches the GP tab). On-track compares each recruiter\'s pacing status at period close vs prior close using the standard rule.</div>';
+  +'<div style="font-size:11px;color:var(--text3);margin-top:14px;padding:0 4px">'
+    +(includeArchived
+      ? 'Archived recruiters included ('+archCount+' active during this '+(selEntry.kind==='Q'?'quarter':'period')+'), each counted through their Date Ended.'
+      : 'Active roster only. Turn on Include Archived to add recruiters who have since left.')
+    +' On-track compares each recruiter\'s pacing status at period close vs prior close using the standard rule.</div>';
 
   _recapLast={
+    archivedIncluded:!!includeArchived, archCount:archCount,
     lbl:selEntry.def.label, prevLbl:prevLbl, closed:selEntry.closed,
     scopeLbl:scopeLbl, isTeam:!!mgrFilter,
     org:cur.org, prevOrg:prev?prev.org:null, summaryText:summaryText,
@@ -9057,7 +9156,7 @@ function exportRecap(){
     +'ul{margin:4px 0 0 18px}@media print{body{padding:16px}}'
     +'</style></head><body>'
     +'<div class="hdr"><div><div class="h1">Period Recap — '+_pfEsc(L.scopeLbl)+' · '+_pfEsc(L.lbl)+(L.closed?'':' (in progress)')+'</div>'
-    +'<div class="sub">'+(L.prevLbl?'Compared to '+_pfEsc(L.prevLbl):'No comparison bucket')+' · Active roster only</div></div>'
+    +'<div class="sub">'+(L.prevLbl?'Compared to '+_pfEsc(L.prevLbl):'No comparison bucket')+' · '+(L.archivedIncluded?'Archived recruiters included ('+L.archCount+')':'Active roster only')+'</div></div>'
     +'<div class="sub">Generated '+(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear()+'</div></div>'
     +'<div class="h2">'+_pfEsc(L.scopeLbl)+' totals</div>'
     +'<table><tr><th>Metric</th><th>'+_pfEsc(L.lbl)+'</th><th>Δ vs '+(L.prevLbl?_pfEsc(L.prevLbl):'—')+'</th></tr>'
@@ -9721,7 +9820,7 @@ async function _writeWeekToSheet(weekData, weekLabel) {
       var archivedNames = [];
       try {
         var arch = JSON.parse(_safeGet('stemArchived') || '[]');
-        archivedNames = arch.map(function(a){ return (a.name||'').trim().toLowerCase(); });
+        archivedNames = arch.map(function(a){ return archKey(a.name); });
       } catch(e2) {}
 
       // Build batch update
@@ -9731,7 +9830,7 @@ async function _writeWeekToSheet(weekData, weekLabel) {
         var recName = (rows[rx][0]||'').trim();
         if (!recName || ['total','avg','average'].some(function(x){return recName.toLowerCase().includes(x);})) continue;
         // Skip archived recruiters
-        if (archivedNames.indexOf(recName.toLowerCase()) >= 0) continue;
+        if (archivedNames.indexOf(archKey(recName)) >= 0) continue;
         // Look up by normalized name
         var recData = weekDataLower[recName.trim().toLowerCase()];
         var val = recData ? (recData[mk]||0) : null;
@@ -10227,10 +10326,10 @@ var XL_DATASETS = [
     build: function(sc) {
       if (typeof GP_DATA === 'undefined' || !GP_DATA.length) return null;
       var archNames = (typeof archivedRecruiters !== 'undefined' ? archivedRecruiters : [])
-        .map(function(a) { return (a.name || '').trim().toLowerCase(); });
+        .map(function(a) { return archKey(a.name); });
       var src = GP_DATA.filter(function(g) {
         if (sc.mgr && g.manager !== sc.mgr) return false;
-        if (!sc.includeArchived && archNames.indexOf((g.name || '').trim().toLowerCase()) >= 0) return false;
+        if (!sc.includeArchived && archNames.indexOf(archKey(g.name)) >= 0) return false;
         return true;
       }).sort(function(a, b) {
         return (a.manager || '').localeCompare(b.manager || '') || a.name.localeCompare(b.name);
