@@ -292,6 +292,23 @@ td.editing{padding:2px 4px!important}
 .pf-cohort-med{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text3)}
 .pf-pctile{font-size:12px;font-weight:700;width:76px;flex-shrink:0}
 .pf-grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.rt-seg{display:inline-flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;vertical-align:middle}
+.rt-seg button{background:var(--bg2);color:var(--text2);border:none;border-right:1px solid var(--border2);height:28px;padding:0 10px;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.rt-seg button:last-child{border-right:none}
+.rt-seg button.on{background:var(--accent-dim);color:var(--accent);font-weight:600}
+.rt-lbl{font-size:11px;color:var(--text3);white-space:nowrap}
+.rt-tbl th{text-align:center;white-space:nowrap}
+.rt-tbl td.rt-cell{text-align:center;white-space:nowrap}
+.rt-sortable{cursor:pointer;user-select:none}
+.rt-sa::after{content:" ↑"}.rt-sd::after{content:" ↓"}
+.rt-chip{display:inline-block;min-width:42px;padding:2px 6px;border-radius:4px;font-weight:600;text-align:center}
+.rt-low{color:var(--text3);border:1px dashed var(--border2);background:transparent}
+.rt-arr{font-size:10px;margin-left:3px}
+.rt-na{color:var(--text3)}
+.rt-bench{display:block;font-size:10px;color:var(--text3);margin-top:1px}
+.rt-totcol{border-left:1px solid var(--border2)}
+.rt-pool td{border-top:1px solid var(--border2);font-weight:700}
+.rt-sec td{font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:10px;text-align:left}
 @media(max-width:860px){.pf-grid2{grid-template-columns:1fr}}
 /* ── Definitions modal ── */
 .defs-sec{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;margin-bottom:12px}
@@ -563,8 +580,9 @@ td.editing{padding:2px 4px!important}
   </div>
   <div class="card">
     <div class="card-hdr">
-      <span class="card-title">Recruiter summary</span>
+      <span class="card-title" id="ov-card-title">Recruiter summary</span>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end">
+        <span class="rt-seg" id="ov-view-seg"><button type="button" data-v="summary" class="on" onclick="setOvView('summary')">Summary</button><button type="button" data-v="trend" onclick="setOvView('trend')" title="Ratios by period or quarter, side by side">Ratio trend</button></span>
         <!-- Ratio key — hover for details -->
         <div style="position:relative;display:inline-block" id="ratio-key-wrap">
           <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border);cursor:help;user-select:none"
@@ -608,13 +626,18 @@ td.editing{padding:2px 4px!important}
         <!-- Manager filter -->
         <div style="display:flex;align-items:center;gap:6px">
           <label style="font-size:11px;color:var(--text3);white-space:nowrap">Manager:</label>
-          <select id="ov-mgr-filter" style="height:28px;font-size:11px" onchange="renderOvTable(filtered())">
+          <select id="ov-mgr-filter" style="height:28px;font-size:11px" onchange="renderOvTable(filtered());renderOvTrend()">
             <option value="">All</option>
           </select>
         </div>
       </div>
     </div>
-    <div class="tbl-wrap"><table>
+    <div id="ov-trend-wrap" style="display:none">
+      <div id="ov-trend-ctrl" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div class="tbl-wrap"><table class="rt-tbl" id="ov-trend-tbl"></table></div>
+      <div id="ov-trend-note" style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6"></div>
+    </div>
+    <div class="tbl-wrap" id="ov-summary-wrap"><table>
       <thead><tr>
         <th data-col="name">Recruiter</th><th data-col="manager">Manager</th>
         <th data-col="avgSub4w" style="color:var(--c-subs)" title="4-week sub average">4wk Subs</th>
@@ -2845,7 +2868,7 @@ function renderOvTable(d){
       <td><span class="pill ${pc}" title="${r.status==='green'?'4-week start target hit (2+)':r.status==='amber'?'Has starts, but under the 2-start target over 4 weeks':'No starts in the last 4 weeks'}">${pl}</span></td>
     </tr>`;
   }).join('');
-  document.querySelectorAll('#tab-overview thead th').forEach(th=>{th.classList.remove('sa','sd');if(th.dataset.col===ovSort)th.classList.add(ovDir==='asc'?'sa':'sd')});
+  document.querySelectorAll('#ov-summary-wrap thead th').forEach(th=>{th.classList.remove('sa','sd');if(th.dataset.col===ovSort)th.classList.add(ovDir==='asc'?'sa':'sd')});
 }
 
 // ─── ANNIVERSARY BANNER ───
@@ -2933,7 +2956,7 @@ function renderBirthdayBanner() {
 }
 
 function renderOverview(){
-  const d=filtered();renderKPIs(d);renderTopChart(d);renderRatioChart(d);renderOvTable(d);
+  const d=filtered();renderKPIs(d);renderTopChart(d);renderRatioChart(d);renderOvTable(d);renderOvTrend();
   const awl=activeWkLabels();
   const full=isFullRange();
   document.getElementById('wk-ct').textContent=full?`${wkLabels.length} weeks tracked`:`${awl.length} of ${wkLabels.length} wks`;
@@ -2943,7 +2966,7 @@ function renderOverview(){
 document.getElementById('mgr-filter').addEventListener('change',renderOverview);
 document.getElementById('metric-select').addEventListener('change',()=>renderTopChart(filtered()));
 document.getElementById('search').addEventListener('input',renderOverview);
-document.querySelectorAll('#tab-overview thead th').forEach(th=>{th.addEventListener('click',()=>{const c=th.dataset.col;if(ovSort===c)ovDir=ovDir==='asc'?'desc':'asc';else{ovSort=c;ovDir='desc';}renderOvTable(filtered())})});
+document.querySelectorAll('#ov-summary-wrap thead th').forEach(th=>{th.addEventListener('click',()=>{const c=th.dataset.col;if(ovSort===c)ovDir=ovDir==='asc'?'desc':'asc';else{ovSort=c;ovDir='desc';}renderOvTable(filtered())})});
 
 // Week range listeners
 document.getElementById('wk-from').addEventListener('change',()=>{
@@ -3296,6 +3319,305 @@ const QUARTER_DEFS = [
   { label:'Q3', weeks:[26,27,28,29,30,31,32,33,34,35,36,37,38] },
   { label:'Q4', weeks:[39,40,41,42,43,44,45,46,47,48,49,50,51] }
 ];
+
+// ─── RATIO TREND (shared by Overview "Ratio trend" grid and Profile "Ratio trend by period") ───
+// Pooled ratios per period/quarter bucket. Pre-hire weeks are skipped (not counted as zeros).
+// Start-based ratios with too few starts in a bucket are shown but marked low volume (not colored, no arrows).
+const RT_KEYS = [
+  { key:'sub2iv',       lbl:'Sub→IV',    full:'Submittal to Interview', num:'s', den:'i'  },
+  { key:'iv2placement', lbl:'IV→Pl.',    full:'Interview to Placement', num:'i', den:'p'  },
+  { key:'pl2start',     lbl:'Pl→Start',  full:'Placement to Start',     num:'p', den:'st' },
+  { key:'sub2start',    lbl:'Sub→Start', full:'Submittal to Start',     num:'s', den:'st' }
+];
+const RT_MIN_STARTS = { P:2, Q:4, R:4 };  // min starts for a start-based ratio to be ranked (period / quarter / range total)
+const RT_ARROW_PCT = 0.10;                // arrow only when the ratio moved 10%+ vs the prior bucket
+const RT_DEN_NAME = { s:'subs', i:'interviews', p:'placements', st:'starts' };
+
+// Buckets for a grain, clipped to [f,t] and to weeks that exist. partial = bucket not fully covered (in progress or clipped).
+function rtBuckets(grain, f, t){
+  var nW = wkLabels.length;
+  var defs = grain === 'Q' ? QUARTER_DEFS : PERIOD_DEFS;
+  return defs.map(function(d){
+    var w = d.weeks.filter(function(i){ return i >= f && i <= t && i < nW; });
+    if(!w.length) return null;
+    return { label:d.label, short:d.label.split(' ')[0], weeks:w, partial:w.length < d.weeks.length };
+  }).filter(Boolean);
+}
+
+// Sum one recruiter over a week list. Weeks before the recruiter's first active week are ignored.
+function rtAgg(r, weeks){
+  var fa = _pfFirstActive(r), pl = r.placements || [];
+  var o = { s:0, i:0, p:0, st:0, active:false };
+  weeks.forEach(function(w){
+    if(w < fa) return;
+    var a = (r.subs||[])[w], b = (r.ivs||[])[w], c = pl[w], d = (r.starts||[])[w];
+    if(a==null && b==null && c==null && d==null) return;
+    o.active = true;
+    o.s += a||0; o.i += b||0; o.p += c||0; o.st += d||0;
+  });
+  return o;
+}
+function rtAggMany(recs, weeks){
+  var o = { s:0, i:0, p:0, st:0, active:false };
+  recs.forEach(function(r){
+    var a = rtAgg(r, weeks);
+    if(!a.active) return;
+    o.active = true; o.s += a.s; o.i += a.i; o.p += a.p; o.st += a.st;
+  });
+  return o;
+}
+
+// state: 'inactive' (not on roster that window), 'nodata' (denominator is 0), 'low' (too few starts), 'ok'
+function rtRatio(t, k, minStarts){
+  if(!t || !t.active) return { state:'inactive', v:null };
+  var den = t[k.den];
+  if(!den) return { state:'nodata', v:null, num:t[k.num], k:k };
+  var v = t[k.num] / den;
+  if(k.den === 'st' && t.st < minStarts) return { state:'low', v:v, st:t.st, k:k };
+  return { state:'ok', v:v, k:k };
+}
+
+// 'better' | 'worse' | null. Lower ratio = better. Only compares two rankable values.
+function rtDelta(cur, prev){
+  if(!cur || !prev || cur.state !== 'ok' || prev.state !== 'ok' || !(prev.v > 0)) return null;
+  var ch = (cur.v - prev.v) / prev.v;
+  if(Math.abs(ch) < RT_ARROW_PCT) return null;
+  return ch < 0 ? 'better' : 'worse';
+}
+
+function rtCellHtml(res, prev, benchV){
+  var bench = benchV != null ? '<span class="rt-bench" title="Benchmark for this window">' + benchV.toFixed(1) + '</span>' : '';
+  if(res.state === 'inactive') return '<span class="rt-na" title="Not active in this window">·</span>';
+  if(res.state === 'nodata'){
+    var dn = RT_DEN_NAME[res.k.den];
+    return '<span class="rt-na" title="0 ' + dn + ' in this window (' + res.num + ' ' + RT_DEN_NAME[res.k.num] + ')">—</span>' + bench;
+  }
+  var txt = res.v.toFixed(1);
+  if(res.state === 'low'){
+    return '<span class="rt-chip rt-low" title="Only ' + res.st + ' start' + (res.st===1?'':'s') + ' in this window. Below the minimum to rank fairly.">' + txt + '</span>' + bench;
+  }
+  var d = rtDelta(res, prev);
+  var arr = d ? '<span class="rt-arr" style="color:' + (d==='better'?'var(--green)':'var(--red)') + '" title="' + (d==='better'?'Improved':'Worse') + ' vs prior (' + prev.v.toFixed(1) + ')">' + (d==='better'?'▼':'▲') + '</span>' : '';
+  return '<span class="rt-chip" style="color:' + ratioColor(res.v, res.k.key) + ';background:' + ratioBg(res.v, res.k.key) + '">' + txt + '</span>' + arr + bench;
+}
+
+// ── Overview: Ratio trend grid ──
+var ovView = 'summary', ovRtGrain = 'P', ovRtKey = 'sub2start', ovRtSort = null, ovRtDir = 1;
+(function(){ try{
+  var s = JSON.parse(safeGet('stemOvRatioTrend') || '{}');
+  if(s.view === 'trend' || s.view === 'summary') ovView = s.view;
+  if(s.grain === 'P' || s.grain === 'Q') ovRtGrain = s.grain;
+  if(RT_KEYS.some(function(k){ return k.key === s.key; })) ovRtKey = s.key;
+} catch(e){} })();
+function _ovRtSave(){ safeSet('stemOvRatioTrend', JSON.stringify({view:ovView, grain:ovRtGrain, key:ovRtKey})); }
+
+function setOvView(v){ ovView = v; _ovRtSave(); renderOvTrend(); }
+function setOvRt(kind, v){
+  if(kind === 'g') ovRtGrain = v; else ovRtKey = v;
+  ovRtSort = null; ovRtDir = 1; _ovRtSave(); renderOvTrend();
+}
+function sortOvRt(col){
+  if(ovRtSort === col) ovRtDir = -ovRtDir; else { ovRtSort = col; ovRtDir = 1; }
+  renderOvTrend();
+}
+
+function _rtSegHtml(opts, cur, fnPrefix){
+  return '<span class="rt-seg">' + opts.map(function(o){
+    return '<button type="button" class="' + (o[0]===cur?'on':'') + '" onclick="' + fnPrefix + '\'' + o[0] + '\')"' + (o[2]?' title="'+o[2]+'"':'') + '>' + o[1] + '</button>';
+  }).join('') + '</span>';
+}
+
+function renderOvTrend(){
+  var sumWrap = document.getElementById('ov-summary-wrap'), trWrap = document.getElementById('ov-trend-wrap');
+  if(!sumWrap || !trWrap) return;
+  var isTrend = ovView === 'trend';
+  sumWrap.style.display = isTrend ? 'none' : '';
+  trWrap.style.display = isTrend ? '' : 'none';
+  var ttl = document.getElementById('ov-card-title'); if(ttl) ttl.textContent = isTrend ? 'Ratio trend' : 'Recruiter summary';
+  document.querySelectorAll('#ov-view-seg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === ovView); });
+  if(!isTrend) return;
+
+  var k = RT_KEYS.find(function(x){ return x.key === ovRtKey; }) || RT_KEYS[3];
+  var ctrl = document.getElementById('ov-trend-ctrl');
+  ctrl.innerHTML =
+    '<span class="rt-lbl">View</span>' + _rtSegHtml([['P','Period'],['Q','Quarter']], ovRtGrain, "setOvRt('g',")
+    + '<span class="rt-lbl">Ratio</span>' + _rtSegHtml(RT_KEYS.map(function(x){ return [x.key, x.lbl, x.full]; }), ovRtKey, "setOvRt('k',");
+
+  var rng = getWeekRange(), f = rng[0], t = rng[1];
+  var buckets = rtBuckets(ovRtGrain, f, t);
+  var allW = []; for(var w = f; w <= t; w++) allW.push(w);
+  var minS = RT_MIN_STARTS[ovRtGrain];
+
+  // Same filters as the summary table: header manager, search, card manager, archived toggle
+  var mgr = (document.getElementById('mgr-filter')||{}).value || '';
+  var q = ((document.getElementById('search')||{}).value || '').toLowerCase();
+  var om = (document.getElementById('ov-mgr-filter')||{}).value || '';
+  var recs = RECRUITERS.map(function(r){ return { r:r, arch:false }; });
+  if(includeArchived && archivedRecruiters && archivedRecruiters.length) recs = recs.concat(archivedRecruiters.map(function(r){ return { r:r, arch:true }; }));
+  recs = recs.filter(function(x){ var r = x.r;
+    return (!mgr || r.manager === mgr) && (!om || r.manager === om) && (!q || r.name.toLowerCase().indexOf(q) >= 0);
+  });
+
+  var rows = recs.map(function(x){
+    var cells = buckets.map(function(b){ return rtRatio(rtAgg(x.r, b.weeks), k, minS); });
+    return { r:x.r, arch:x.arch, cells:cells, tot:rtRatio(rtAgg(x.r, allW), k, RT_MIN_STARTS.R) };
+  }).filter(function(x){ return x.cells.some(function(c){ return c.state !== 'inactive'; }); });
+
+  var sv = function(c){ return c.state === 'ok' ? c.v : c.state === 'low' ? 1e6 + c.v : c.state === 'nodata' ? 2e6 : 3e6; };
+  if(ovRtSort === 'name' || ovRtSort === null) rows.sort(function(a,b){ return ovRtDir * a.r.name.localeCompare(b.r.name); });
+  else if(ovRtSort === 'mgr') rows.sort(function(a,b){ return ovRtDir * (a.r.manager.localeCompare(b.r.manager) || a.r.name.localeCompare(b.r.name)); });
+  else rows.sort(function(a,b){
+    var NA = { state:'inactive' }, ca = (ovRtSort === 'tot' ? a.tot : a.cells[ovRtSort]) || NA, cb = (ovRtSort === 'tot' ? b.tot : b.cells[ovRtSort]) || NA;
+    var va = sv(ca), vb = sv(cb);
+    if(va >= 1e6 || vb >= 1e6) return va - vb;   // unrankable always sinks
+    return ovRtDir * (va - vb);
+  });
+
+  var totLbl = isFullRange() ? 'YTD' : 'Range';
+  var sortCls = function(c){ return ovRtSort === c ? (ovRtDir === 1 ? ' rt-sa' : ' rt-sd') : ''; };
+  var h = '<thead><tr><th class="rt-sortable' + sortCls('name') + '" onclick="sortOvRt(\'name\')" style="text-align:left">Recruiter</th>'
+    + '<th class="rt-sortable' + sortCls('mgr') + '" onclick="sortOvRt(\'mgr\')" style="text-align:left">Manager</th>'
+    + buckets.map(function(b, i){
+        return '<th class="rt-sortable' + sortCls(i) + '" onclick="sortOvRt(' + i + ')" title="' + b.label + (b.partial ? ' (partial: in progress or clipped by the week range)' : '') + '">' + b.short + (b.partial ? '*' : '') + '</th>';
+      }).join('')
+    + '<th class="rt-sortable rt-totcol' + sortCls('tot') + '" onclick="sortOvRt(\'tot\')" title="All weeks in the selected range">' + totLbl + '</th></tr></thead><tbody>';
+
+  if(!rows.length){
+    h += '<tr><td colspan="' + (buckets.length + 3) + '" style="color:var(--text3);padding:14px">No recruiters match the current filters.</td></tr>';
+  }
+  h += rows.map(function(x){
+    var mc = MGR_COLORS[x.r.manager] || '#888';
+    return '<tr><td style="font-weight:500;white-space:nowrap"><span class="pf-name-link" onclick="openProfileEnc(\'' + encodeURIComponent(x.r.name) + '\')" title="Open profile">' + x.r.name + '</span>'
+      + (x.arch ? '<span style="font-size:9px;color:var(--amber);margin-left:5px;padding:1px 4px;border-radius:3px;background:var(--amber-bg)">archived</span>' : '') + '</td>'
+      + '<td><span class="mgr" style="background:' + mc + '22;color:' + mc + '">' + x.r.manager + '</span></td>'
+      + x.cells.map(function(c, i){ return '<td class="rt-cell">' + rtCellHtml(c, x.cells[i-1]) + '</td>'; }).join('')
+      + '<td class="rt-cell rt-totcol">' + rtCellHtml(x.tot) + '</td></tr>';
+  }).join('');
+
+  // Pooled row: total numerator / total denominator across everyone shown
+  var shown = rows.map(function(x){ return x.r; });
+  var tc = buckets.map(function(b){ return rtRatio(rtAggMany(shown, b.weeks), k, minS); });
+  var tt = rtRatio(rtAggMany(shown, allW), k, RT_MIN_STARTS.R);
+  var poolLbl = om ? om + '\'s team' : mgr ? mgr + '\'s team' : 'All shown';
+  h += '</tbody><tfoot><tr class="rt-pool"><td title="Pooled: total ' + RT_DEN_NAME[k.num] + ' / total ' + RT_DEN_NAME[k.den] + ' across everyone shown">' + poolLbl + ' (pooled)</td><td></td>'
+    + tc.map(function(c, i){ return '<td class="rt-cell">' + rtCellHtml(c, tc[i-1]) + '</td>'; }).join('')
+    + '<td class="rt-cell rt-totcol">' + rtCellHtml(tt) + '</td></tr></tfoot>';
+
+  document.getElementById('ov-trend-tbl').innerHTML = h;
+  document.getElementById('ov-trend-note').innerHTML =
+    'Lower is better. ▼ improved / ▲ worse vs prior ' + (ovRtGrain === 'Q' ? 'quarter' : 'period') + ' (10%+ change). '
+    + '<span class="rt-chip rt-low" style="padding:0 5px">dashed</span> = under ' + minS + ' starts in the ' + (ovRtGrain === 'Q' ? 'quarter' : 'period') + ', not ranked. '
+    + '* = partial window. · = not active. Columns follow the week range filter. Click a name for the full funnel trend.';
+}
+
+// ── Profile: Ratio trend by period (independent of the profile's range buttons) ──
+var pfRtGrain = 'P', pfRtBench = 'team';
+function setPfRt(kind, v){ if(kind === 'g') pfRtGrain = v; else pfRtBench = v; renderRecruiterProfile(); }
+
+// Builds the card model for one recruiter across their active tenure. Benchmark = pooled active (non-archived) recruiters.
+function pfRatioTrendModel(r, firstActive, lastWk){
+  var buckets = rtBuckets(pfRtGrain, firstActive, lastWk);
+  var minS = RT_MIN_STARTS[pfRtGrain];
+  var benchRecs = pfRtBench === 'none' ? null
+    : RECRUITERS.filter(function(x){ return pfRtBench === 'team' || x.manager === r.manager; });
+  var benchLbl = pfRtBench === 'team' ? 'All active recruiters' : pfRtBench === 'mgr' ? r.manager + '\'s team' : '';
+  var self = buckets.map(function(b){ return rtAgg(r, b.weeks); });
+  var bench = benchRecs ? buckets.map(function(b){ return rtAggMany(benchRecs, b.weeks); }) : null;
+  var rows = RT_KEYS.map(function(k){
+    return {
+      k:k,
+      vals:self.map(function(a){ return rtRatio(a, k, minS); }),
+      bench:bench ? bench.map(function(a){ return rtRatio(a, k, minS); }) : null
+    };
+  });
+  return { grain:pfRtGrain, bench:pfRtBench, benchLbl:benchLbl, minS:minS, buckets:buckets, self:self, rows:rows };
+}
+
+function pfRatioTrendHtml(M, mgrName){
+  var cols = M.buckets;
+  var benchOpts = [['team','All active'],['mgr', _pfEsc(mgrName) + '\'s team'],['none','None']];
+  var h = '<div class="card" style="margin-bottom:14px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
+    + '<span class="card-title">Ratio trend by ' + (M.grain === 'Q' ? 'quarter' : 'period') + '</span>'
+    + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+    + '<span class="rt-lbl">View</span>' + _rtSegHtml([['P','Period'],['Q','Quarter']], M.grain, "setPfRt('g',")
+    + '<span class="rt-lbl">Benchmark</span>' + _rtSegHtml(benchOpts, M.bench, "setPfRt('b',")
+    + '</div></div>';
+  if(!cols.length){
+    return h + '<div style="color:var(--text3);font-size:12px">No active weeks yet.</div></div>';
+  }
+  h += '<div class="tbl-wrap"><table class="rt-tbl rt-pf"><thead><tr><th style="text-align:left;width:110px"></th>'
+    + cols.map(function(b){ return '<th title="' + b.label + (b.partial ? ' (partial: in progress or before hire date)' : '') + '">' + b.short + (b.partial ? '*' : '') + '</th>'; }).join('')
+    + '</tr></thead><tbody>'
+    + '<tr class="rt-sec"><td colspan="' + (cols.length + 1) + '">Ratios (lower is better)' + (M.benchLbl ? '<span style="font-weight:400"> · small number = ' + _pfEsc(M.benchLbl) + ', pooled</span>' : '') + '</td></tr>';
+  M.rows.forEach(function(row){
+    h += '<tr><td style="text-align:left;color:var(--text2)" title="' + row.k.full + '">' + row.k.lbl + '</td>'
+      + row.vals.map(function(c, i){
+          var bv = row.bench && row.bench[i].v != null ? row.bench[i].v : null;
+          return '<td class="rt-cell">' + rtCellHtml(c, row.vals[i-1], bv) + '</td>';
+        }).join('') + '</tr>';
+  });
+  h += '<tr class="rt-sec"><td colspan="' + (cols.length + 1) + '">Volume</td></tr>';
+  [['s','Subs','var(--c-subs)'],['i','Interviews','var(--c-ivs)'],['p','Placements','var(--purple)'],['st','Starts','var(--c-starts)']].forEach(function(v){
+    h += '<tr><td style="text-align:left;color:var(--text2)">' + v[1] + '</td>'
+      + M.self.map(function(a){ return '<td style="color:' + v[2] + ';font-weight:600">' + (a.active ? a[v[0]] : '<span class="rt-na">·</span>') + '</td>'; }).join('') + '</tr>';
+  });
+  h += '</tbody></table></div>'
+    + '<div style="position:relative;height:190px;margin-top:12px"><canvas id="pf-rt-chart"></canvas></div>'
+    + '<div style="font-size:11px;color:var(--text3);margin-top:6px">▼ improved / ▲ worse vs prior ' + (M.grain === 'Q' ? 'quarter' : 'period') + ' (10%+ change). Dashed = under ' + M.minS + ' starts, not ranked. * = partial window. Uses full tenure; the range buttons above do not affect this card.</div>'
+    + '</div>';
+  return h;
+}
+
+function pfRatioTrendChart(M){
+  var el = document.getElementById('pf-rt-chart');
+  if(!el || !M.buckets.length) return;
+  var sRow = M.rows[3];
+  var pt = function(c){ return c.state === 'ok' || c.state === 'low' ? +c.v.toFixed(1) : null; };
+  var ds = [{
+    label:'Sub→Start', data:sRow.vals.map(pt), borderColor:'#4f8ef7', backgroundColor:'#4f8ef7', borderWidth:2, tension:0.3, spanGaps:true,
+    pointRadius:4,
+    pointBackgroundColor:sRow.vals.map(function(c){ return c.state === 'low' ? 'transparent' : '#4f8ef7'; })
+  }];
+  if(sRow.bench) ds.push({ label:M.benchLbl, data:sRow.bench.map(pt), borderColor:'#9ba3b8', borderDash:[6,4], borderWidth:1.5, pointRadius:0, tension:0.3, spanGaps:true });
+  _pfCharts.rt = new Chart(el, {
+    type:'line',
+    data:{ labels:M.buckets.map(function(b){ return b.short + (b.partial ? '*' : ''); }), datasets:ds },
+    options:{ maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ boxWidth:10, font:{ size:10 } } },
+        tooltip:{ callbacks:{ label:function(c){ return c.dataset.label + ': ' + c.raw + ':1'; } } } },
+      scales:{ x:{ ticks:{ font:{ size:10 } }, grid:{ display:false } },
+        y:{ reverse:true, ticks:{ font:{ size:10 } }, title:{ display:true, text:'Sub→Start (up = better)', font:{ size:10 } } } } }
+  });
+}
+
+
+// 1:1 export section for the ratio trend (print colors, mirrors the on-screen card)
+function _pfRtExportHtml(M, name){
+  if(!M || !M.buckets || !M.buckets.length) return '';
+  var col = function(c){
+    if(c.state !== 'ok') return '#5c6480';
+    var hi = c.k.key === 'sub2start' ? 8 : 3, lo = c.k.key === 'sub2start' ? 12 : 5;
+    return c.v < hi ? '#1a7a45' : c.v <= lo ? '#a86a00' : '#b93030';
+  };
+  var cell = function(c, prev, b){
+    if(c.state === 'inactive') return '<td style="color:#9098b0">·</td>';
+    var v = c.state === 'nodata' ? '—' : c.v.toFixed(1) + (c.state === 'low' ? '†' : '');
+    var d = rtDelta(c, prev);
+    var arr = d ? (d === 'better' ? ' <span style="color:#1a7a45">▼</span>' : ' <span style="color:#b93030">▲</span>') : '';
+    var bv = b && b.v != null ? '<div style="font-size:10px;color:#9098b0">' + b.v.toFixed(1) + '</div>' : '';
+    return '<td style="text-align:center"><b style="color:' + col(c) + '">' + v + '</b>' + arr + bv + '</td>';
+  };
+  var unit = M.grain === 'Q' ? 'quarter' : 'period';
+  return '<div class="h2">Ratio trend by ' + unit + (M.benchLbl ? ' (gray = ' + _pfEsc(M.benchLbl) + ', pooled)' : '') + '</div>'
+    + '<table><tr><th>Ratio</th>' + M.buckets.map(function(b){ return '<th style="text-align:center">' + b.short + (b.partial ? '*' : '') + '</th>'; }).join('') + '</tr>'
+    + M.rows.map(function(row){
+        return '<tr><td>' + row.k.lbl + '</td>' + row.vals.map(function(c, i){ return cell(c, row.vals[i-1], row.bench && row.bench[i]); }).join('') + '</tr>';
+      }).join('')
+    + '<tr><td style="color:#5c6480">Starts</td>' + M.self.map(function(a){ return '<td style="text-align:center;color:#5c6480">' + (a.active ? a.st : '·') + '</td>'; }).join('') + '</tr>'
+    + '</table>'
+    + '<div class="sub" style="margin-top:4px">Lower is better. ▼ improved / ▲ worse vs prior ' + unit + ' (10%+ change). † = under ' + M.minS + ' starts, not ranked. * = partial window.</div>';
+}
 
 // Aggregate a weekly array into period or quarter buckets, limited to available weeks
 function aggregateByGrain(weeklyArr, grain, nWeeksAvailable) {
@@ -5769,7 +6091,7 @@ function saveEditModal() {
 // newRecruiters: [{name, manager, addedOn, startWeekIndex}] — added after BASE_DATA, stored in localStorage
 // PRESET_ARCHIVED — baked in so archived list survives dashboard updates
 // To update: export your current archived list and paste the JSON here
-const PRESET_ARCHIVED = [{"name":"Heather McRae","manager":"Noah","archivedOn":"6/4/2026","endedOn":"05/08/2026","subs":[6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],"ivs":[1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],"placements":[0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],"hireDate":"2014-07-07","birthday":""},{"name":"Helen Phillips","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/19/2026","subs":[2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],"ivs":[1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],"placements":[0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],"starts":[1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],"leads":[0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],"hireDate":"2003-02-07","birthday":"06/30"},{"name":"John Gorsuch","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/10/2026","subs":[5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],"ivs":[1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],"starts":[0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],"leads":[0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],"hireDate":"2022-09-12","birthday":""},{"name":"Jason Beir","manager":"Kevin","archivedOn":"6/8/2026","endedOn":"06/05/2026","subs":[4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],"ivs":[3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],"placements":[0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2020-10-01","birthday":""},{"name":"Jessica Paden","manager":"Brett","archivedOn":"6/9/2026","endedOn":"06/08/2026","subs":[6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],"ivs":[2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],"placements":[2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],"starts":[0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],"leads":[0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],"hireDate":"2024-01-29","birthday":"06/30"},{"name":"Stephen Pemberton","manager":"Joe","archivedOn":"6/23/2026","endedOn":"06/22/2026","subs":[5,3,6,5,5,7,5,6,6,5,4,10,6,7,5,10,7,5,5,5,4,5,10,3],"ivs":[0,0,1,0,1,0,1,3,0,1,0,1,1,0,2,0,3,2,2,2,0,0,0,0],"placements":[0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0],"starts":[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0],"leads":[1,0,0,0,5,2,1,0,3,2,0,1,0,2,0,1,0,0,0,0,1,1,0,2],"hireDate":"2025-12-15","birthday":"07/20"},{"name":"Taylor Durrill","manager":"Noah","archivedOn":"7/15/2026","endedOn":"07/15/2026","subs":[5,7,6,7,4,6,6,6,6,null,null,null,null,null,null,null,null,null,null,null,0,0,4,2,3,3,5],"ivs":[0,2,0,2,0,1,1,1,2,1,null,1,null,null,null,null,0,0,0,0,0,0,0,0,0,3,1],"placements":[0,0,0,0,1,0,0,0,0,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0,0,0],"starts":[0,0,0,0,0,0,1,0,0,null,null,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,1,1,1,1,3,null,null,null,null,null,null,null,null,null,0,null,0,0,0,1,0,2,0],"hireDate":"2024-03-26","birthday":"01/18"},{"name":"Aidan (AJ) Smith","manager":"Rachel","archivedOn":"8/20/2026","endedOn":"08/17/2026","subs":[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5,7,0,0,4,5,7,6,3,4,6,5,5,6,3],"ivs":[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3,0,0,0,0,1,0,3,1,5,0,0,2,3,0],"placements":[0,1,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0],"starts":[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0,0,0,0,0,1,0,0,1,1,0,0,3,0,0],"hireDate":"2025-07-14","birthday":"01/31"}];
+const PRESET_ARCHIVED = [{"name":"Heather McRae","manager":"Noah","archivedOn":"6/4/2026","endedOn":"05/08/2026","subs":[6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],"ivs":[1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],"placements":[0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],"hireDate":"2014-07-07","birthday":"","vertical":"Energy, Oil, Gas & Utilities","title":""},{"name":"Helen Phillips","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/19/2026","subs":[2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],"ivs":[1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],"placements":[0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],"starts":[1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],"leads":[0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],"hireDate":"2003-02-07","birthday":"06/30","vertical":"T&M: Auto","title":""},{"name":"John Gorsuch","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/10/2026","subs":[5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],"ivs":[1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],"starts":[0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],"leads":[0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],"hireDate":"2022-09-12","birthday":"","vertical":"T&M: Auto","title":""},{"name":"Jason Beir","manager":"Kevin","archivedOn":"6/8/2026","endedOn":"06/05/2026","subs":[4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],"ivs":[3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],"placements":[0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2020-10-01","birthday":"","vertical":"Telecom","title":""},{"name":"Jessica Paden","manager":"Brett","archivedOn":"6/9/2026","endedOn":"06/08/2026","subs":[6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],"ivs":[2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],"placements":[2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],"starts":[0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],"leads":[0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],"hireDate":"2024-01-29","birthday":"06/30","vertical":"Telecom","title":""},{"name":"Stephen Pemberton","manager":"Joe","archivedOn":"6/23/2026","endedOn":"06/22/2026","subs":[5,3,6,5,5,7,5,6,6,5,4,10,6,7,5,10,7,5,5,5,4,5,10,3],"ivs":[0,0,1,0,1,0,1,3,0,1,0,1,1,0,2,0,3,2,2,2,0,0,0,0],"placements":[0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0],"starts":[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0],"leads":[1,0,0,0,5,2,1,0,3,2,0,1,0,2,0,1,0,0,0,0,1,1,0,2],"hireDate":"2025-12-15","birthday":"07/20","vertical":"T&M: Auto","title":""},{"name":"Taylor Durrill","manager":"Noah","archivedOn":"7/15/2026","endedOn":"07/15/2026","subs":[5,7,6,7,4,6,6,6,6,null,null,null,null,null,null,null,null,null,null,null,0,0,4,2,3,3,5],"ivs":[0,2,0,2,0,1,1,1,2,1,null,1,null,null,null,null,0,0,0,0,0,0,0,0,0,3,1],"placements":[0,0,0,0,1,0,0,0,0,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0,0,0],"starts":[0,0,0,0,0,0,1,0,0,null,null,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,1,1,1,1,3,null,null,null,null,null,null,null,null,null,0,null,0,0,0,1,0,2,0],"hireDate":"2024-03-26","birthday":"01/18","vertical":"Energy, Oil, Gas & Utilities","title":""},{"name":"Aidan (AJ) Smith","manager":"Rachel","archivedOn":"9/17/2026","endedOn":"08/17/2026","subs":[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5,7,0,0,4,5,7,6,3,4,6,5,5,6,3,0,0,0,0],"ivs":[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3,0,0,0,0,1,0,3,1,5,0,0,2,3,0,0,0,0,0],"placements":[0,1,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0],"starts":[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0],"leads":[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0,0,0,0,0,1,0,0,1,1,0,0,3,0,0,0,0,0,0],"hireDate":"2025-07-14","birthday":"01/31","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Associate Recruiter"},{"name":"Lazaro Calderin","manager":"Rachel","archivedOn":"9/9/2026","endedOn":"09/04/2026","subs":[3,8,5,0,9,7,12,4,3,4,5,19,1,10,0,9,20,22,0,21,10,6,10,16,8,2,4,12,11,8,6,4,15,21,13],"ivs":[0,0,0,0,17,1,2,0,0,4,0,9,1,4,0,5,3,1,0,9,1,3,0,2,0,0,1,0,0,1,4,4,0,8,0],"placements":[0,1,0,1,1,5,0,0,0,1,1,1,1,0,0,0,4,1,0,0,0,2,0,1,0,0,1,0,0,0,2,0,0,1,1],"starts":[1,0,0,0,1,0,0,5,1,0,0,1,0,1,2,0,0,0,3,1,1,0,1,0,1,1,1,0,0,0,2,0,0,1,0],"leads":[0,0,0,0,0,0,1,1,7,1,7,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,3,1],"hireDate":"2016-10-31","birthday":"03/26","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Principal Recruiter 1"},{"name":"Kaitlyn Moreschi","manager":"Rachel","archivedOn":"9/15/2026","endedOn":"09/08/2026","subs":[4,4,7,8,10,7,6,4,6,4,3,2,7,4,4,6,8,6,10,11,9,5,15,0,3,0,10,5,4,0,13,5,3,2,6,0],"ivs":[1,1,0,4,1,2,2,4,4,1,0,1,0,2,3,3,1,0,6,2,1,11,3,1,0,0,3,9,4,0,5,7,1,1,2,0],"placements":[0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,1,0,0,3,1,1,1,0,0,0,0,0,1,2,2,1,0,0],"starts":[0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,1,0,0,0,2,0,2,1,1,0,0,1,0,1,1,1,0],"leads":[0,0,0,0,1,1,1,0,1,1,0,0,2,1,1,0,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,0],"hireDate":"2022-01-31","birthday":"08/24","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Senior Recruiter 1"},{"name":"Sean McDivitt","manager":"Tyler","archivedOn":"9/28/2026","endedOn":"09/25/2026","subs":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,12,7,7,5,6,2,7,11,3,9,1,3,9,14,15,6,2,1],"ivs":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,2,4,2,3,1,3,5,3,4,0,1,2,8,9,1,1],"placements":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,0,1,0,0,0,0,1,1,0,0,2,2,0,1,1],"starts":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0],"leads":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,1,1,0,0,0,1,0,1,0,0,0,0,0,0],"hireDate":"2026-05-19","birthday":"11/09","vertical":"Life Sciences","title":"Senior Recruiter 1"}];
 
 // PRESET_VERTICALS — baked in to survive dashboard updates.
 // Snapshot from the roster preset export of 2026-09-16. localStorage always
@@ -9474,6 +9796,7 @@ function renderRecruiterProfile(){
   }
 
   // Stash everything the 1:1 export needs so it always matches what's on screen
+  var rtModel = pfRatioTrendModel(r, firstActive, lastWk);
   _pfLast = {
     name:r.name, manager:r.manager, hd:hd, isArch:isArch,
     f:f, t:t, rangeWks:rangeWks, tenureWks:tenureWks,
@@ -9486,7 +9809,8 @@ function renderRecruiterProfile(){
     mMedS2i:mMedS2i, mMedI2p:mMedI2p, mMedP2s:mMedP2s,
     tenureStarts:tenureStarts, target:target, onTrk:onTrk,
     momText:momText, signal:signal, gpTot:gpTot, gpWk:gpWk, orgRank:orgRank,
-    cohortLabel:cohortLabel, cohortN:cohort.length, cohortRows:cohortRows
+    cohortLabel:cohortLabel, cohortN:cohort.length, cohortRows:cohortRows,
+    rt:rtModel
   };
 
   // ── Build HTML ──
@@ -9559,6 +9883,7 @@ function renderRecruiterProfile(){
     +'</div>'
     +'<div style="margin-top:12px;font-size:12px;color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px">💡 '+signal+'</div>'
   +'</div>'
+  +pfRatioTrendHtml(rtModel, r.manager)
   +'<div class="pf-grid2" style="margin-bottom:14px">'
     +'<div class="card" style="margin-bottom:0"><div class="card-hdr"><span class="card-title">Weekly activity trend</span></div><div style="position:relative;height:230px"><canvas id="pf-trend"></canvas></div></div>'
     +'<div class="card" style="margin-bottom:0"><div class="card-hdr"><span class="card-title">Pacing — cumulative starts vs required</span><span style="font-size:11px;color:var(--text3);cursor:help" title="'+_pfEsc(onTrackTip)+'">ⓘ on-track rule</span></div><div style="position:relative;height:230px"><canvas id="pf-pace"></canvas></div></div>'
@@ -9627,6 +9952,7 @@ function renderRecruiterProfile(){
     options:{maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:10,font:{size:10}}}},
       scales:{x:{ticks:{font:{size:10},maxTicksLimit:8},grid:{display:false}},y:{ticks:{font:{size:10}},beginAtZero:true}}}
   });
+  pfRatioTrendChart(rtModel);
 }
 
 // ── Printable 1:1 review sheet — reads the last-rendered profile stats for exact parity ──
@@ -9675,6 +10001,7 @@ function exportProfileSheet(){
     +'<tr><td>Placement → Start</td><td>'+pc(L.p2s)+'</td><td>'+pc(L.medP2s)+'</td>'+(mgrCols?'<td>'+pc(L.mMedP2s)+'</td>':'')+'</tr>'
     +'</table>'
     +'<div class="callout">💡 '+_pfEsc(signalText)+'</div>'
+    +_pfRtExportHtml(L.rt, L.name)
     +'<div class="h2">Cohort benchmark — '+_pfEsc(L.cohortLabel)+' (n = '+L.cohortN+')</div>'
     +'<table><tr><th>Metric (per active wk)</th><th>'+_pfEsc(L.name.split(' ')[0])+'</th><th>Cohort median</th><th>Cohort rank</th><th>All-active rank</th><th>'+_pfEsc(L.mgrLbl)+' team rank</th></tr>'
     +L.cohortRows.map(function(row){
