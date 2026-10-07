@@ -355,6 +355,10 @@ td.editing{padding:2px 4px!important}
 .yoy-tbl tr:hover td{background:var(--bg2)}
 .yoy-gs{border-left:1px solid var(--border2)}
 .yoy-tag{font-size:10.5px;padding:1px 6px;border-radius:5px;background:var(--bg4);color:var(--text2);margin-left:6px;font-weight:500}
+.yoy-plain-row{display:grid;grid-template-columns:150px 1fr;gap:10px;padding:7px 0;border-top:1px solid var(--border);font-size:13px;color:var(--text2);line-height:1.5}
+.yoy-plain-row b{color:var(--text);font-weight:650}
+.yoy-plain-lbl{font-weight:600;color:var(--text)}
+@media(max-width:700px){.yoy-plain-row{grid-template-columns:1fr;gap:2px}}
 .yoy-foot{font-size:11.5px;color:var(--text3);margin-top:10px;line-height:1.5}
 .yoy-export{background:var(--bg2);color:var(--text2);border:1px solid var(--border2);border-radius:7px;height:28px;padding:0 11px;font-size:12px;cursor:pointer;font-family:inherit}
 .yoy-seg button:focus-visible,.yoy-tbl th:focus-visible,.yoy-export:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -1272,6 +1276,7 @@ td.editing{padding:2px 4px!important}
   <div id="yoy-body">
     <div class="yoy-kv" id="yoy-kv"></div>
     <div class="yoy-kr" id="yoy-kr"></div>
+    <div class="card yoy-plain" id="yoy-plain" style="margin-bottom:14px"></div>
     <div class="card" style="margin-bottom:14px">
       <div class="card-hdr">
         <div><div class="card-title">Trend by period</div><div class="yoy-cardp" id="yoy-trend-p"></div></div>
@@ -2506,6 +2511,7 @@ function toggleIncludeArchived() {
     else if (t==='trends') renderTrends();
     else if (t==='leaderboard') renderLeaderboard();
     else if (t==='recap') renderRecap();
+    else if (t==='yoy') renderYoY();
   }
 }
 
@@ -9604,13 +9610,14 @@ function _yoyKey(n){ return archKey(n); }
 // Current-year records: live roster plus everyone archived this year.
 // Archived arrays keep trailing zeros after an exit, so weeks after endedOn
 // are blanked to keep weekly averages honest.
-function _yoyCurrentRecs(){
+function _yoyCurrentRecs(forceAll){
   const out = {};
   const nW = wkLabels.length;
   const fit = function(arr){ const a=[]; for(let i=0;i<nW;i++) a.push(arr && i<arr.length ? arr[i] : null); return a; };
   RECRUITERS.forEach(function(r){
     out[_yoyKey(r.name)] = { name:r.name, s:fit(r.subs), i:fit(r.ivs), t:fit(r.starts), l:fit(r.leads) };
   });
+  if (!forceAll && !includeArchived) return out;
   (archivedRecruiters||[]).forEach(function(r){
     const k = _yoyKey(r.name);
     if (out[k]) return;
@@ -9652,7 +9659,7 @@ function _yoyPillVol(n,o){
 }
 function _yoyPillRatio(n,o){
   if (n==null||o==null) return '<span class="yoy-pill yoy-flat">n/a</span>';
-  const d=n-o, c=Math.abs(d)<0.05?'yoy-flat':(d<0?'yoy-up':'yoy-dn');
+  const d=Math.round(n*10)/10-Math.round(o*10)/10, c=Math.abs(d)<0.05?'yoy-flat':(d<0?'yoy-up':'yoy-dn');
   return '<span class="yoy-pill '+c+'">'+(d>0?'+':'')+d.toFixed(1)+'</span>';
 }
 
@@ -9684,12 +9691,13 @@ function renderYoY(){
   const keys = Array.from(new Set(Object.keys(prev).concat(Object.keys(cur))));
   const rows = [];
   keys.forEach(function(k){
+    if (!includeArchived && !cur[k]) return;
     const a=_yoyAgg(prev[k],0,wk), b=_yoyAgg(cur[k],0,wk);
     if (yoyState.scope==='lfl' ? (a&&b) : (a||b)) rows.push({ k:k, n:(cur[k]||prev[k]).name, a:a, b:b });
   });
   const tot = function(m){ return [rows.reduce(function(x,r){ return x+(r.a?r.a[m]:0); },0), rows.reduce(function(x,r){ return x+(r.b?r.b[m]:0); },0)]; };
   const py = yoyState.cmp, cy = YOY_CUR_YEAR;
-  document.getElementById('yoy-subline').textContent = 'Weeks 1 to '+wk+' of '+cy+' vs the same weeks of '+py+'. '+rows.length+' recruiters'+(yoyState.scope==='lfl'?' with data in both years':'')+'.';
+  document.getElementById('yoy-subline').textContent = 'Weeks 1 to '+wk+' of '+cy+' vs the same weeks of '+py+'. '+rows.length+' recruiters'+(yoyState.scope==='lfl'?' with data in both years':'')+'. '+(includeArchived?'Includes archived recruiters.':'Active roster only. Turn on Include Archived to add people who have left.');
 
   const notes = YOY_HISTORY[py].notes || {};
   const vol = [['s','Submittals','kpi-accent'],['i','Interviews','kpi-green'],['t','Starts','kpi-red'],['l','Leads','kpi-amber']];
@@ -9704,6 +9712,17 @@ function renderYoY(){
     return '<div class="kpi kpi-purple"><div class="kpi-label">'+r[0]+'</div><div class="yoy-krow"><span class="yoy-chip yoy-big '+_yoyBand(r[1],r[3])+'">'+_yoyFr(r[1])+'</span>'+_yoyPillRatio(r[1],r[2])+'</div>'
       +'<div class="kpi-sub">'+py+': '+_yoyFr(r[2])+'</div></div>';
   }).join('');
+
+  const fmt=function(n){ return n.toLocaleString(); };
+  const line=function(label, num, den, nn, dn){
+    const r0=_yoyRatio(num[0],den[0]), r1=_yoyRatio(num[1],den[1]);
+    if (r0==null||r1==null) return '';
+    const d=Math.round(r1*10)/10-Math.round(r0*10)/10, cmp=Math.abs(d)<0.05?'About the same as last year.':(d>0?'That\u2019s '+d.toFixed(1)+' more '+nn+' for every '+dn.replace(/s$/,'')+'.':'That\u2019s '+Math.abs(d).toFixed(1)+' fewer '+nn+' for every '+dn.replace(/s$/,'')+'.');
+    return '<div class="yoy-plain-row"><div class="yoy-plain-lbl">'+label+'</div><div>In '+py+' it took <b>'+fmt(num[0])+' '+nn+'</b> to get <b>'+fmt(den[0])+' '+dn+'</b>, or <b>'+r0.toFixed(1)+'</b> per '+dn.replace(/s$/,'')+'. '
+      +'In '+cy+' it took <b>'+fmt(num[1])+' '+nn+'</b> to get <b>'+fmt(den[1])+' '+dn+'</b>, or <b>'+r1.toFixed(1)+'</b> per '+dn.replace(/s$/,'')+'. '+cmp+'</div></div>';
+  };
+  document.getElementById('yoy-plain').innerHTML='<div class="card-title" style="margin-bottom:8px">In plain terms, weeks 1 to '+wk+'</div>'
+    +line('Subs to starts',S,T,'subs','starts')+line('Subs to interviews',S,I,'subs','interviews')+line('Interviews to starts',I,T,'interviews','starts');
 
   _yoyRenderTrend(rows.map(function(r){ return r.k; }), prev, cur, histW, wk);
   _yoyRenderTable(rows);
@@ -9796,7 +9815,7 @@ function yoySet(key, v){ yoyState[key] = (key==='wk'||key==='cmp') ? +v : v; ren
 // Rollover helper: freezes the current year's weekly numbers in the same
 // shape as YOY_HISTORY so it can be baked in when the new year starts.
 function exportYoYYear(){
-  const cur=_yoyCurrentRecs(), recs={};
+  const cur=_yoyCurrentRecs(true), recs={};
   Object.keys(cur).forEach(function(k){ const r=cur[k]; if(_yoyAgg(r,0,r.s.length)) recs[r.name]={ s:r.s, i:r.i, t:r.t, l:r.l }; });
   const obj={ wk1:WK1_ANCHOR, weeks:wkLabels.length, recs:recs };
   copyToClipboard(JSON.stringify(obj), '\u2705 '+YOY_CUR_YEAR+' copied to clipboard.\n\nPaste it in as YOY_HISTORY['+YOY_CUR_YEAR+'] in the next dashboard update.');
