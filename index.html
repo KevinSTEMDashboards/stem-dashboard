@@ -791,7 +791,7 @@ td.editing{padding:2px 4px!important}
 
 <!-- RECRUITER DETAIL -->
 <div class="tab-panel" id="tab-recruiter">
-  <div class="wctrl"><select id="rec-select" style="min-width:210px"></select><button class="btn" onclick="openRecruiterProfile(document.getElementById('rec-select').value)" style="height:32px;font-size:12px;margin-left:8px" title="Deep-dive profile: funnel, pacing, cohort benchmark, 1:1 export">👤 Open profile</button></div>
+  <div class="wctrl"><select class="nh-filter" onchange="nhSet(this.value)" title="New hire filter (shared by Trends, Leaderboard, Recruiter Detail)" style="height:32px;font-size:12px;margin-right:8px"><option value="all">All recruiters</option></select><select id="rec-select" style="min-width:210px"></select><button class="btn" onclick="openRecruiterProfile(document.getElementById('rec-select').value)" style="height:32px;font-size:12px;margin-left:8px" title="Deep-dive profile: funnel, pacing, cohort benchmark, 1:1 export">👤 Open profile</button></div>
   <div class="kpis" id="rec-kpis"></div>
   <div class="charts-row">
     <div class="card card-accent-blue"><div class="card-hdr"><span class="card-title">Weekly submittals</span></div><div class="chart-wrap"><canvas id="rSubsC" role="img" aria-label="Weekly subs"></canvas></div></div>
@@ -903,6 +903,7 @@ td.editing{padding:2px 4px!important}
       <select id="ti-wk-to" onchange="renderTrends()" style="height:32px;font-size:12px"></select>
     </div>
     <select id="ti-mgr" onchange="renderTrends()" style="height:32px;font-size:12px"><option value="">All managers</option></select>
+    <select class="nh-filter" onchange="nhSet(this.value)" title="New hire filter (shared by Trends, Leaderboard, Recruiter Detail)" style="height:32px;font-size:12px"><option value="all">All recruiters</option></select>
   </div>
 
   <!-- Section tabs -->
@@ -910,6 +911,7 @@ td.editing{padding:2px 4px!important}
     <button class="ti-sec-btn active" onclick="showTiSection('health')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px">Team Health</button>
     <button class="ti-sec-btn" onclick="showTiSection('snapshot')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">Weekly Snapshot</button>
     <button class="ti-sec-btn" onclick="showTiSection('sparklines')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">Sparkline Grid</button>
+    <button class="ti-sec-btn" onclick="showTiSection('ramp')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">New Hire Ramp</button>
   </div>
 
   <div id="ti-health" class="ti-section"></div>
@@ -943,6 +945,7 @@ td.editing{padding:2px 4px!important}
     <div id="snap-content"></div>
   </div>
   <div id="ti-sparklines" class="ti-section" style="display:none"></div>
+  <div id="ti-ramp" class="ti-section" style="display:none"></div>
 </div>
 
 
@@ -1153,6 +1156,7 @@ td.editing{padding:2px 4px!important}
 <!-- LEADERBOARD -->
 <div class="tab-panel" id="tab-leaderboard">
   <div class="wctrl">
+    <select class="nh-filter" onchange="nhSet(this.value)" title="New hire filter (shared by Trends, Leaderboard, Recruiter Detail)" style="height:32px;font-size:12px"><option value="all">All recruiters</option></select>
     <div style="position:relative" id="lb-vert-wrap">
       <button type="button" id="lb-vert-btn" onclick="toggleLbVertMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:140px;justify-content:space-between">
         <span id="lb-vert-label">All verticals</span><span style="font-size:10px;opacity:.6">&#9662;</span>
@@ -3995,6 +3999,7 @@ function renderWoW(){
 // ─── RECRUITER DETAIL ───
 let rCharts={};
 function renderRecruiter(){
+  nhApplyRecSelect();
   const recSel=document.getElementById('rec-select');
   // Auto-select first recruiter if nothing selected
   if(!recSel.value && recSel.options.length>0) recSel.selectedIndex=0;
@@ -5047,14 +5052,15 @@ function showTiSection(name) {
   // Hide week range filter when on snapshot (it has its own controls)
   var weekRange = document.querySelector('#tab-trends .wctrl');
   if (weekRange) weekRange.style.display = name === 'snapshot' ? 'none' : '';
-  ['health','snapshot','sparklines'].forEach(function(s) {
+  ['health','snapshot','sparklines','ramp'].forEach(function(s) {
     document.getElementById('ti-'+s).style.display = s===name ? '' : 'none';
   });
   document.querySelectorAll('.ti-sec-btn').forEach(function(btn) {
     var active = btn.textContent.toLowerCase().replace(/\s/g,'').includes(name) ||
       (name==='health' && btn.textContent.includes('Health')) ||
       (name==='snapshot' && btn.textContent.includes('Snapshot')) ||
-      (name==='sparklines' && btn.textContent.includes('Sparkline'));
+      (name==='sparklines' && btn.textContent.includes('Sparkline')) ||
+      (name==='ramp' && btn.textContent.includes('Ramp'));
     btn.style.color = active ? 'var(--accent)' : 'var(--text3)';
     btn.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
   });
@@ -5096,7 +5102,8 @@ function renderTrends() {
   var mgrF = document.getElementById('ti-mgr').value;
 
   // Get data sliced to selected range
-  var all = computedAll().filter(function(r){ return !mgrF || r.manager === mgrF; });
+  nhSyncSelects();
+  var all = computedAll().filter(function(r){ return (!mgrF || r.manager === mgrF) && nhPass(r.name); });
 
   // Helper: sum array slice
   function sliceSum(arr, from, to) {
@@ -5135,12 +5142,14 @@ function renderTrends() {
     if (btn.style.color === 'var(--accent)' || btn.style.color.includes('378ADD')) {
       if (btn.textContent.includes('Snapshot')) activeSection = 'snapshot';
       else if (btn.textContent.includes('Sparkline')) activeSection = 'sparklines';
+      else if (btn.textContent.includes('Ramp')) activeSection = 'ramp';
       else activeSection = 'health';
     }
   });
 
   if (activeSection === 'health') renderTiHealth(recs, mgrF, f, t);
   else if (activeSection === 'snapshot') renderTiSnapshot();
+  else if (activeSection === 'ramp') renderTiRamp(mgrF, f, t);
   else renderTiSparklines(recs, f, t);
 }
 
@@ -7562,6 +7571,8 @@ function lbGetRangedRecs(mgrFilter){
   // Use full RECRUITERS arrays (not range-sliced) so lb window filter works independently
   var base=RECRUITERS.map(function(r){return compute(r);});
   base=base.filter(function(r){return _lbVertPass(r.name);});
+  nhSyncSelects();
+  base=base.filter(function(r){return nhPass(r.name);});
   var recs;
   if(mgrFilter!==undefined&&mgrFilter!==null&&mgrFilter!==''){
     recs=base.filter(function(r){return r.manager===mgrFilter;});
@@ -9534,6 +9545,7 @@ function renderRecap(){
 
   var noCmp=!prev?'<div style="font-size:12px;color:var(--text3);margin-bottom:12px">No closed comparison bucket available'+(vs==='lastq'?' (same period last quarter hasn\'t closed or doesn\'t exist)':'')+' — showing totals only.</div>':'';
 
+  var hc = hcCardHtml(selEntry, mx, entries, mgrFilter, scopeLbl);
   body.innerHTML =
    noCmp
   +'<div class="card" style="margin-bottom:16px">'
@@ -9548,6 +9560,7 @@ function renderRecap(){
     +'</div>'
     +(summaryText?'<div style="font-size:11.5px;color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px;margin-top:12px">💡 <b style="color:var(--text)">Auto-summary:</b> '+summaryText+'</div>':'')
   +'</div>'
+  +hc.html
   +(prev?'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">'
     +'<div class="card" style="margin-bottom:0">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px"><span class="card-title">'+(mgrFilter?'Recruiter':'Manager')+' movement — '+mvName+' Δ vs '+prevLbl+'</span><span style="font-size:11px;color:var(--text3)">gray = per rec-wk change</span></div>'
@@ -9572,8 +9585,356 @@ function renderRecap(){
     scopeLbl:scopeLbl, isTeam:!!mgrFilter,
     org:cur.org, prevOrg:prev?prev.org:null, summaryText:summaryText,
     mgrRows:mgrRows, mvName:mvName, mvIsGP:mvIsGP,
-    upList:upList, downList:downList
+    upList:upList, downList:downList, hc:hc
   };
+}
+
+// ─── NEW HIRE FILTER ───
+// One shared filter used by Trends & Insights, Leaderboard, and Recruiter Detail.
+// Values: 'all' | 'd90' | 'm6' | 'yr' | 'c:YYYY-MM' (everyone hired that month).
+// Remembered per browser. Changing it on any tab changes it on all three.
+var nhFilter = (function(){ try { return safeGet('stemNewHireFilter') || 'all'; } catch(e){ return 'all'; } })();
+var NH_YEAR = +WK1_ANCHOR.slice(0,4);
+var NH_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function _nhHire(name){
+  var hd = (typeof getHireDate === 'function') ? getHireDate(name) : '';
+  return hd ? _parseDateLoose(hd) : null;
+}
+function _nhYm(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+
+// Pure test: does a hire date pass filter f as of `today`?
+function nhPassDate(d, f, today){
+  if (!f || f === 'all') return true;
+  if (!d) return false;
+  var days = _daysBetween(d, today || new Date());
+  if (f === 'd90') return days <= 90;
+  if (f === 'm6')  return days <= 183;
+  if (f === 'yr')  return d.getFullYear() === NH_YEAR;
+  if (f.indexOf('c:') === 0) return _nhYm(d) === f.slice(2);
+  return true;
+}
+function nhPass(name, f){ return nhPassDate(_nhHire(name), f || nhFilter); }
+
+function _nhRoster(){
+  var names = {};
+  RECRUITERS.forEach(function(r){ names[r.name] = true; });
+  if (includeArchived && typeof archivedRecruiters !== 'undefined') archivedRecruiters.forEach(function(r){ names[r.name] = true; });
+  return Object.keys(names);
+}
+function nhOptionsHtml(){
+  var roster = _nhRoster();
+  var cnt = function(f){ return roster.filter(function(n){ return nhPass(n, f); }).length; };
+  var html = '<option value="all">All recruiters</option>'
+    + '<option value="d90">New hires: last 90 days (' + cnt('d90') + ')</option>'
+    + '<option value="m6">New hires: last 6 months (' + cnt('m6') + ')</option>'
+    + '<option value="yr">New hires: hired in ' + NH_YEAR + ' (' + cnt('yr') + ')</option>';
+  var classes = {};
+  roster.forEach(function(n){
+    var d = _nhHire(n);
+    if (d && d.getFullYear() === NH_YEAR) classes[_nhYm(d)] = (classes[_nhYm(d)] || 0) + 1;
+  });
+  Object.keys(classes).sort().reverse().forEach(function(ym){
+    html += '<option value="c:' + ym + '">' + NH_MONTHS[+ym.slice(5)-1] + ' ' + ym.slice(0,4) + ' class (' + classes[ym] + ')</option>';
+  });
+  return html;
+}
+function nhSyncSelects(){
+  var html = nhOptionsHtml();
+  document.querySelectorAll('select.nh-filter').forEach(function(sel){
+    if (sel._nhHtml !== html) { sel.innerHTML = html; sel._nhHtml = html; }
+    sel.value = nhFilter;
+    if (sel.value !== nhFilter) { nhFilter = 'all'; sel.value = 'all'; }
+    var on = nhFilter !== 'all';
+    sel.style.borderColor = on ? 'var(--accent)' : '';
+    sel.style.color = on ? 'var(--accent)' : '';
+    sel.style.fontWeight = on ? '600' : '';
+  });
+}
+function nhSet(v){
+  nhFilter = v || 'all';
+  try { safeSet('stemNewHireFilter', nhFilter); } catch(e){}
+  nhSyncSelects();
+  var act = document.querySelector('.tab-panel.active');
+  var id = act ? act.id : '';
+  try { if (id === 'tab-leaderboard') renderLeaderboard(); } catch(e){ console.error(e); }
+  try { if (id === 'tab-trends') renderTrends(); } catch(e){ console.error(e); }
+  try { if (id === 'tab-recruiter') renderRecruiter(); } catch(e){ console.error(e); }
+}
+// Recruiter Detail: hide recruiters outside the filter in the dropdown.
+function nhApplyRecSelect(){
+  nhSyncSelects();
+  var sel = document.getElementById('rec-select');
+  if (!sel) return;
+  var firstOk = -1;
+  for (var i = 0; i < sel.options.length; i++) {
+    var o = sel.options[i];
+    var ok = !o.value || nhPass(o.value);
+    o.hidden = !ok; o.disabled = !ok;
+    if (ok && o.value && firstOk < 0) firstOk = i;
+  }
+  var cur = sel.options[sel.selectedIndex];
+  if ((!cur || cur.disabled) && firstOk >= 0) sel.selectedIndex = firstOk;
+}
+
+// ─── NEW HIRE RAMP (Trends & Insights section) ───
+// Calendar weeks side by side, not weeks since start. Not a ranking.
+var rampState = { metric:'subs', mode:'wk' };
+var _rampChart = null;
+var RAMP_COLORS = ['#4f8ef7','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4','#a855f7','#eab308'];
+var RAMP_METRICS = [['subs','Subs'],['ivs','Interviews'],['placements','Placements'],['starts','Starts'],['leads','Leads']];
+
+function _wkDateLbl(i){
+  var a = _parseDateLoose(WK1_ANCHOR);
+  var d = new Date(a.getFullYear(), a.getMonth(), a.getDate() + 7*i);
+  return (d.getMonth()+1) + '/' + d.getDate();
+}
+function rampSet(k, v){ rampState[k] = v; renderTrends(); }
+
+// Pure: weekly or cumulative series over [c0, c1] for one person.
+// Weeks before start or after end are null (blank, not zero).
+function rampSeries(arr, start, end, c0, c1, mode){
+  var out = [], cum = 0;
+  for (var i = start; i < c0; i++) cum += ((arr || [])[i] || 0);
+  for (var w = c0; w <= c1; w++) {
+    if (w < start || (end != null && w > end)) { out.push(null); continue; }
+    var v = (arr || [])[w];
+    if (mode === 'cum') { cum += (v || 0); out.push(cum); }
+    else out.push(v == null ? null : v);
+  }
+  return out;
+}
+
+function renderTiRamp(mgrF, f, t){
+  var wrap = document.getElementById('ti-ramp');
+  if (!wrap) return;
+  var eff = nhFilter === 'all' ? 'yr' : nhFilter;
+  var pool = RECRUITERS.slice();
+  if (includeArchived && typeof archivedRecruiters !== 'undefined') {
+    var have = {}; pool.forEach(function(r){ have[r.name] = true; });
+    archivedRecruiters.forEach(function(a){ if (!have[a.name]) pool.push(Object.assign({}, a, {_isArchived:true})); });
+  }
+  var group = pool.filter(function(r){ return (!mgrF || r.manager === mgrF) && nhPass(r.name, eff); });
+  group.sort(function(a, b){ return (getHireDate(a.name) || '').localeCompare(getHireDate(b.name) || '') || a.name.localeCompare(b.name); });
+
+  var mx = _recapMaxWeek();
+  var mLbl = (RAMP_METRICS.find(function(m){ return m[0] === rampState.metric; }) || RAMP_METRICS[0])[1];
+  var seg = function(key, opts){
+    return '<div style="display:inline-flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden">'
+      + opts.map(function(o){
+          var on = rampState[key] === o[0];
+          return '<button type="button" onclick="rampSet(\'' + key + '\',\'' + o[0] + '\')" style="height:28px;padding:0 10px;font-size:11.5px;font-weight:600;border:none;cursor:pointer;background:' + (on ? 'var(--accent)' : 'var(--bg2)') + ';color:' + (on ? '#fff' : 'var(--text2)') + '">' + o[1] + '</button>';
+        }).join('') + '</div>';
+  };
+  var effLbl = nhFilter === 'all'
+    ? 'Showing everyone hired in ' + NH_YEAR + '. Pick a New hires group above to narrow it.'
+    : 'Showing ' + group.length + ' new hire' + (group.length !== 1 ? 's' : '') + (mgrF ? ' on ' + mgrF + "'s team" : '') + '.';
+  var head = '<div class="card" style="margin-bottom:16px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
+    + '<span class="card-title">New hire ramp: ' + (rampState.mode === 'cum' ? 'cumulative ' : 'weekly ') + mLbl.toLowerCase() + '</span>'
+    + '<span style="display:flex;gap:8px;flex-wrap:wrap">' + seg('metric', RAMP_METRICS) + seg('mode', [['wk','Weekly'],['cum','Cumulative']]) + '</span></div>'
+    + '<div style="font-size:11.5px;color:var(--text3);margin-bottom:12px">' + effLbl + ' Same calendar weeks side by side, starting at each person\'s hire week. This is a progress view, not a ranking.</div>';
+
+  if (!group.length || mx < 0) {
+    if (_rampChart) { try { _rampChart.destroy(); } catch(e){} _rampChart = null; }
+    wrap.innerHTML = head + '<div style="padding:24px;text-align:center;color:var(--text3);font-size:12px">No recruiters match this new hire group.</div></div>';
+    return;
+  }
+
+  var rows = group.map(function(r){
+    var tw = tenureWindow(r.name);
+    return { r:r, start:tw.start, end:tw.end, hd:getHireDate(r.name) };
+  });
+  var minStart = Math.min.apply(null, rows.map(function(x){ return x.start; }));
+  var c0 = Math.max(f, minStart), c1 = Math.min(t, mx);
+  if (c1 < c0) c1 = c0;
+  var cols = []; for (var w = c0; w <= c1; w++) cols.push(w);
+  rows.forEach(function(x){
+    x.series = rampSeries(x.r[rampState.metric], x.start, x.end, c0, c1, rampState.mode);
+    var tot = 0; for (var i = x.start; i <= Math.min(c1, x.end == null ? c1 : x.end); i++) tot += ((x.r[rampState.metric] || [])[i] || 0);
+    x.total = tot;
+    x.wks = Math.max(0, Math.min(c1, x.end == null ? c1 : x.end) - x.start + 1);
+  });
+
+  var th = 'padding:6px 8px;font-size:11px;font-weight:700;color:var(--text3);border-bottom:1px solid var(--border);white-space:nowrap;text-align:right;background:var(--bg2)';
+  var td = 'padding:6px 8px;font-size:12px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap';
+  var tbl = '<div style="overflow-x:auto;margin-top:14px"><table style="border-collapse:collapse;width:100%">'
+    + '<tr><th class="sticky-col-1" style="' + th + ';text-align:left">Recruiter</th><th style="' + th + ';text-align:left">Mgr</th><th style="' + th + '">Hired</th><th style="' + th + '" title="Weeks in seat through the last week shown">Wks</th><th style="' + th + '">Total</th>'
+    + cols.map(function(w){ return '<th style="' + th + '" title="Week of ' + _wkDateLbl(w) + '">' + wkLabels[w] + '<div style="font-weight:500;font-size:10px">' + _wkDateLbl(w) + '</div></th>'; }).join('')
+    + '</tr>'
+    + rows.map(function(x, i){
+        var mc = MGR_COLORS[x.r.manager] || '#888';
+        var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + RAMP_COLORS[i % RAMP_COLORS.length] + ';margin-right:6px"></span>';
+        var hd = x.hd ? (function(d){ return (d.getMonth()+1) + '/' + d.getDate(); })(_parseDateLoose(x.hd)) : '';
+        return '<tr><td class="sticky-col-1" style="' + td + ';text-align:left;font-weight:500">' + dot
+          + '<span class="pf-name-link" onclick="openProfileEnc(\'' + encodeURIComponent(x.r.name) + '\')" title="Open profile">' + x.r.name + '</span>'
+          + (x.r._isArchived ? ' <span style="font-size:9px;color:var(--amber)">archived</span>' : '') + '</td>'
+          + '<td style="' + td + ';text-align:left"><span class="mgr" style="background:' + mc + '22;color:' + mc + '">' + x.r.manager + '</span></td>'
+          + '<td style="' + td + ';color:var(--text2)">' + hd + '</td>'
+          + '<td style="' + td + ';color:var(--text2)">' + x.wks + '</td>'
+          + '<td style="' + td + ';font-weight:700">' + x.total + '</td>'
+          + x.series.map(function(v, j){
+              var w = cols[j];
+              if (v == null) {
+                var pre = w < x.start;
+                return '<td style="' + td + ';background:var(--bg2);color:var(--text3)" title="' + (pre ? 'Before hire date' : 'No data') + '">' + (pre ? '' : '·') + '</td>';
+              }
+              var first = w === x.start;
+              return '<td style="' + td + (first ? ';box-shadow:inset 2px 0 0 var(--accent)' : '') + '"' + (first ? ' title="First week"' : '') + '>' + v + '</td>';
+            }).join('')
+          + '</tr>';
+      }).join('')
+    + '</table></div>';
+
+  wrap.innerHTML = head
+    + '<div class="chart-wrap" style="height:300px"><canvas id="ti-ramp-chart" role="img" aria-label="New hire ramp chart"></canvas></div>'
+    + tbl
+    + '<div style="font-size:11px;color:var(--text3);margin-top:10px">Shaded cells are weeks before the hire date. The blue edge marks each person\'s first week. Names open the Recruiter Profile.</div>'
+    + '</div>';
+
+  if (_rampChart) { try { _rampChart.destroy(); } catch(e){} _rampChart = null; }
+  var cv = document.getElementById('ti-ramp-chart');
+  if (cv && typeof Chart !== 'undefined') {
+    _rampChart = new Chart(cv, {
+      type: 'line',
+      data: {
+        labels: cols.map(function(w){ return wkLabels[w] + ' (' + _wkDateLbl(w) + ')'; }),
+        datasets: rows.map(function(x, i){
+          var c = RAMP_COLORS[i % RAMP_COLORS.length];
+          return { label:x.r.name, data:x.series, borderColor:c, backgroundColor:c, borderWidth:2, pointRadius:2.5, tension:0.25, spanGaps:false };
+        })
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false },
+        plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{ size:11 } } } },
+        scales:{ x:{ ticks:{ font:{ size:10 } }, grid:{ display:false } }, y:{ beginAtZero:true, ticks:{ font:{ size:10 }, precision:0 }, grid:{ color:'rgba(128,128,128,0.12)' } } }
+      }
+    });
+  }
+}
+
+// ─── RECRUITER HEADCOUNT (Period Recap) ───
+// Who supported the business in a period. Managers count. Names listed here are
+// left out because they are not in production. Use the person's full roster name.
+const HEADCOUNT_EXCLUDE = ['Joe'];
+
+function _hcDay(dateStr){
+  var d = _parseDateLoose(dateStr);
+  return d ? _daysBetween(_parseDateLoose(WK1_ANCHOR), d) : null;
+}
+// Everyone, active and archived, regardless of the Include Archived toggle.
+function _hcPeople(mgrFilter){
+  var ex = {}; HEADCOUNT_EXCLUDE.forEach(function(n){ ex[n.trim().toLowerCase()] = true; });
+  var seen = {}, out = [];
+  var add = function(r, archived){
+    if (!r || !r.name || seen[r.name] || ex[r.name.trim().toLowerCase()]) return;
+    if (mgrFilter && r.manager !== mgrFilter) return;
+    seen[r.name] = true;
+    var hire = _hcDay(getHireDate(r.name));
+    if (hire == null) {
+      var nr = (typeof newRecruiters !== 'undefined') ? newRecruiters.find(function(x){ return x.name === r.name; }) : null;
+      hire = (nr && typeof nr.startWeekIndex === 'number' && nr.startWeekIndex > 0) ? nr.startWeekIndex * 7 : -100000;
+    }
+    var end = archived && r.endedOn ? _hcDay(r.endedOn) : null;
+    out.push({ name:r.name, manager:r.manager, hire:hire, end:end });
+  };
+  RECRUITERS.forEach(function(r){ add(r, false); });
+  if (typeof archivedRecruiters !== 'undefined') archivedRecruiters.forEach(function(r){ add(r, true); });
+  return out;
+}
+// Pure: counts for a window of day numbers [pS, pE] (days since Wk 1 Monday).
+function hcCount(people, pS, pE){
+  var r = { start:0, joined:[], exited:[], worked:0, end:0 };
+  people.forEach(function(p){
+    if (p.end != null && p.end < p.hire) return;           // bad data: ended before hired
+    var on = p.hire <= pE && (p.end == null || p.end >= pS);
+    if (!on) return;
+    r.worked++;
+    if (p.hire < pS) r.start++; else r.joined.push(p);
+    if (p.end != null && p.end <= pE) r.exited.push(p);
+  });
+  r.end = r.worked - r.exited.length;
+  r.joined.sort(function(a,b){ return a.hire - b.hire; });
+  r.exited.sort(function(a,b){ return a.end - b.end; });
+  return r;
+}
+function _hcWindow(def){
+  var todayD = _daysBetween(_parseDateLoose(WK1_ANCHOR), new Date());
+  var pS = def.weeks[0] * 7, pE = def.weeks[def.weeks.length-1] * 7 + 6;
+  return { pS:pS, pE:Math.min(pE, Math.max(pS, todayD)), fullEnd:pE };
+}
+function _hcDayLbl(day){
+  var a = _parseDateLoose(WK1_ANCHOR);
+  var d = new Date(a.getFullYear(), a.getMonth(), a.getDate() + day);
+  return (d.getMonth()+1) + '/' + d.getDate();
+}
+function _hcSentence(lbl, w, c){
+  var nm = function(arr, key){ return arr.map(function(p){ return p.name; }).join(', '); };
+  return lbl + ' (' + _hcDayLbl(w.pS) + ' to ' + _hcDayLbl(w.pE) + '): ' + c.worked + ' recruiter' + (c.worked !== 1 ? 's' : '') + ' supported the business. '
+    + 'Started with ' + c.start + ', ' + c.joined.length + ' joined' + (c.joined.length ? ' (' + nm(c.joined) + ')' : '')
+    + ', ' + c.exited.length + ' exited' + (c.exited.length ? ' (' + nm(c.exited) + ')' : '')
+    + ', ended at ' + c.end + '.';
+}
+var _hcCopyText = '';
+function hcCopy(){ if (_hcCopyText) copyToClipboard(_hcCopyText, 'Headcount copied to clipboard.'); }
+
+function hcCardHtml(selEntry, mx, entries, mgrFilter, scopeLbl){
+  var people = _hcPeople(mgrFilter);
+  var w = _hcWindow(selEntry.def);
+  var c = hcCount(people, w.pS, w.pE);
+  _hcCopyText = _hcSentence((mgrFilter ? scopeLbl + ', ' : '') + selEntry.def.label, w, c);
+  var tile = function(v, lbl, color, big){
+    return '<div style="background:var(--bg2);border:1px solid ' + (big ? 'var(--accent)' : 'var(--border)') + ';border-radius:var(--radius);padding:12px;text-align:center">'
+      + '<div style="font-size:24px;font-weight:800;color:' + color + '">' + v + '</div>'
+      + '<div style="font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-top:2px">' + lbl + '</div></div>';
+  };
+  var who = function(arr, isExit){
+    return arr.map(function(p){
+      return p.name + ' <span style="color:var(--text3)">(' + p.manager + ', ' + _hcDayLbl(isExit ? p.end : p.hire) + ')</span>';
+    }).join(', ');
+  };
+  var perP = entries.filter(function(en){ return en.kind === 'P'; });
+  var selWeeks = selEntry.def.weeks;
+  var cells = perP.map(function(en){
+    var ww = _hcWindow(en.def);
+    var cc = hcCount(people, ww.pS, ww.pE);
+    var hl = en.def.weeks.every(function(x){ return selWeeks.indexOf(x) >= 0; });
+    return { lbl:en.def.label.split(' / ')[0], c:cc, hl:hl, closed:en.closed };
+  });
+  var tth = 'padding:5px 6px;font-size:11px;font-weight:700;color:var(--text3);text-align:right;border-bottom:1px solid var(--border);white-space:nowrap';
+  var ttd = 'padding:5px 6px;font-size:12px;text-align:right;border-bottom:1px solid var(--border)';
+  var hlBg = function(x){ return x.hl ? ';background:var(--accent-bg, rgba(79,142,247,0.12))' : ''; };
+  var row = function(lbl, fn, bold){
+    return '<tr><td style="' + ttd + ';text-align:left;color:var(--text2)' + (bold ? ';font-weight:700;color:var(--text)' : '') + '">' + lbl + '</td>'
+      + cells.map(function(x){ return '<td style="' + ttd + hlBg(x) + (bold ? ';font-weight:700' : '') + '">' + fn(x.c) + '</td>'; }).join('') + '</tr>';
+  };
+  var ytd = '<div style="overflow-x:auto;margin-top:12px"><table style="border-collapse:collapse;width:100%">'
+    + '<tr><th style="' + tth + ';text-align:left">' + NH_YEAR + ' by period</th>' + cells.map(function(x){ return '<th style="' + tth + hlBg(x) + '">' + x.lbl + (x.closed ? '' : '*') + '</th>'; }).join('') + '</tr>'
+    + row('Supported', function(c){ return c.worked; }, true)
+    + row('Start', function(c){ return c.start; })
+    + row('Joined', function(c){ return c.joined.length ? '<span style="color:var(--green)">+' + c.joined.length + '</span>' : '0'; })
+    + row('Exited', function(c){ return c.exited.length ? '<span style="color:var(--red)">−' + c.exited.length + '</span>' : '0'; })
+    + row('End', function(c){ return c.end; })
+    + '</table></div>';
+  var html = '<div class="card" style="margin-bottom:16px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+    + '<span class="card-title">Recruiter headcount · ' + scopeLbl + ' · ' + selEntry.def.label + (selEntry.closed ? '' : ' <span style="color:var(--amber)">(through ' + _hcDayLbl(w.pE) + ')</span>') + '</span>'
+    + '<button onclick="hcCopy()" class="btn" style="height:28px;font-size:11.5px" title="Copy a one-line summary for email">📋 Copy for email</button></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px">'
+    + tile(c.worked, 'Supported the business', 'var(--accent)', true)
+    + tile(c.start, 'Start of ' + (selEntry.kind === 'Q' ? 'quarter' : 'period'), 'var(--text)')
+    + tile('+' + c.joined.length, 'Joined', 'var(--green)')
+    + tile((c.exited.length ? '−' : '') + c.exited.length, 'Exited', 'var(--red)')
+    + tile(c.end, 'End of ' + (selEntry.kind === 'Q' ? 'quarter' : 'period'), 'var(--text)')
+    + '</div>'
+    + (c.joined.length ? '<div style="font-size:11.5px;color:var(--text2);margin-top:10px"><b style="color:var(--green)">Joined:</b> ' + who(c.joined, false) + '</div>' : '')
+    + (c.exited.length ? '<div style="font-size:11.5px;color:var(--text2);margin-top:6px"><b style="color:var(--red)">Exited:</b> ' + who(c.exited, true) + '</div>' : '')
+    + ytd
+    + '<div style="font-size:11px;color:var(--text3);margin-top:8px">Supported = anyone on the roster for at least one day of the period (start + joined). Uses hire dates and Date Ended, includes managers, and always counts archived recruiters. '
+    + (HEADCOUNT_EXCLUDE.length ? 'Not counted: ' + HEADCOUNT_EXCLUDE.join(', ') + ' (not in production). ' : '')
+    + '* = period in progress.</div>'
+    + '</div>';
+  return { html:html, c:c, w:w, sentence:_hcCopyText, cells:cells };
 }
 
 function exportRecap(){
@@ -9608,6 +9969,9 @@ function exportRecap(){
     +'<tr><td>Gross Profit</td><td>'+formatGP(L.org.gp)+'</td><td>'+pd(L.org.gp,P?P.gp:null,true)+'</td></tr>'
     +'<tr><td>On track</td><td>'+L.org.ot+' / '+L.org.act+'</td><td>'+(P?(L.org.ot-P.ot>=0?'+':'')+(L.org.ot-P.ot)+' (prev '+P.ot+'/'+P.act+')':'—')+'</td></tr></table>'
     +(L.summaryText?'<div class="callout">💡 '+_pfEsc(L.summaryText)+'</div>':'')
+    +(L.hc?'<div class="h2">Recruiter headcount</div><div class="callout" style="margin-top:0">'+_pfEsc(L.hc.sentence)+'</div>'
+      +'<table style="margin-top:8px"><tr><th>'+NH_YEAR+'</th>'+L.hc.cells.map(function(x){return '<th>'+_pfEsc(x.lbl)+(x.closed?'':'*')+'</th>';}).join('')+'</tr>'
+      +[['Supported',function(c){return c.worked;}],['Start',function(c){return c.start;}],['Joined',function(c){return c.joined.length;}],['Exited',function(c){return c.exited.length;}],['End',function(c){return c.end;}]].map(function(rw){return '<tr><td>'+rw[0]+'</td>'+L.hc.cells.map(function(x){return '<td'+(x.hl?' style="font-weight:700"':'')+'>'+rw[1](x.c)+'</td>';}).join('')+'</tr>';}).join('')+'</table>':'')
     +(L.mgrRows.length?'<div class="h2">'+(L.isTeam?'Recruiter':'Manager')+' movement — '+_pfEsc(L.mvName)+' Δ</div>'
       +'<table><tr><th>'+(L.isTeam?'Recruiter':'Manager')+'</th><th>Δ</th><th>Δ per rec-wk</th></tr>'
       +L.mgrRows.map(function(x){
@@ -9888,7 +10252,7 @@ var _pfLast = null; // stats stash from last render — keeps the 1:1 export in 
 
 // ── Build date: bump on every delivered build. Cache tiebreaker, not a version scheme —
 // if a user's date doesn't match the latest push, they're on a stale cached copy.
-var DASH_BUILT = 'Oct 7, 2026';
+var DASH_BUILT = 'Oct 8, 2026';
 (function(){ var el=document.getElementById('dash-built'); if(el) el.textContent='Updated '+DASH_BUILT; })();
 function openDefinitions(){ document.getElementById('defs-modal').style.display='flex'; }
 function closeDefinitions(){ document.getElementById('defs-modal').style.display='none'; }
