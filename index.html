@@ -134,6 +134,15 @@ main{max-width:min(100%,2600px);margin:0 auto;padding:16px 20px 48px}
 .wow-table .sticky-col-2{position:sticky;left:130px;z-index:2;background:var(--bg)}
 .wow-table thead tr th{position:sticky;top:0;z-index:3;background:var(--bg2)}
 .wow-table thead .sticky-col-1{z-index:4 !important}.wow-table thead .sticky-col-2{z-index:4 !important}
+.ramp-tbl{border-collapse:separate;border-spacing:0;width:max-content}
+.ramp-tbl .rk{position:sticky;z-index:2;background:var(--bg)}
+.ramp-tbl th.rk{z-index:3;background:var(--bg2)}
+.ramp-tbl .rk1{left:0;width:180px;min-width:180px;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.ramp-tbl .rk2{left:180px;width:76px;min-width:76px;max-width:76px}
+.ramp-tbl .rk3{left:256px;width:56px;min-width:56px;max-width:56px}
+.ramp-tbl .rk4{left:312px;width:46px;min-width:46px;max-width:46px}
+.ramp-tbl .rk5{left:358px;width:58px;min-width:58px;max-width:58px;box-shadow:inset -1px 0 0 var(--border2)}
+.ramp-tbl .wk{min-width:52px}
 table{width:100%;border-collapse:collapse;font-size:12px}
 thead th{
   font-size:10px;font-weight:700;color:var(--text3);text-align:left;
@@ -9758,21 +9767,21 @@ function renderTiRamp(mgrF, f, t){
 
   var th = 'padding:6px 8px;font-size:11px;font-weight:700;color:var(--text3);border-bottom:1px solid var(--border);white-space:nowrap;text-align:right;background:var(--bg2)';
   var td = 'padding:6px 8px;font-size:12px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap';
-  var tbl = '<div style="overflow-x:auto;margin-top:14px"><table style="border-collapse:collapse;width:100%">'
-    + '<tr><th class="sticky-col-1" style="' + th + ';text-align:left">Recruiter</th><th style="' + th + ';text-align:left">Mgr</th><th style="' + th + '">Hired</th><th style="' + th + '" title="Weeks in seat through the last week shown">Wks</th><th style="' + th + '">Total</th>'
-    + cols.map(function(w){ return '<th style="' + th + '" title="Week of ' + _wkDateLbl(w) + '">' + wkLabels[w] + '<div style="font-weight:500;font-size:10px">' + _wkDateLbl(w) + '</div></th>'; }).join('')
+  var tbl = '<div style="overflow-x:auto;margin-top:14px"><table class="ramp-tbl">'
+    + '<tr><th class="rk rk1" style="' + th + ';text-align:left">Recruiter</th><th class="rk rk2" style="' + th + ';text-align:left">Mgr</th><th class="rk rk3" style="' + th + '">Hired</th><th class="rk rk4" style="' + th + '" title="Weeks in seat through the last week shown">Wks</th><th class="rk rk5" style="' + th + '">Total</th>'
+    + cols.map(function(w){ return '<th class="wk" style="' + th + '" title="Week of ' + _wkDateLbl(w) + '">' + wkLabels[w] + '<div style="font-weight:500;font-size:10px">' + _wkDateLbl(w) + '</div></th>'; }).join('')
     + '</tr>'
     + rows.map(function(x, i){
         var mc = MGR_COLORS[x.r.manager] || '#888';
         var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + RAMP_COLORS[i % RAMP_COLORS.length] + ';margin-right:6px"></span>';
         var hd = x.hd ? (function(d){ return (d.getMonth()+1) + '/' + d.getDate(); })(_parseDateLoose(x.hd)) : '';
-        return '<tr><td class="sticky-col-1" style="' + td + ';text-align:left;font-weight:500">' + dot
+        return '<tr><td class="rk rk1" style="' + td + ';text-align:left;font-weight:500" title="' + x.r.name + '">' + dot
           + '<span class="pf-name-link" onclick="openProfileEnc(\'' + encodeURIComponent(x.r.name) + '\')" title="Open profile">' + x.r.name + '</span>'
           + (x.r._isArchived ? ' <span style="font-size:9px;color:var(--amber)">archived</span>' : '') + '</td>'
-          + '<td style="' + td + ';text-align:left"><span class="mgr" style="background:' + mc + '22;color:' + mc + '">' + x.r.manager + '</span></td>'
-          + '<td style="' + td + ';color:var(--text2)">' + hd + '</td>'
-          + '<td style="' + td + ';color:var(--text2)">' + x.wks + '</td>'
-          + '<td style="' + td + ';font-weight:700">' + x.total + '</td>'
+          + '<td class="rk rk2" style="' + td + ';text-align:left"><span class="mgr" style="background:' + mc + '22;color:' + mc + '">' + x.r.manager + '</span></td>'
+          + '<td class="rk rk3" style="' + td + ';color:var(--text2)">' + hd + '</td>'
+          + '<td class="rk rk4" style="' + td + ';color:var(--text2)">' + x.wks + '</td>'
+          + '<td class="rk rk5" style="' + td + ';font-weight:700">' + x.total + '</td>'
           + x.series.map(function(v, j){
               var w = cols[j];
               if (v == null) {
