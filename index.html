@@ -8293,24 +8293,38 @@ function renderGP() {
       ${wkCells}
     </tr>`;
   }).join('') +
-  // Weekly totals footer row
+  // Weekly totals footer row. Hovering a total shows the per-recruiter average.
   `<tr style="border-top:2px solid var(--border);font-weight:700;background:var(--bg2)">
     <td class="sticky-col-1" style="font-size:12px;font-weight:700">TEAM TOTAL</td>
     <td class="sticky-col-2"></td>
-    <td style="text-align:right;font-size:12px">${formatGP(recs.reduce((s,r)=>s+r.ytdGP,0))}</td>
-    <td style="text-align:right;font-size:12px;color:var(--text3)">${formatGP(recs.reduce((s,r)=>s+r.prior2026,0))}</td>
-    <td style="text-align:right;font-size:12px;color:var(--c-starts)">${formatGP(recs.reduce((s,r)=>s+r.gp2026,0))}</td>
+    <td style="text-align:right;font-size:12px;cursor:help" title="${gpAvgTip(recs.map(r=>r.ytdGP))}">${formatGP(recs.reduce((s,r)=>s+r.ytdGP,0))}</td>
+    <td style="text-align:right;font-size:12px;color:var(--text3);cursor:help" title="${gpAvgTip(recs.map(r=>r.prior2026))}">${formatGP(recs.reduce((s,r)=>s+r.prior2026,0))}</td>
+    <td style="text-align:right;font-size:12px;color:var(--c-starts);cursor:help" title="${gpAvgTip(recs.map(r=>r.gp2026))}">${formatGP(recs.reduce((s,r)=>s+r.gp2026,0))}</td>
     <td style="text-align:right;font-size:12px"></td>
     <td style="text-align:right;font-size:12px"></td>
-    ${(function(){ const t=recs.reduce((s,r)=>s+gpNetWeekly(r.weekly,nW),0); const c=t>0?'#3B6D11':t<0?'#A32D2D':'var(--text3)'; return `<td style="text-align:right;font-size:12px;color:${c}">${t?(t>0?'+':'')+formatGP(t):'—'}</td>`; })()}
+    ${(function(){ const t=recs.reduce((s,r)=>s+gpNetWeekly(r.weekly,nW),0); const c=t>0?'#3B6D11':t<0?'#A32D2D':'var(--text3)'; return `<td style="text-align:right;font-size:12px;color:${c};cursor:help" title="${gpAvgTip(recs.map(r=>gpNetWeekly(r.weekly,nW)),true)}">${t?(t>0?'+':'')+formatGP(t):'—'}</td>`; })()}
     ${wkHeaders.map((_,i) => {
       const wi = wkSlice.f+i;
       const wkTotal = recs.reduce((s,r)=>s+(wi<r.weekly.length?(r.weekly[wi]||0):0),0);
-      return `<td style="text-align:right;font-size:12px;color:var(--accent)">${wkTotal?formatGP(wkTotal):'—'}</td>`;
+      return `<td style="text-align:right;font-size:12px;color:var(--accent);cursor:help" title="${gpAvgTip(recs.map(r=>wi<r.weekly.length?(r.weekly[wi]||0):0))}">${wkTotal?formatGP(wkTotal):'—'}</td>`;
     }).join('')}
   </tr>`;
 }
 
+
+// Tooltip text for a GP team-total cell: the average across every recruiter in
+// the table, plus the average among only those with a non-zero value, since new
+// hires and people with no carried-in GP otherwise pull the plain average down.
+function gpAvgTip(vals, signed) {
+  const n = vals.length;
+  if (!n) return '';
+  const fmt = v => (signed && v>0 ? '+' : '') + formatGP(v);
+  const tot = vals.reduce((s,v)=>s+(v||0),0);
+  const nz = vals.filter(v=>v);
+  let t = 'Average per recruiter: ' + fmt(tot/n) + ' (' + n + ' recruiters)';
+  if (nz.length && nz.length < n) t += '\nAverage among the ' + nz.length + (signed ? ' with a change: ' : ' with GP: ') + fmt(tot/nz.length);
+  return t;
+}
 
 // Net weekly GP: the latest week in the GP data minus Week 1. Each recruiter's
 // weekly array is trimmed after their last non-zero week, so "current" is the
