@@ -1708,7 +1708,7 @@ async function loadFromSheets() {
     allSheetNames.forEach(sheetName => {
       sheetLookup[norm(sheetName)] = {
         name: sheetName,
-        manager: (subs[sheetName]||ivs[sheetName]||pls[sheetName]||sts[sheetName]||lds[sheetName]||{}).manager || '',
+        manager: canonMgr((subs[sheetName]||ivs[sheetName]||pls[sheetName]||sts[sheetName]||lds[sheetName]||{}).manager || ''),
         subs:       (subs[sheetName]||{}).weekly || [],
         ivs:        (ivs[sheetName]||{}).weekly  || [],
         placements: (pls[sheetName]||{}).weekly  || [],
@@ -2298,6 +2298,37 @@ function manualSync() {
 
 
 const MGR_COLORS={Kevin:'#378ADD',Rachel:'#1D9E75',Tyler:'#EF9F27',Brett:'#D4537E',Noah:'#7F77DD',Joe:'#888780',Zach:'#5DCAA5',Matt:'#60A5FA'};
+
+// Map a manager value to its MGR_COLORS key. The Sheet's manager column is free
+// text, so "Zachary", "zach ", "Brett Schuber" or "Matthew" would otherwise fail
+// exact-match filters and drop the recruiter out of every manager view. Exact
+// (case-insensitive) match first, then the first word against each key. Anything
+// unrecognised is returned trimmed, unchanged, so it can be flagged rather than
+// guessed at.
+function canonMgr(m) {
+  var s = (m == null ? '' : String(m)).trim().replace(/\s+/g, ' ');
+  if (!s) return '';
+  var keys = Object.keys(MGR_COLORS), lo = s.toLowerCase();
+  for (var i = 0; i < keys.length; i++) if (keys[i].toLowerCase() === lo) return keys[i];
+  var first = lo.split(' ')[0];
+  for (var j = 0; j < keys.length; j++) {
+    var k = keys[j].toLowerCase();
+    if (first === k || (first.length > k.length && first.indexOf(k) === 0)) return keys[j];
+  }
+  return s;
+}
+
+// True for a manager's own roster row. Managers report to Kevin, so a first-name
+// match only counts when the row is under Kevin. A recruiter who shares a first
+// name with a manager (e.g. a second Rachel on Tyler's team) is NOT a manager.
+function isManagerRow(r) {
+  if (!r || canonMgr(r.manager) !== 'Kevin') return false;
+  var fn = (r.name || '').split(' ')[0].toLowerCase();
+  return Object.keys(MGR_COLORS).some(function(key) {
+    var mn = key.toLowerCase();
+    return mn !== 'kevin' && (fn === mn || fn.startsWith(mn) || mn.startsWith(fn));
+  });
+}
 
 const BASE_DATA=[
   {name:'Aidan (AJ) Smith',manager:'Rachel',subs:[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5],ivs:[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3],placements:[0,1,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0],starts:[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1],leads:[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0]},
@@ -3790,11 +3821,7 @@ function renderWoWSnapshot(mgr) {
 
   let recs=computedAll().filter(r=>!mgr||r.manager===mgr).sort((a,b)=>a.name.localeCompare(b.name));
   if (wowMgrsOnly) {
-    const mgrFirstNames=MGRS.map(function(x){return x.toLowerCase();});
-    recs=recs.filter(function(r){
-      const fn=r.name.split(' ')[0].toLowerCase();
-      return mgrFirstNames.some(function(mn){return fn===mn||fn.startsWith(mn)||mn.startsWith(fn);});
-    });
+    recs=recs.filter(isManagerRow);
   }
 
   var metrics=[['subs','Subs','#378ADD'],['ivs','IVs','#1D9E75'],['placements','Placements','#a855f7'],['starts','Starts','#D4537E'],['leads','Leads','#EF9F27']];
@@ -3842,11 +3869,7 @@ function renderWoWAggregated(m, mgr, view, grain){
   var totCard=document.getElementById('wow-total-card'); if(totCard) totCard.style.display='';
   let recs=computedAll().filter(r=>!mgr||r.manager===mgr).sort((a,b)=>a.name.localeCompare(b.name));
   if (wowMgrsOnly) {
-    const mgrFirstNames=MGRS.map(function(x){return x.toLowerCase();});
-    recs=recs.filter(function(r){
-      const fn=r.name.split(' ')[0].toLowerCase();
-      return mgrFirstNames.some(function(mn){return fn===mn||fn.startsWith(mn)||mn.startsWith(fn);});
-    });
+    recs=recs.filter(isManagerRow);
   }
   const nW=activeWkLabels().length;
   const labels=grainLabels(grain, nW);
@@ -3928,11 +3951,7 @@ function renderWoW(){
   let recs=computedAll().filter(r=>!mgr||r.manager===mgr).sort((a,b)=>a.name.localeCompare(b.name));
   // Managers only: filter to recruiters whose first name matches a manager name
   if (wowMgrsOnly) {
-    const mgrFirstNames=MGRS.map(function(m){return m.toLowerCase();});
-    recs=recs.filter(function(r){
-      const fn=r.name.split(' ')[0].toLowerCase();
-      return mgrFirstNames.some(function(mn){return fn===mn||fn.startsWith(mn)||mn.startsWith(fn);});
-    });
+    recs=recs.filter(isManagerRow);
   }
   const awl=activeWkLabels();
   const nW=awl.length;
@@ -6217,7 +6236,7 @@ function saveEditModal() {
 // newRecruiters: [{name, manager, addedOn, startWeekIndex}] — added after BASE_DATA, stored in localStorage
 // PRESET_ARCHIVED — baked in so archived list survives dashboard updates
 // To update: export your current archived list and paste the JSON here
-const PRESET_ARCHIVED = [{"name":"Heather McRae","manager":"Noah","archivedOn":"6/4/2026","endedOn":"05/08/2026","subs":[6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],"ivs":[1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],"placements":[0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],"hireDate":"2014-07-07","birthday":"","vertical":"Energy, Oil, Gas & Utilities","title":""},{"name":"Helen Phillips","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/19/2026","subs":[2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],"ivs":[1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],"placements":[0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],"starts":[1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],"leads":[0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],"hireDate":"2003-02-07","birthday":"06/30","vertical":"T&M: Auto","title":""},{"name":"John Gorsuch","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/10/2026","subs":[5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],"ivs":[1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],"starts":[0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],"leads":[0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],"hireDate":"2022-09-12","birthday":"","vertical":"T&M: Auto","title":""},{"name":"Jason Beir","manager":"Kevin","archivedOn":"6/8/2026","endedOn":"06/05/2026","subs":[4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],"ivs":[3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],"placements":[0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2020-10-01","birthday":"","vertical":"Telecom","title":""},{"name":"Jessica Paden","manager":"Brett","archivedOn":"6/9/2026","endedOn":"06/08/2026","subs":[6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],"ivs":[2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],"placements":[2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],"starts":[0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],"leads":[0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],"hireDate":"2024-01-29","birthday":"06/30","vertical":"Telecom","title":""},{"name":"Stephen Pemberton","manager":"Joe","archivedOn":"6/23/2026","endedOn":"06/22/2026","subs":[5,3,6,5,5,7,5,6,6,5,4,10,6,7,5,10,7,5,5,5,4,5,10,3],"ivs":[0,0,1,0,1,0,1,3,0,1,0,1,1,0,2,0,3,2,2,2,0,0,0,0],"placements":[0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0],"starts":[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0],"leads":[1,0,0,0,5,2,1,0,3,2,0,1,0,2,0,1,0,0,0,0,1,1,0,2],"hireDate":"2025-12-15","birthday":"07/20","vertical":"T&M: Auto","title":""},{"name":"Taylor Durrill","manager":"Noah","archivedOn":"7/15/2026","endedOn":"07/15/2026","subs":[5,7,6,7,4,6,6,6,6,null,null,null,null,null,null,null,null,null,null,null,0,0,4,2,3,3,5],"ivs":[0,2,0,2,0,1,1,1,2,1,null,1,null,null,null,null,0,0,0,0,0,0,0,0,0,3,1],"placements":[0,0,0,0,1,0,0,0,0,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0,0,0],"starts":[0,0,0,0,0,0,1,0,0,null,null,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,1,1,1,1,3,null,null,null,null,null,null,null,null,null,0,null,0,0,0,1,0,2,0],"hireDate":"2024-03-26","birthday":"01/18","vertical":"Energy, Oil, Gas & Utilities","title":""},{"name":"Aidan (AJ) Smith","manager":"Rachel","archivedOn":"9/17/2026","endedOn":"08/17/2026","subs":[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5,7,0,0,4,5,7,6,3,4,6,5,5,6,3,0,0,0,0],"ivs":[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3,0,0,0,0,1,0,3,1,5,0,0,2,3,0,0,0,0,0],"placements":[0,1,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0],"starts":[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0],"leads":[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0,0,0,0,0,1,0,0,1,1,0,0,3,0,0,0,0,0,0],"hireDate":"2025-07-14","birthday":"01/31","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Associate Recruiter"},{"name":"Lazaro Calderin","manager":"Rachel","archivedOn":"9/9/2026","endedOn":"09/04/2026","subs":[3,8,5,0,9,7,12,4,3,4,5,19,1,10,0,9,20,22,0,21,10,6,10,16,8,2,4,12,11,8,6,4,15,21,13],"ivs":[0,0,0,0,17,1,2,0,0,4,0,9,1,4,0,5,3,1,0,9,1,3,0,2,0,0,1,0,0,1,4,4,0,8,0],"placements":[0,1,0,1,1,5,0,0,0,1,1,1,1,0,0,0,4,1,0,0,0,2,0,1,0,0,1,0,0,0,2,0,0,1,1],"starts":[1,0,0,0,1,0,0,5,1,0,0,1,0,1,2,0,0,0,3,1,1,0,1,0,1,1,1,0,0,0,2,0,0,1,0],"leads":[0,0,0,0,0,0,1,1,7,1,7,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,3,1],"hireDate":"2016-10-31","birthday":"03/26","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Principal Recruiter 1"},{"name":"Kaitlyn Moreschi","manager":"Rachel","archivedOn":"9/15/2026","endedOn":"09/08/2026","subs":[4,4,7,8,10,7,6,4,6,4,3,2,7,4,4,6,8,6,10,11,9,5,15,0,3,0,10,5,4,0,13,5,3,2,6,0],"ivs":[1,1,0,4,1,2,2,4,4,1,0,1,0,2,3,3,1,0,6,2,1,11,3,1,0,0,3,9,4,0,5,7,1,1,2,0],"placements":[0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,1,0,0,3,1,1,1,0,0,0,0,0,1,2,2,1,0,0],"starts":[0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,1,0,0,0,2,0,2,1,1,0,0,1,0,1,1,1,0],"leads":[0,0,0,0,1,1,1,0,1,1,0,0,2,1,1,0,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,0],"hireDate":"2022-01-31","birthday":"08/24","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Senior Recruiter 1"},{"name":"Sean McDivitt","manager":"Tyler","archivedOn":"9/28/2026","endedOn":"09/25/2026","subs":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,12,7,7,5,6,2,7,11,3,9,1,3,9,14,15,6,2,1],"ivs":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,2,4,2,3,1,3,5,3,4,0,1,2,8,9,1,1],"placements":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,0,1,0,0,0,0,1,1,0,0,2,2,0,1,1],"starts":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0],"leads":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,1,1,0,0,0,1,0,1,0,0,0,0,0,0],"hireDate":"2026-05-19","birthday":"11/09","vertical":"Life Sciences","title":"Senior Recruiter 1"},{"name":"Justin LaSorsa","manager":"Rachel","archivedOn":"10/14/2026","endedOn":"10/12/2026","subs":[5,0,0,0,1,9,5,4,5,5,2,7,6,7,7,6,2,5,7,6,0,3,10,6,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ivs":[4,0,2,2,0,0,1,5,3,3,2,1,1,7,2,3,2,0,3,0,1,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,1,1,0,0,0,0,0,1,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0],"starts":[0,1,1,0,0,0,0,0,0,0,0,0,1,0,0,1,0,1,1,0,0,0,0,0,0,0,1,0,0,2,0,0,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,2,1,0,1,2,2,4,1,1,1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2024-02-19","birthday":"01/08","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Technical Recruiter 1"}];
+const PRESET_ARCHIVED = [{"name":"Heather McRae","manager":"Noah","archivedOn":"6/4/2026","endedOn":"05/08/2026","subs":[6,4,6,8,2,9,5,4,6,3,5,2,2,7,6,5,8,2,0,0,0],"ivs":[1,0,0,1,0,0,1,1,2,0,2,1,0,0,1,0,4,0,0,0,0],"placements":[0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,0,0,0,1,4,0,2,0,0,0,0,0,0,0,0,0],"hireDate":"2014-07-07","birthday":"","vertical":"Energy, Oil, Gas & Utilities","title":"","lastPromoted":""},{"name":"Helen Phillips","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/19/2026","subs":[2,4,3,4,4,4,5,2,1,6,6,4,8,3,3,3,5,7,7,0,0],"ivs":[1,0,4,0,0,4,3,0,0,0,1,2,1,4,4,0,1,3,0,0,0],"placements":[0,0,2,0,0,0,2,0,0,0,1,0,0,0,2,2,0,1,0,0,0],"starts":[1,0,0,0,2,0,0,0,0,0,0,1,0,2,0,0,0,2,0,0,0],"leads":[0,0,0,0,0,1,1,0,3,2,1,0,0,1,0,3,0,4,0,0,0],"hireDate":"2003-02-07","birthday":"06/30","vertical":"T&M: Auto","title":"","lastPromoted":""},{"name":"John Gorsuch","manager":"Joe","archivedOn":"6/4/2026","endedOn":"05/10/2026","subs":[5,1,2,7,6,4,9,3,2,4,2,2,4,5,4,1,2,3,0,0,0],"ivs":[1,0,0,0,0,7,0,1,1,0,0,1,1,0,0,5,1,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0],"starts":[0,3,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],"leads":[0,0,0,0,0,1,0,0,1,1,0,1,8,1,0,0,0,0,0,0,0],"hireDate":"2022-09-12","birthday":"","vertical":"T&M: Auto","title":"","lastPromoted":""},{"name":"Jason Beir","manager":"Kevin","archivedOn":"6/8/2026","endedOn":"06/05/2026","subs":[4,5,6,10,4,0,1,1,0,0,0,0,2,2,0,0,0,1,1,0,0],"ivs":[3,5,4,5,8,3,0,3,0,0,0,0,2,4,0,0,0,1,1,0,0],"placements":[0,0,0,0,0,0,2,1,0,0,0,0,0,0,0,0,2,0,0,0,0],"starts":[1,0,0,0,0,0,0,1,0,2,0,0,0,0,0,0,0,0,1,0,0],"leads":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2020-10-01","birthday":"","vertical":"Telecom","title":"","lastPromoted":""},{"name":"Jessica Paden","manager":"Brett","archivedOn":"6/9/2026","endedOn":"06/08/2026","subs":[6,4,2,5,4,3,8,7,4,7,1,3,6,3,4,0,0,4,2,4,2,1],"ivs":[2,5,1,1,4,1,2,1,2,4,0,0,0,0,4,3,0,1,2,0,0,2],"placements":[2,0,3,0,0,0,1,0,0,3,1,0,0,0,1,0,0,0,0,0,0,0],"starts":[0,0,2,0,1,1,1,1,0,0,0,2,2,0,0,0,1,0,0,0,0,0],"leads":[0,2,2,2,1,1,1,3,1,2,4,2,0,1,2,1,0,1,0,1,1,0],"hireDate":"2024-01-29","birthday":"06/30","vertical":"Telecom","title":"","lastPromoted":""},{"name":"Stephen Pemberton","manager":"Joe","archivedOn":"6/23/2026","endedOn":"06/22/2026","subs":[5,3,6,5,5,7,5,6,6,5,4,10,6,7,5,10,7,5,5,5,4,5,10,3],"ivs":[0,0,1,0,1,0,1,3,0,1,0,1,1,0,2,0,3,2,2,2,0,0,0,0],"placements":[0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0],"starts":[0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0],"leads":[1,0,0,0,5,2,1,0,3,2,0,1,0,2,0,1,0,0,0,0,1,1,0,2],"hireDate":"2025-12-15","birthday":"07/20","vertical":"T&M: Auto","title":"","lastPromoted":""},{"name":"Taylor Durrill","manager":"Noah","archivedOn":"7/15/2026","endedOn":"07/15/2026","subs":[5,7,6,7,4,6,6,6,6,null,null,null,null,null,null,null,null,null,null,null,0,0,4,2,3,3,5],"ivs":[0,2,0,2,0,1,1,1,2,1,null,1,null,null,null,null,0,0,0,0,0,0,0,0,0,3,1],"placements":[0,0,0,0,1,0,0,0,0,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0,0,0],"starts":[0,0,0,0,0,0,1,0,0,null,null,null,null,null,null,null,null,null,1,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,1,1,1,1,3,null,null,null,null,null,null,null,null,null,0,null,0,0,0,1,0,2,0],"hireDate":"2024-03-26","birthday":"01/18","vertical":"Energy, Oil, Gas & Utilities","title":"","lastPromoted":""},{"name":"Aidan (AJ) Smith","manager":"Rachel","archivedOn":"9/17/2026","endedOn":"08/17/2026","subs":[8,4,2,6,0,9,3,7,3,5,7,5,8,6,13,5,7,5,7,0,0,4,5,7,6,3,4,6,5,5,6,3,0,0,0,0],"ivs":[1,0,0,0,3,0,0,5,2,4,0,3,1,2,0,2,2,3,0,0,0,0,1,0,3,1,5,0,0,2,3,0,0,0,0,0],"placements":[0,1,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0],"starts":[0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0],"leads":[0,0,0,0,0,1,1,1,1,2,1,1,1,1,0,1,0,0,0,0,0,0,1,0,0,1,1,0,0,3,0,0,0,0,0,0],"hireDate":"2025-07-14","birthday":"01/31","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Associate Recruiter","lastPromoted":""},{"name":"Lazaro Calderin","manager":"Rachel","archivedOn":"9/9/2026","endedOn":"09/04/2026","subs":[3,8,5,0,9,7,12,4,3,4,5,19,1,10,0,9,20,22,0,21,10,6,10,16,8,2,4,12,11,8,6,4,15,21,13],"ivs":[0,0,0,0,17,1,2,0,0,4,0,9,1,4,0,5,3,1,0,9,1,3,0,2,0,0,1,0,0,1,4,4,0,8,0],"placements":[0,1,0,1,1,5,0,0,0,1,1,1,1,0,0,0,4,1,0,0,0,2,0,1,0,0,1,0,0,0,2,0,0,1,1],"starts":[1,0,0,0,1,0,0,5,1,0,0,1,0,1,2,0,0,0,3,1,1,0,1,0,1,1,1,0,0,0,2,0,0,1,0],"leads":[0,0,0,0,0,0,1,1,7,1,7,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,3,1],"hireDate":"2016-10-31","birthday":"03/26","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Principal Recruiter 1","lastPromoted":""},{"name":"Kaitlyn Moreschi","manager":"Rachel","archivedOn":"9/15/2026","endedOn":"09/08/2026","subs":[4,4,7,8,10,7,6,4,6,4,3,2,7,4,4,6,8,6,10,11,9,5,15,0,3,0,10,5,4,0,13,5,3,2,6,0],"ivs":[1,1,0,4,1,2,2,4,4,1,0,1,0,2,3,3,1,0,6,2,1,11,3,1,0,0,3,9,4,0,5,7,1,1,2,0],"placements":[0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,1,0,0,1,0,0,3,1,1,1,0,0,0,0,0,1,2,2,1,0,0],"starts":[0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,1,0,0,0,2,0,2,1,1,0,0,1,0,1,1,1,0],"leads":[0,0,0,0,1,1,1,0,1,1,0,0,2,1,1,0,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,0],"hireDate":"2022-01-31","birthday":"08/24","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Senior Recruiter 1","lastPromoted":""},{"name":"Sean McDivitt","manager":"Tyler","archivedOn":"9/28/2026","endedOn":"09/25/2026","subs":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,12,7,7,5,6,2,7,11,3,9,1,3,9,14,15,6,2,1],"ivs":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,2,4,2,3,1,3,5,3,4,0,1,2,8,9,1,1],"placements":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,0,1,0,0,0,0,1,1,0,0,2,2,0,1,1],"starts":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0],"leads":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,1,1,0,0,0,1,0,1,0,0,0,0,0,0],"hireDate":"2026-05-19","birthday":"11/09","vertical":"Life Sciences","title":"Senior Recruiter 1","lastPromoted":""},{"name":"Justin LaSorsa","manager":"Rachel","archivedOn":"10/14/2026","endedOn":"10/12/2026","subs":[5,0,0,0,1,9,5,4,5,5,2,7,6,7,7,6,2,5,7,6,0,3,10,6,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"ivs":[4,0,2,2,0,0,1,5,3,3,2,1,1,7,2,3,2,0,3,0,1,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"placements":[0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,1,1,0,0,0,0,0,1,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0],"starts":[0,1,1,0,0,0,0,0,0,0,0,0,1,0,0,1,0,1,1,0,0,0,0,0,0,0,1,0,0,2,0,0,0,0,0,0,0,0,0,0],"leads":[0,0,0,0,0,2,1,0,1,2,2,4,1,1,1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"hireDate":"2024-02-19","birthday":"01/08","vertical":"BFSI, Tech, Retail & FMCG & Business Services","title":"Technical Recruiter 1","lastPromoted":""}];
 
 // PRESET_VERTICALS — baked in to survive dashboard updates.
 // Snapshot from the roster preset export of 2026-09-16. localStorage always
@@ -6236,6 +6255,7 @@ const PRESET_VERTICALS = {
   "Benjamin Grover": "T&M: Auto",
   "Brandon Fitzgerald": "T&M: Auto",
   "Brandon Jeter": "Energy, Oil, Gas & Utilities",
+  "Brandon Vargas": "BFSI, Tech, Retail & FMCG & Business Services",
   "Brett Schuber": "Telecom",
   "Briana Moglia": "T&M: Airline & Heavy Equipment",
   "Briana Siler": "T&M: Airline & Heavy Equipment",
@@ -6261,6 +6281,7 @@ const PRESET_VERTICALS = {
   "Jillian Dunn": "T&M: Auto",
   "John Gorsuch": "T&M: Auto",
   "Jonathan Robertson": "Energy, Oil, Gas & Utilities",
+  "Jonathan Turyna": "T&M: Airline & Heavy Equipment",
   "Joseph Paolozzi": "T&M: Airline & Heavy Equipment",
   "Justin LaSorsa": "BFSI, Tech, Retail & FMCG & Business Services",
   "Kaitlyn Moreschi": "BFSI, Tech, Retail & FMCG & Business Services",
@@ -6282,6 +6303,7 @@ const PRESET_VERTICALS = {
   "Paige Atkinson": "T&M: Airline & Heavy Equipment",
   "Peter Costello": "Energy, Oil, Gas & Utilities",
   "Rachael Watkins": "Energy, Oil, Gas & Utilities",
+  "Rachel Bernstein": "Telecom",
   "Rachel Hewitt": "BFSI, Tech, Retail & FMCG & Business Services",
   "Rebecca Schopfer": "Life Sciences",
   "Ryan Charran": "T&M: Airline & Heavy Equipment",
@@ -6737,6 +6759,7 @@ const PRESET_HIRE_DATES = {
   "Benjamin Grover": "2017-09-18",
   "Brandon Fitzgerald": "2026-08-03",
   "Brandon Jeter": "2026-08-24",
+  "Brandon Vargas": "2026-10-12",
   "Brett Schuber": "2019-01-07",
   "Briana Moglia": "2021-11-29",
   "Briana Siler": "2021-12-08",
@@ -6762,6 +6785,7 @@ const PRESET_HIRE_DATES = {
   "Jillian Dunn": "2014-08-18",
   "John Gorsuch": "2022-09-12",
   "Jonathan Robertson": "2026-05-18",
+  "Jonathan Turyna": "2026-10-05",
   "Joseph Paolozzi": "2014-06-16",
   "Justin LaSorsa": "2024-02-19",
   "Kaitlyn Moreschi": "2022-01-31",
@@ -6783,6 +6807,7 @@ const PRESET_HIRE_DATES = {
   "Paige Atkinson": "2019-02-11",
   "Peter Costello": "2026-03-30",
   "Rachael Watkins": "2026-06-22",
+  "Rachel Bernstein": "2026-10-14",
   "Rachel Hewitt": "2026-01-05",
   "Rebecca Schopfer": "2022-06-27",
   "Ryan Charran": "2026-08-24",
@@ -7015,6 +7040,7 @@ const PRESET_TITLES = {
   "Benjamin Grover": "Recruiting Team Lead",
   "Brandon Fitzgerald": "Senior Recruiter 1",
   "Brandon Jeter": "Executive Recruiter 1",
+  "Brandon Vargas": "Senior Recruiter 1",
   "Brett Schuber": "Recruiting Manager",
   "Briana Moglia": "Executive Recruiter 1",
   "Briana Siler": "Principal Recruiter 2",
@@ -7035,6 +7061,7 @@ const PRESET_TITLES = {
   "Jessica Mema": "Technical Recruiter",
   "Jillian Dunn": "Technical Recruiter",
   "Jonathan Robertson": "Senior Recruiter 2",
+  "Jonathan Turyna": "Senior Recruiter 1",
   "Joseph Paolozzi": "Executive Recruiter 1",
   "Justin LaSorsa": "Technical Recruiter 1",
   "Kaitlyn Moreschi": "Senior Recruiter 1",
@@ -7056,6 +7083,7 @@ const PRESET_TITLES = {
   "Paige Atkinson": "Recruiting Team Lead",
   "Peter Costello": "Senior Recruiter 1",
   "Rachael Watkins": "Senior Recruiter 1",
+  "Rachel Bernstein": "Senior Recruiter 1",
   "Rachel Hewitt": "Recruiting Manager",
   "Rebecca Schopfer": "Senior Recruiter 2",
   "Ryan Charran": "Associate Recruiter",
@@ -9477,21 +9505,21 @@ function renderOrgChart() {
 
   // Build a set of all manager first names AND full names (lowercase) to detect duplicates
   // Use MGR_COLORS as definitive manager list — includes Matt even before MGRS rebuilds from Sheet
-  var allMgrKeys = Object.keys(MGR_COLORS).map(function(m){return m.toLowerCase();});
   var displayMgrs = Object.keys(MGR_COLORS).filter(function(m){ return m.toLowerCase() !== 'kevin'; });
-  var mgrFirstNames = allMgrKeys.filter(function(m){ return m !== 'kevin'; });
-
-  function isManager(r) {
-    var firstName = r.name.split(' ')[0].toLowerCase();
-    return mgrFirstNames.some(function(mn){
-      return firstName === mn || firstName.startsWith(mn) || mn.startsWith(firstName);
-    });
-  }
+  var isManager = isManagerRow;
 
 
   // Kevin's true direct reports: assigned to Kevin AND not a manager themselves
   var kevinDirects = all.filter(function(r){
-    return r.manager.toLowerCase() === 'kevin' && !isManager(r);
+    return canonMgr(r.manager) === 'Kevin' && !isManager(r);
+  });
+
+  // Anyone whose manager matches no team. Shown in their own column with the
+  // value that failed to match, so a typo on the Sheet is visible instead of the
+  // person silently vanishing while still counting in the total.
+  var unassigned = all.filter(function(r){
+    var m = canonMgr(r.manager);
+    return !isManager(r) && m !== 'Kevin' && displayMgrs.indexOf(m) < 0;
   });
 
   var totalReports = all.length;
@@ -9515,10 +9543,10 @@ function renderOrgChart() {
     var mc = MGR_COLORS[mgr] || '#888';
     // Recruiters under this manager, excluding the manager themselves
     var team = all.filter(function(r){
-      return r.manager === mgr && !isManager(r);
+      return canonMgr(r.manager) === mgr && !isManager(r);
     });
     // Find the manager's own recruiter record for tenure
-    var mgrRecord = all.find(function(r){ return isManager(r) && r.manager.toLowerCase()==='kevin' && r.name.split(' ')[0].toLowerCase().startsWith(mgr.toLowerCase().slice(0,4)); })
+    var mgrRecord = all.find(function(r){ return isManager(r) && r.name.split(' ')[0].toLowerCase().startsWith(mgr.toLowerCase().slice(0,4)); })
       || all.find(function(r){ return r.name.split(' ')[0].toLowerCase() === mgr.toLowerCase(); });
     var mgrTenure = mgrRecord && getHireDate(mgrRecord.name) ? calcTenure(getHireDate(mgrRecord.name)) : '';
 
@@ -9559,7 +9587,21 @@ function renderOrgChart() {
     +'</div>';
   }).join('');
 
-  var lineW = Math.min((displayMgrs.length + (kevinDirects.length ? 1 : 0)) * 156, window.innerWidth * 0.85);
+  var unassignedHTML = unassigned.length
+    ? '<div class="org-manager-col">'
+      +'<div class="org-line-v"></div>'
+      +'<div class="org-mgr-card" style="background:var(--red-bg, rgba(242,85,85,.08));border-color:var(--red);color:var(--red)">'
+        +'<div class="org-mgr-name">\u26a0 No team match</div>'
+        +'<div class="org-mgr-sub">'+unassigned.length+' recruiter'+(unassigned.length!==1?'s':'')+' &nbsp;\u00b7&nbsp; check the Sheet\u2019s manager column</div>'
+      +'</div>'
+      +'<div class="org-recruiter-list">'+unassigned.map(function(r){
+          return recCard(r).replace('<div class="org-rec-sub">',
+            '<div class="org-rec-sub"><span style="color:var(--red)">Manager: \u201c'+(String(r.manager||'').trim()||'blank')+'\u201d</span>');
+        }).join('')+'</div>'
+    +'</div>'
+    : '';
+
+  var lineW = Math.min((displayMgrs.length + (kevinDirects.length ? 1 : 0) + (unassigned.length ? 1 : 0)) * 156, window.innerWidth * 0.85);
   var connectorLine = '<div style="display:flex;justify-content:center;width:100%">'
     +'<div style="height:2px;background:var(--border2);width:'+lineW+'px"></div>'
     +'</div>';
@@ -9588,7 +9630,7 @@ function renderOrgChart() {
       +'</div>'
       +'<div class="org-connector-down"></div>'
       +connectorLine
-      +'<div class="org-managers-row">'+mgrHTML+directInlineHTML+'</div>'
+      +'<div class="org-managers-row">'+mgrHTML+directInlineHTML+unassignedHTML+'</div>'
     +'</div>'
   +'</div>';
 }
