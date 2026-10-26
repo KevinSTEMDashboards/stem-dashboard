@@ -1035,6 +1035,7 @@ td.editing{padding:2px 4px!important}
     <button class="gp-sec-btn" data-sec="sparklines" onclick="showGpSection('sparklines')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">GP Trend</button>
     <button class="gp-sec-btn" data-sec="trip" onclick="showGpSection('trip')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">&#127965; Performance Trip</button>
     <button class="gp-sec-btn" data-sec="promo" onclick="showGpSection('promo')" style="padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px">&#127894; Promotion Tracker</button>
+    <button class="gp-sec-btn" id="gp-ms-btn" data-sec="milestones" onclick="showGpSection('milestones')" style="display:none;padding:8px 16px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-1px" title="Admin only">&#127941; Milestones <span id="gp-ms-count" style="display:none;margin-left:4px;font-size:10px;font-weight:800;padding:1px 6px;border-radius:10px;background:var(--amber-bg);color:var(--amber)"></span></button>
   </div>
 
   <div id="gp-section-table">
@@ -1162,6 +1163,9 @@ td.editing{padding:2px 4px!important}
       </div>
     </div>
   </div>
+
+  <!-- ── GP MILESTONES (admin only) ── -->
+  <div id="gp-section-milestones" style="display:none"></div>
 </div>
 
 <!-- LEADERBOARD -->
@@ -1486,6 +1490,7 @@ td.editing{padding:2px 4px!important}
     </div>
     <div class="defs-sec"><div class="defs-title">GP &amp; periods</div>
       <div class="defs-term"><b>GP matching</b><span class="defs-d">Gross profit joins to recruiters by name. GP rows that don't match a roster name aren't dropped — they're footnoted on the manager's GP tile.</span></div>
+      <div class="defs-term"><b>GP milestones (admin)</b><span class="defs-d">Weekly book: first single week at or above each $5K tier, counted once ever. In-year: the week calendar-year GP crosses the trip goal, then $1M and every $500K after. New ones wait for admin review before celebrating.</span></div>
       <div class="defs-term"><b>Periods (5/4/4)</b><span class="defs-d">Each quarter = a 5-week period followed by two 4-week periods. Recap compares closed buckets only — an in-progress period is never a baseline.</span></div>
       <div class="defs-term"><b>Benchmark guards</b><span class="defs-d">Funnel conversion medians require minimum volume (5 subs / 5 interviews / 3 placements); manager-team comparisons require a team of 3+. Below those, the comparison is hidden rather than shown as noise.</span></div>
       <div class="defs-term"><b>Week flags</b><span class="defs-d">PTO / Leave / Not yet started annotate a recruiter's metric-weeks; flagged metric-weeks are excluded from averages and available-headcount so absences don't drag stats. A flag on a metric with a value above 0 is ignored — real numbers always display and count.</span></div>
@@ -1838,6 +1843,7 @@ async function loadFromSheets() {
     safeSet('stemLastSync', new Date().toISOString());
     renderOverview();
     _hideBootOverlay('success');
+    try { msRun(); } catch (e) { console.warn('Milestone scan failed:', e); }
     renderGPIfActive();
     populateWkSelects();
     populateTiSelects();
@@ -4729,13 +4735,15 @@ function exportRosterPresets() {
     return out;
   }
   const hd = prune(hireDates), bd = prune(birthdays), vt = prune(verticals), tt = prune(titles), pd = prune(promoDates);
+  const ms = msLoad();
+  const msN = Object.keys(ms.entries).length;
 
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
     label: 'STEM Dashboard roster presets (hire dates, birthdays, verticals, titles, last promoted)',
     counts: { hireDates: Object.keys(hd).length, birthdays: Object.keys(bd).length, verticals: Object.keys(vt).length, titles: Object.keys(tt).length, promoDates: Object.keys(pd).length },
-    hireDates: hd, birthdays: bd, verticals: vt, titles: tt, promoDates: pd
+    hireDates: hd, birthdays: bd, verticals: vt, titles: tt, promoDates: pd, milestones: ms
   };
 
   // Download a real file — more reliable than the clipboard, and attachable.
@@ -4753,14 +4761,16 @@ function exportRosterPresets() {
            + 'const PRESET_BIRTHDAYS = '  + JSON.stringify(bd, null, 2) + ';\n\n'
            + 'const PRESET_VERTICALS = '  + JSON.stringify(vt, null, 2) + ';\n\n'
            + 'const PRESET_TITLES = '     + JSON.stringify(tt, null, 2) + ';\n\n'
-           + 'const PRESET_PROMO_DATES = ' + JSON.stringify(pd, null, 2) + ';';
+           + 'const PRESET_PROMO_DATES = ' + JSON.stringify(pd, null, 2) + ';\n\n'
+           + 'var PRESET_MILESTONES = ' + JSON.stringify(ms) + ';';
   copyToClipboard(js,
     '\u2705 Roster presets copied and downloaded!\n\n'
     + Object.keys(hd).length + ' hire dates, '
     + Object.keys(bd).length + ' birthdays, '
     + Object.keys(vt).length + ' verticals, '
     + Object.keys(tt).length + ' titles, '
-    + Object.keys(pd).length + ' last promoted dates.\n\n'
+    + Object.keys(pd).length + ' last promoted dates, '
+    + msN + ' GP milestones.\n\n'
     + 'The .json file is in your Downloads folder.');
 }
 
@@ -4801,6 +4811,7 @@ function exportSettings() {
     stemBirthdays:  safeGet('stemBirthdays')  || '{}',
     stemTitles:     safeGet('stemTitles')     || '{}',
     stemPromoDates: safeGet('stemPromoDates') || '{}',
+    stemMilestones: safeGet('stemMilestones') || '',
     stemWeekFlags:  safeGet('stemWeekFlags')  || '{}',
     // Auth
     stemUsers:     safeGet('stemUsers')     || '[]',
@@ -4836,7 +4847,7 @@ function importSettings() {
         // Restore all keys
         // stemBirthdays, stemWeekFlags and stemTitles are exported, so restore them too
         // (birthdays and week flags were previously exported but silently skipped).
-        const keys = ['stemXW','stemBaseEdits','stemArchived','stemUnarchived','stemNewRecs','stemHireDates','stemBirthdays','stemWeekFlags','stemTitles','stemPromoDates','stemUsers','stemInvites','stemSession','stemLastSync'];
+        const keys = ['stemXW','stemBaseEdits','stemArchived','stemUnarchived','stemNewRecs','stemHireDates','stemBirthdays','stemWeekFlags','stemTitles','stemPromoDates','stemMilestones','stemUsers','stemInvites','stemSession','stemLastSync'];
         keys.forEach(function(k) {
           if (p[k] !== undefined && p[k] !== '') safeSet(k, p[k]);
         });
@@ -5839,7 +5850,7 @@ function updateAuthUI() {
             ${mi('💾','Export Settings','exportSettings','Export all settings to a backup file')}
             ${mi('📂','Import Settings','importSettings','Restore settings from a backup file')}
             ${mi('📋','Copy Archived JSON','exportArchivedForEmbed','Copy archived list JSON to embed in dashboard file')}
-            ${mi('🧬','Copy Roster Presets','exportRosterPresets','Download + copy hire dates, birthdays, verticals, titles and last promoted dates to bake into the dashboard file')}
+            ${mi('🧬','Copy Roster Presets','exportRosterPresets','Download + copy hire dates, birthdays, verticals, titles and last promoted dates and GP milestones to bake into the dashboard file')}
             ${isAdmin ? sec('Admin')+mi('👥','Manage editors','openUserModal','') : ''}
             <div style="border-top:1px solid var(--border);margin:6px 4px"></div>
             ${mi('🚪','Sign out','signOut','')}
@@ -5857,6 +5868,7 @@ function updateAuthUI() {
   if (rosterTab) rosterTab.style.display = isEditor ? '' : 'none';
   if (orgTab) orgTab.style.display = isEditor ? '' : 'none';
   if (calTab) calTab.style.display = isEditor ? '' : 'none';
+  if (typeof msAuthSync === 'function') msAuthSync();
 
   // Show/hide entry gate
   const gate = document.getElementById('entry-auth-gate');
@@ -8673,13 +8685,14 @@ function gpNetWeekly(weekly, nW) {
 
 var gpActiveSection = 'table';
 
-var GP_SECTIONS = ['table','sparklines','trip','promo'];
+var GP_SECTIONS = ['table','sparklines','trip','promo','milestones'];
 
 function showGpSection(name) {
   // Only act if GP tab is active
   const gpTab = document.getElementById('tab-gp');
   if (!gpTab || !gpTab.classList.contains('active')) return;
   if (GP_SECTIONS.indexOf(name) < 0) name = 'table';
+  if (name === 'milestones' && !msIsAdmin()) name = 'table';
   gpActiveSection = name;
   GP_SECTIONS.forEach(function(sec) {
     var el = document.getElementById('gp-section-'+sec);
@@ -8706,6 +8719,7 @@ function renderGpActiveSection() {
   if (gpActiveSection==='sparklines') renderGpTrendChart();
   else if (gpActiveSection==='trip')  renderGpTrip();
   else if (gpActiveSection==='promo') renderGpPromo();
+  else if (gpActiveSection==='milestones') renderGpMilestones();
 }
 
 var gpTrendView = 'weekly'; // 'weekly' | 'cumulative'
@@ -9346,6 +9360,357 @@ function renderGPIfActive() {
     renderGP();
     renderGpActiveSection();
   }
+}
+
+// ═══════════ GP MILESTONES (admin only) ═══════════
+// Weekly book: the first single week a recruiter's GP reaches each $5K tier,
+// ever. Cumulative: the week their calendar-year GP crosses the trip goal, then
+// $1M, $1.5M, $2M and up. New crossings land in a review queue for the admin
+// to confirm or dismiss. Stored per browser (stemMilestones) and baked back in
+// through Copy Roster Presets. Declared with var so nothing here sits in a
+// temporal dead zone when updateAuthUI runs early in page load.
+var MS_WK_STEP = 5000;
+var MS_CUM_START = 1000000, MS_CUM_STEP = 500000;
+var MS_LOOKBACK = 4;      // crossings older than this, seen for the first time, are logged as baseline
+var MS_SPIKE_MULT = 2;    // a milestone week above 2x the trailing 8-week average gets a perm-fee hint
+var PRESET_MILESTONES = {};
+var msLogFilter = 'decided';
+
+function msKey(name) { return archKey(name); }
+
+// Cumulative YTD GP at the end of each week. Anchored on the same YTD figure the
+// Performance Trip tab uses, so the two tabs can never disagree on who qualified.
+function msCumSeries(weekly, ytd, nW) {
+  var out = new Array(nW), suffix = 0;
+  for (var w = nW - 1; w >= 0; w--) {
+    out[w] = ytd - suffix;
+    suffix += (w < weekly.length ? (weekly[w] || 0) : 0);
+  }
+  return out;
+}
+
+// Cumulative tiers up to maxVal. The trip tier is always present when a goal is set.
+function msCumTiers(maxVal, tripGoal) {
+  var tiers = [];
+  if (tripGoal > 0) tiers.push({id: 'trip', v: tripGoal});
+  for (var v = MS_CUM_START; v <= maxVal; v += MS_CUM_STEP) {
+    if (v === tripGoal) continue;
+    tiers.push({id: String(v), v: v});
+  }
+  return tiers;
+}
+
+function msTrailingAvg(weekly, w, n) {
+  var s = 0, c = 0;
+  for (var i = w - 1; i >= Math.max(0, w - n); i--) { s += (i < weekly.length ? (weekly[i] || 0) : 0); c++; }
+  return c ? s / c : 0;
+}
+
+// Pure. Updates store in place and returns it.
+// recs: [{name, manager, weekly:[], ytdGP}]   opts: {nW, year, tripGoal, now}
+function msScan(store, recs, opts) {
+  var nW = opts.nW;
+  store.entries = store.entries || {};
+  if (!nW) return store;
+  var E = store.entries;
+  var first = !store.lastNW;
+  // First scan: only the last few weeks get flagged. Later scans: anything newer
+  // than the previous scan is flagged, even after a long gap between visits.
+  var cutoff = first ? nW - MS_LOOKBACK : Math.min(nW - MS_LOOKBACK, store.lastNW - 1);
+  var fresh = [];
+
+  recs.forEach(function(r) {
+    var k = msKey(r.name), wk = r.weekly || [];
+    var at = function(w) { return w < wk.length ? (wk[w] || 0) : 0; };
+
+    var mx = 0;
+    for (var i = 0; i < nW; i++) if (at(i) > mx) mx = at(i);
+    for (var t = MS_WK_STEP; t <= mx; t += MS_WK_STEP) {
+      var key = 'wk|' + k + '|' + t, e = E[key];
+      if (e && e.status !== 'dismissed') continue;
+      var from = e ? e.wk + 1 : 0, hit = -1;
+      for (var w = from; w < nW; w++) if (at(w) >= t) { hit = w; break; }
+      if (hit < 0) continue;
+      var avg = msTrailingAvg(wk, hit, 8);
+      var ne = {
+        name: r.name, mgr: r.manager, type: 'wk', tier: t, wk: hit, val: Math.round(at(hit)),
+        avg: Math.round(avg), spike: avg > 0 && at(hit) > MS_SPIKE_MULT * avg, seenAt: opts.now,
+        status: (!e && hit < cutoff) ? 'baseline' : 'pending'
+      };
+      if (e) ne.prevDismissedWk = e.wk;
+      E[key] = ne;
+      if (ne.status === 'pending') fresh.push(key);
+    }
+
+    var cum = msCumSeries(wk, r.ytdGP || 0, nW);
+    msCumTiers(cum[nW - 1], opts.tripGoal).forEach(function(tier) {
+      var key = 'cum|' + opts.year + '|' + k + '|' + tier.id;
+      if (E[key]) return;
+      var hit = -1;
+      for (var w = 0; w < nW; w++) if (cum[w] >= tier.v) { hit = w; break; }
+      if (hit < 0) return;
+      E[key] = {
+        name: r.name, mgr: r.manager, type: 'cum', tier: tier.v, trip: tier.id === 'trip', year: opts.year,
+        wk: hit, val: Math.round(cum[hit]), seenAt: opts.now,
+        status: hit < cutoff ? 'baseline' : 'pending'
+      };
+      if (E[key].status === 'pending') fresh.push(key);
+    });
+  });
+
+  // One flag per jump: tiers cleared in the same week roll up under the highest.
+  var groups = {};
+  fresh.forEach(function(key) {
+    var e = E[key];
+    if (e.type !== 'wk') return;
+    var g = msKey(e.name) + '|' + e.wk;
+    (groups[g] = groups[g] || []).push(key);
+  });
+  Object.keys(groups).forEach(function(g) {
+    var ks = groups[g].sort(function(a, b) { return E[b].tier - E[a].tier; });
+    for (var i = 1; i < ks.length; i++) { E[ks[i]].status = 'covered'; E[ks[i]].coveredBy = ks[0]; }
+    if (ks.length > 1) E[ks[0]].jumped = ks.length;
+  });
+
+  store.lastNW = Math.max(store.lastNW || 0, nW);
+  return store;
+}
+
+// Confirm, dismiss, or send back to pending. Rolled-up lower tiers follow the top one.
+function msDecide(store, key, status) {
+  var E = store.entries, e = E[key];
+  if (!e) return store;
+  var stamp = new Date().toISOString();
+  e.status = status;
+  e.decidedAt = status === 'pending' ? null : stamp;
+  Object.keys(E).forEach(function(k) {
+    if (E[k].coveredBy !== key) return;
+    E[k].status = status === 'pending' ? 'covered' : status;
+    E[k].decidedAt = e.decidedAt;
+  });
+  return store;
+}
+
+function msIsAdmin() { return !!(typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'admin'); }
+
+function msLoad() {
+  var s = null;
+  try { s = JSON.parse(safeGet('stemMilestones') || 'null'); } catch (e) { s = null; }
+  if (!s || typeof s !== 'object') s = {v: 1, entries: {}};
+  if (!s.entries) s.entries = {};
+  var P = (PRESET_MILESTONES && PRESET_MILESTONES.entries) || {};
+  Object.keys(P).forEach(function(k) { if (!s.entries[k]) s.entries[k] = P[k]; });
+  if (!s.lastNW && PRESET_MILESTONES && PRESET_MILESTONES.lastNW) s.lastNW = PRESET_MILESTONES.lastNW;
+  return s;
+}
+function msSave(s) { safeSet('stemMilestones', JSON.stringify(s)); }
+
+function msYear() { return +WK1_ANCHOR.slice(0, 4); }
+function msTripGoal() {
+  var g = gpNumSetting('stemTripGoal', TRIP_GOAL_DEFAULT);
+  var el = document.getElementById('trip-goal');
+  if (el && el.value !== '') g = parseFloat(el.value) || 0;
+  return g;
+}
+function msRows() {
+  var arch = archivedRecruiters.map(function(a) { return archKey(a.name); });
+  return GP_DATA.filter(function(r) { return arch.indexOf(archKey(r.name)) < 0; });
+}
+
+// Scan the live GP data. Admin only, and only once GP data has loaded.
+function msRun() {
+  if (!msIsAdmin() || !GP_DATA.length) return null;
+  var s = msLoad();
+  msScan(s, msRows(), {nW: gpTotalWeeks(), year: msYear(), tripGoal: msTripGoal(), now: new Date().toISOString()});
+  msSave(s);
+  msUpdateBadge(s);
+  return s;
+}
+
+function msUpdateBadge(s) {
+  var btn = document.getElementById('gp-ms-btn');
+  if (!btn) return;
+  btn.style.display = msIsAdmin() ? '' : 'none';
+  var cnt = document.getElementById('gp-ms-count');
+  if (!cnt) return;
+  var n = 0;
+  if (s && msIsAdmin()) Object.keys(s.entries).forEach(function(k) { if (s.entries[k].status === 'pending') n++; });
+  cnt.textContent = n ? String(n) : '';
+  cnt.style.display = n ? '' : 'none';
+}
+
+// Called from updateAuthUI: shows the sub-tab for admins only.
+function msAuthSync() {
+  try {
+    msUpdateBadge(msIsAdmin() ? msLoad() : null);
+    if (!msIsAdmin() && typeof gpActiveSection !== 'undefined' && gpActiveSection === 'milestones') {
+      gpActiveSection = 'table';
+      var gpTab = document.getElementById('tab-gp');
+      if (gpTab && gpTab.classList.contains('active')) showGpSection('table');
+      else GP_SECTIONS.forEach(function(sec) {
+        var el = document.getElementById('gp-section-' + sec);
+        if (el) el.style.display = sec === 'table' ? '' : 'none';
+      });
+    }
+  } catch (e) { /* GP section not ready yet */ }
+}
+
+function msMoney(v) {
+  v = Math.round(v || 0);
+  if (v >= 1000000 && v % 100000 === 0) return '$' + (v / 1000000).toFixed(v % 1000000 === 0 ? 0 : 1) + 'M';
+  if (v >= 1000 && v < 1000000 && v % 1000 === 0) return '$' + (v / 1000) + 'K';
+  return '$' + v.toLocaleString();
+}
+function msWkLbl(w) { return wkLabels[w] || ('Wk ' + (w + 1)); }
+function msLabel(e) {
+  if (e.type === 'wk') return 'First ' + msMoney(e.tier) + ' week';
+  if (e.trip) return 'Qualified for the trip (' + msMoney(e.tier) + ' YTD)';
+  return 'Crossed ' + msMoney(e.tier) + ' YTD';
+}
+function msSort(a, b) { return (b.e.wk - a.e.wk) || (b.e.tier - a.e.tier) || a.e.name.localeCompare(b.e.name); }
+
+function msAct(key, status) {
+  var s = msLoad();
+  msDecide(s, key, status);
+  msSave(s);
+  renderGpMilestones();
+}
+function msSetLogFilter(v) { msLogFilter = v; renderGpMilestones(); }
+
+// Current 5/4/4 period, from the latest GP week
+function msCurrentPeriod(nW) {
+  var last = nW - 1;
+  for (var i = 0; i < PERIOD_DEFS.length; i++) if (PERIOD_DEFS[i].weeks.indexOf(last) >= 0) return PERIOD_DEFS[i];
+  return null;
+}
+
+function msCopyShoutouts() {
+  var s = msLoad(), nW = gpTotalWeeks(), per = msCurrentPeriod(nW);
+  var rows = Object.keys(s.entries).map(function(k) { return {k: k, e: s.entries[k]}; }).filter(function(x) {
+    return x.e.status === 'confirmed' && !x.e.coveredBy && per && per.weeks.indexOf(x.e.wk) >= 0;
+  }).sort(msSort);
+  if (!rows.length) { alert('No confirmed milestones in ' + (per ? per.label : 'this period') + ' yet.'); return; }
+  var txt = 'GP milestones, ' + (per ? per.label : '') + '\n' + rows.map(function(x) {
+    return x.e.name + ': ' + msLabel(x.e) + ' (' + msWkLbl(x.e.wk) + ')';
+  }).join('\n');
+  copyToClipboard(txt, '✅ ' + rows.length + ' confirmed milestone' + (rows.length === 1 ? '' : 's') + ' copied.');
+}
+
+function renderGpMilestones() {
+  var gpTab = document.getElementById('tab-gp');
+  if (!gpTab || !gpTab.classList.contains('active')) return;
+  var wrap = document.getElementById('gp-section-milestones');
+  if (!wrap) return;
+  if (!msIsAdmin()) { wrap.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:20px">Milestones are visible to the admin only.</div>'; return; }
+  var s = msRun();
+  if (!s) { wrap.innerHTML = gpEmptyMsg(); return; }
+
+  var E = s.entries, nW = gpTotalWeeks(), per = msCurrentPeriod(nW), goal = msTripGoal();
+  var all = Object.keys(E).map(function(k) { return {k: k, e: E[k]}; });
+  var pending = all.filter(function(x) { return x.e.status === 'pending'; }).sort(msSort);
+  var confirmedPer = all.filter(function(x) {
+    return x.e.status === 'confirmed' && !x.e.coveredBy && per && per.weeks.indexOf(x.e.wk) >= 0;
+  }).length;
+
+  // Who is close to their next in-year tier, at their trailing 8-week pace
+  var closing = [];
+  msRows().forEach(function(r) {
+    var ytd = r.ytdGP || 0;
+    var tiers = msCumTiers(Math.max(ytd + MS_CUM_STEP, MS_CUM_START), goal).sort(function(a, b) { return a.v - b.v; });
+    var next = tiers.filter(function(t) { return t.v > ytd; })[0];
+    if (!next) return;
+    var rate = gpTrailingAvg(r.weekly, 8, nW);
+    if (rate <= 0) return;
+    var wks = Math.ceil((next.v - ytd) / rate);
+    if (wks <= 8) closing.push({r: r, tier: next, gap: next.v - ytd, wks: wks});
+  });
+  closing.sort(function(a, b) { return a.wks - b.wks || a.gap - b.gap; });
+
+  var btn = function(key, status, label, icon) {
+    return '<button class="btn" data-k="' + _pfEsc(key) + '" onclick="msAct(this.dataset.k,\'' + status + '\')" style="font-size:11px;height:28px;padding:0 10px">' + icon + ' ' + label + '</button>';
+  };
+  var chip = function(txt, col, bg) {
+    return '<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:' + bg + ';color:' + col + ';white-space:nowrap">' + txt + '</span>';
+  };
+
+  var pendHtml = pending.length ? pending.map(function(x) {
+    var e = x.e, notes = [];
+    if (e.type === 'wk') notes.push(msWkLbl(e.wk) + ' · ' + msMoney(e.val) + ' that week');
+    else notes.push(msWkLbl(e.wk) + ' · ' + msMoney(e.val) + ' YTD');
+    var tags = '';
+    if (e.spike) tags += chip('Trailing 8-wk avg ' + msMoney(e.avg) + ', possible perm fee', 'var(--amber)', 'var(--amber-bg)') + ' ';
+    if (e.jumped) tags += chip('Cleared ' + e.jumped + ' tiers in one week', 'var(--accent)', 'var(--accent-dim)') + ' ';
+    if (e.prevDismissedWk != null) tags += chip('Flagged again (dismissed at ' + msWkLbl(e.prevDismissedWk) + ')', 'var(--text2)', 'var(--bg4)') + ' ';
+    if (e.trip) tags += chip('Performance Trip', 'var(--green)', 'var(--green-bg)') + ' ';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap">'
+      + '<div style="flex:1;min-width:240px">'
+      + '<div style="font-size:13px;font-weight:600">' + _pfEsc(e.name) + ' ' + gpMgrChip(e.mgr) + '</div>'
+      + '<div style="font-size:12.5px;color:var(--text);margin-top:3px">' + msLabel(e) + '</div>'
+      + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + notes.join(' ') + '</div>'
+      + (tags ? '<div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap">' + tags + '</div>' : '')
+      + '</div>'
+      + btn(x.k, 'confirmed', 'Confirm', '&#10003;') + btn(x.k, 'dismissed', 'Dismiss', '&#10005;')
+      + '</div>';
+  }).join('') : '<div style="padding:16px 14px;font-size:12px;color:var(--text3)">Nothing waiting for review.</div>';
+
+  var closeHtml = closing.length ? closing.slice(0, 10).map(function(c) {
+    return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border);font-size:12px;flex-wrap:wrap">'
+      + '<span><b>' + _pfEsc(c.r.name) + '</b> ' + gpMgrChip(c.r.manager) + ' <span style="color:var(--text3)">→ ' + (c.tier.id === 'trip' ? 'trip goal (' + msMoney(c.tier.v) + ')' : msMoney(c.tier.v) + ' YTD') + '</span></span>'
+      + '<span style="color:var(--text2)">' + msMoney(c.gap) + ' away · ~' + c.wks + ' wk' + (c.wks === 1 ? '' : 's') + ' at current pace</span></div>';
+  }).join('') : '<div style="padding:14px;font-size:12px;color:var(--text3)">Nobody is within 8 weeks of their next in-year milestone.</div>';
+
+  var STAT = {
+    confirmed: ['Confirmed', 'var(--green)'], dismissed: ['Dismissed', 'var(--text3)'],
+    baseline: ['Before tracking', 'var(--text3)'], covered: ['Rolled into higher tier', 'var(--text3)'],
+    pending: ['Pending', 'var(--amber)']
+  };
+  var logRows = all.filter(function(x) {
+    var st = x.e.status;
+    if (msLogFilter === 'decided') return (st === 'confirmed' || st === 'dismissed') && !x.e.coveredBy;
+    if (msLogFilter === 'all') return true;
+    return st === msLogFilter;
+  }).sort(msSort);
+  var logHtml = logRows.length ? logRows.map(function(x) {
+    var e = x.e, st = STAT[e.status] || [e.status, 'var(--text3)'];
+    var undo = (e.status === 'confirmed' || e.status === 'dismissed') && !e.coveredBy ? btn(x.k, 'pending', 'Undo', '&#8617;') : '';
+    return '<tr><td style="white-space:nowrap;font-weight:500">' + _pfEsc(e.name) + '</td><td>' + gpMgrChip(e.mgr) + '</td>'
+      + '<td>' + msLabel(e) + '</td><td style="white-space:nowrap">' + msWkLbl(e.wk) + '</td>'
+      + '<td style="text-align:right">' + msMoney(e.val) + '</td>'
+      + '<td style="color:' + st[1] + ';font-weight:600;white-space:nowrap">' + st[0] + '</td><td style="text-align:right">' + undo + '</td></tr>';
+  }).join('') : '<tr><td colspan="7" style="color:var(--text3);padding:14px">No milestones in this view.</td></tr>';
+
+  var fOpt = function(v, l) { return '<option value="' + v + '"' + (msLogFilter === v ? ' selected' : '') + '>' + l + '</option>'; };
+
+  wrap.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:18px">'
+    + gpKpiCard('Pending review', pending.length, 'var(--amber)', 'Confirm before calling out')
+    + gpKpiCard('Confirmed this period', confirmedPer, 'var(--green)', per ? per.label : '')
+    + gpKpiCard('Closing in', closing.length, 'var(--accent)', 'Next in-year tier within ~8 wks')
+    + '</div>'
+    + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:18px">'
+    + '<div class="card-hdr" style="padding:12px 14px 0;margin-bottom:8px"><span class="card-title">Pending review</span>'
+    + '<button class="btn" onclick="msCopyShoutouts()" style="font-size:11px;height:28px" title="Copy this period\'s confirmed milestones as a list for a team meeting or email">&#128203; Copy this period\'s confirmed</button></div>'
+    + '<div style="border-top:1px solid var(--border)">' + pendHtml + '</div></div>'
+    + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:18px">'
+    + '<div class="card-hdr" style="padding:12px 14px 0;margin-bottom:8px"><span class="card-title">Closing in on next in-year milestone</span><span style="font-size:11px;color:var(--text3)">Pace = trailing 8-week average</span></div>'
+    + '<div style="border-top:1px solid var(--border)">' + closeHtml + '</div></div>'
+    + '<div class="card-hdr" style="margin-bottom:8px"><span class="card-title">Milestone log</span>'
+    + '<select onchange="msSetLogFilter(this.value)" style="height:30px;font-size:12px">'
+    + fOpt('decided', 'Confirmed and dismissed') + fOpt('confirmed', 'Confirmed') + fOpt('dismissed', 'Dismissed')
+    + fOpt('baseline', 'Before tracking') + fOpt('all', 'Everything') + '</select></div>'
+    + '<div class="tbl-wrap" style="max-height:420px;overflow-y:auto"><table><thead><tr><th>Recruiter</th><th>Mgr</th><th>Milestone</th><th>Week</th><th style="text-align:right">Amount</th><th>Status</th><th></th></tr></thead><tbody>'
+    + logHtml + '</tbody></table></div>'
+    + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:16px;margin-top:18px">'
+    + '<div class="card-title" style="margin-bottom:8px">How milestones work</div>'
+    + '<div style="font-size:11px;color:var(--text3);line-height:1.6">'
+    + '<b>Weekly book:</b> the first single week a recruiter\'s GP reaches each $5K tier ($5K, $10K, $15K and up). It counts once, ever. '
+    + 'Weekly GP mixes contract and perm, so a week above twice the trailing 8-week average is tagged as a possible perm fee. '
+    + 'If several tiers are cleared in one week, they show as one flag for the highest. Dismissing one clears it, and it is flagged again the next time they genuinely reach that tier.'
+    + '<br><br><b>In-year total:</b> the week calendar-year GP crosses the trip goal (' + msMoney(goal) + ', from the Performance Trip tab), then $1M, $1.5M, $2M and up. '
+    + 'It uses the same YTD GP figure as the trip tab, so the two always agree. These reset each January.'
+    + '<br><br>Milestones reached before tracking started are logged as <b>before tracking</b>, except crossings from the last ' + MS_LOOKBACK + ' weeks, which are flagged so recent ones are not missed. '
+    + 'Archived recruiters are excluded. Confirmations live in this browser, and Copy Roster Presets carries them into the dashboard file.'
+    + '</div></div>';
 }
 
 // ─── END GROSS PROFIT ───
@@ -10621,7 +10986,7 @@ var _pfLast = null; // stats stash from last render — keeps the 1:1 export in 
 
 // ── Build date: bump on every delivered build. Cache tiebreaker, not a version scheme —
 // if a user's date doesn't match the latest push, they're on a stale cached copy.
-var DASH_BUILT = 'Oct 16, 2026';
+var DASH_BUILT = 'Oct 26, 2026';
 (function(){ var el=document.getElementById('dash-built'); if(el) el.textContent='Updated '+DASH_BUILT; })();
 function openDefinitions(){ document.getElementById('defs-modal').style.display='flex'; }
 function closeDefinitions(){ document.getElementById('defs-modal').style.display='none'; }
