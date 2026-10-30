@@ -8564,7 +8564,8 @@ function renderGP() {
   document.getElementById('gp-mgr-cards').innerHTML = mgrCards;
 
   // ── Team Summary KPIs ──
-  const allRecs = GP_DATA.filter(r => !archivedNames.includes(archKey(r.name)));
+  // Honors the manager/recruiter filters (same set as the table and GP Trend)
+  const allRecs = recs;
   const teamYTD    = allRecs.reduce((s,r)=>s+r.ytdGP,0);
   const team2026   = allRecs.reduce((s,r)=>s+r.gp2026,0);
   const teamPrior  = allRecs.reduce((s,r)=>s+r.prior2026,0);
@@ -8587,11 +8588,20 @@ function renderGP() {
     ${sub?`<div style="font-size:11px;color:var(--text3);margin-top:2px">${sub}</div>`:''}
   </div>`;
 
+  // Top row follows the selected week range. Prior/2026 split only exists as
+  // season totals in the Sheet (weekly columns are combined GP), so those two
+  // cards stay season-level and say so when a narrower range is selected.
+  const isFullWin = wkSlice.f===0 && wkSlice.t>=nW-1;
+  const lblOf = i => wkLabels[i]||('Wk '+(i+1));
+  const rangeLbl = isFullWin ? 'YTD' : (wkSlice.f===wkSlice.t ? lblOf(wkSlice.f) : lblOf(wkSlice.f)+' \u2013 '+lblOf(Math.min(wkSlice.t,nW-1)));
+  const nWeeksSel = Math.max(1, Math.min(wkSlice.t,nW-1)-wkSlice.f+1);
+  const avgWeeklyTeam = teamPeriod / nWeeksSel;
+  const seasonSub = isFullWin ? '' : ' \u00b7 season total';
   document.getElementById('gp-summary').innerHTML =
-    kpiCard('Team YTD GP', formatGP(teamYTD), 'var(--text)', `${headcount} recruiters · ${formatGP(avgYTD)}/head`) +
-    kpiCard('Prior 2026 GP', formatGP(teamPrior), 'var(--text3)', 'Carried in from prior year') +
-    kpiCard('2026 GP', formatGP(team2026), 'var(--c-starts)', `${formatGP(avg2026)}/head`) +
-    kpiCard('Period GP', formatGP(teamPeriod), 'var(--accent)', `${formatGP(avgPeriod)}/head avg`) +
+    kpiCard(isFullWin ? 'Team YTD GP' : 'Team GP \u00b7 '+rangeLbl, formatGP(teamPeriod), 'var(--text)', `${headcount} recruiters \u00b7 ${formatGP(avgPeriod)}/head`) +
+    kpiCard('Prior 2026 GP', formatGP(teamPrior), 'var(--text3)', 'Carried in from prior year'+seasonSub) +
+    kpiCard('2026 GP', formatGP(team2026), 'var(--c-starts)', `${formatGP(avg2026)}/head`+seasonSub) +
+    kpiCard('Avg weekly GP \u00b7 '+rangeLbl, formatGP(avgWeeklyTeam), 'var(--accent)', `${nWeeksSel} week${nWeeksSel===1?'':'s'}`) +
     (periodPct!==null ? kpiCard(`vs ${prevF2>=0&&wkLabels[prevF2]?wkLabels[prevF2]:'Wk'+(prevF2+1)}${prevT2!==prevF2&&wkLabels[prevT2]?' – '+wkLabels[prevT2]:''}`, `<span style="color:${pCol}">${periodPct>0?'+':''}${periodPct}%</span>`, 'var(--text)', `${formatGP(teamPeriod-prevPeriod)} change`) : '');
 
   // Table
