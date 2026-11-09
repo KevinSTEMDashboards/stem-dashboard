@@ -11854,256 +11854,9 @@ function exportProfileSheet(){
   setTimeout(function(){try{w.print();}catch(e){}},400);
 }
 
-loadFromSheets();
-
-} catch(e) { console.error('STEM Dashboard error:', e.message, e.stack); document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;color:#f55656;background:#16181d;min-height:100vh"><h2>Dashboard failed to load</h2><p style="margin-top:12px;color:#9ba3b8">Error: ' + e.message + '</p><p style="margin-top:8px;color:#5c6480;font-size:12px">' + (e.stack||'').replace(/\n/g,'<br>') + '</p></div>'; }
-
-</script>
-<script>
-// ── Standalone push-to-sheet functions ──
-// Uses var to avoid redeclaration errors with block 3 consts
-var _OAUTH_CLIENT_ID = '449401016766-a464fe1emnm95aaq6h1rlprbsqcskvig.apps.googleusercontent.com';
-var _SHEET_ID = '1pfZkfllcnqzKz8of6luC0Qns4EeLpnYdGietH8cPHiQ';
-
-function _safeGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
-function _safeSet(k,v) { try { localStorage.setItem(k,v); } catch(e) {} }
-
-function _getOAuthToken() {
-  return new Promise(function(resolve, reject) {
-    var cached = _safeGet('stemOAuthToken');
-    var expiry = _safeGet('stemOAuthExpiry');
-    if (cached && expiry && Date.now() < parseInt(expiry)) { resolve(cached); return; }
-    var w = window.open(
-      'https://accounts.google.com/o/oauth2/auth' +
-      '?client_id=' + _OAUTH_CLIENT_ID +
-      '&redirect_uri=' + encodeURIComponent('https://kevinstemdashboards.github.io/stem-dashboard') +
-      '&response_type=token' +
-      '&scope=' + encodeURIComponent('https://www.googleapis.com/auth/spreadsheets'),
-      'oauth2', 'width=500,height=600'
-    );
-    if (!w) { reject(new Error('Popup blocked — please allow popups for this site')); return; }
-    var timer = setInterval(function() {
-      try {
-        if (w.closed) { clearInterval(timer); reject(new Error('Sign-in cancelled')); return; }
-        var hash = w.location.hash;
-        if (hash && hash.includes('access_token')) {
-          clearInterval(timer);
-          var m = hash.match(/access_token=([^&]+)/);
-          if (m) {
-            var token = m[1];
-            _safeSet('stemOAuthToken', token);
-            _safeSet('stemOAuthExpiry', String(Date.now() + 3500000));
-            w.close();
-            resolve(token);
-          } else {
-            w.close();
-            reject(new Error('Could not extract token'));
-          }
-        }
-      } catch(e) { /* cross-origin, keep waiting */ }
-    }, 300);
-  });
-}
-
-function _colToLetter(n) {
-  var s = ''; n = n + 1;
-  while (n > 0) { var r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); }
-  return s;
-}
-
-async function _writeWeekToSheet(weekData, weekLabel) {
-  var token = await _getOAuthToken();
-  var tabs = ['Subs','Interviews','Placements','Starts','Leads'];
-  var metricKeys = ['subs','ivs','placements','starts','leads'];
-  var results = [];
-  // Every roster member needs a row on every tab, or their numbers get dropped.
-  var guard = await sheetRowGuard(weekData, tabs, token);
-  if (!guard.ok) return [{tab: 'All tabs', ok: false, err: guard.err}];
-  for (var t = 0; t < tabs.length; t++) {
-    var tab = tabs[t]; var mk = metricKeys[t];
-    try {
-      var resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values/'+encodeURIComponent(tab)+'?key=AIzaSyCas-IXPeCDB4op7kp3mnGoFCuBINAEY2g');
-      if (!resp.ok) { results.push({tab:tab,ok:false,err:'read HTTP '+resp.status}); continue; }
-      var d = await resp.json();
-      var rows = d.values || [];
-      if (!rows.length) { results.push({tab:tab,ok:false,err:'empty sheet response'}); continue; }
-      // Find header row (has "Recruiter" in col A)
-      var hdrRow = -1;
-      for (var r=0; r<rows.length; r++) { if ((rows[r][0]||'').toLowerCase().includes('recruiter')) { hdrRow=r; break; } }
-      if (hdrRow < 0) { results.push({tab:tab,ok:false,err:'Header not found'}); continue; }
-      // Find last column that has non-zero data from any recruiter
-      // (zeros in future weeks don't count — they're just empty/placeholder)
-      var hdr = rows[hdrRow];
-      var lastDataCol = 1;
-      
-      for (var c2=1; c2<hdr.length; c2++) {
-        var h2 = String(hdr[c2]||'').toLowerCase().trim();
-        if (!h2) continue;
-        if (['total','avg','average','ytd','sum'].some(function(x){return h2.includes(x);})) continue;
-        // Check if any recruiter row has a non-zero, non-empty value in this column
-        var hasRealData = false;
-        for (var rx2=hdrRow+1; rx2<rows.length; rx2++) {
-          var row2 = rows[rx2];
-          if (!row2 || !(row2[0]||'').trim()) continue;
-          var recN = row2[0].trim().toLowerCase();
-          if (['total','avg','average'].some(function(x){return recN.includes(x);})) continue;
-          var v2 = String(row2[c2]||'').trim();
-          if (v2 !== '' && v2 !== '0') { hasRealData = true; break; }
-        }
-        if (hasRealData) lastDataCol = c2;
-      }
-      
-      var newCol = lastDataCol + 1;
-      if (newCol > 300) { results.push({tab:tab,ok:false,err:'Column out of range: '+newCol}); continue; }
-
-      // SAFETY: verify target column is actually empty across all recruiter rows.
-      // If it already has data, the detection was stale — abort to avoid overwriting.
-      var targetHasData = false;
-      for (var sc=hdrRow+1; sc<rows.length; sc++) {
-        var srow = rows[sc];
-        if (!srow || !(srow[0]||'').trim()) continue;
-        var srecN = srow[0].trim().toLowerCase();
-        if (['total','avg','average'].some(function(x){return srecN.includes(x);})) continue;
-        var sv = String(srow[newCol]||'').trim();
-        if (sv !== '' && sv !== '0') { targetHasData = true; break; }
-      }
-      if (targetHasData) {
-        results.push({tab:tab,ok:false,err:'Target column already has data (stale read?) — push aborted to prevent overwrite. Please retry.'});
-        continue;
-      }
-
-      var colLetter = _colToLetter(newCol);
-      // Build case-insensitive weekData lookup
-      var weekDataLower = {};
-      Object.keys(weekData).forEach(function(k) {
-        weekDataLower[k.trim().toLowerCase()] = weekData[k];
-      });
-
-      // Build list of archived recruiter names to skip
-      var archivedNames = [];
-      try {
-        var arch = JSON.parse(_safeGet('stemArchived') || '[]');
-        archivedNames = arch.map(function(a){ return archKey(a.name); });
-      } catch(e2) {}
-
-      // Build batch update
-      var data = [];
-      for (var rx=0; rx<rows.length; rx++) {
-        if (rx === hdrRow) continue;
-        var recName = (rows[rx][0]||'').trim();
-        if (!recName || ['total','avg','average'].some(function(x){return recName.toLowerCase().includes(x);})) continue;
-        // Skip archived recruiters
-        if (archivedNames.indexOf(archKey(recName)) >= 0) continue;
-        // Look up by normalized name
-        var recData = weekDataLower[recName.trim().toLowerCase()];
-        var val = recData ? (recData[mk]||0) : null;
-        if (val === null) continue;
-        data.push({range:tab+'!'+colLetter+(rx+1),values:[[val]]});
-      }
-      if (!data.length) { results.push({tab:tab,ok:true}); continue; }
-      var updateResp = await fetch(
-        'https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values:batchUpdate',
-        { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-          body: JSON.stringify({valueInputOption:'RAW',data:data}) }
-      );
-      var upd = await updateResp.json();
-      if (upd.error) { results.push({tab:tab,ok:false,err:upd.error.message}); }
-      else { results.push({tab:tab,ok:true}); }
-    } catch(e) { results.push({tab:tab,ok:false,err:e.message}); }
-  }
-  return results;
-}
-
-async function pushWeekToSheet(i) {
-  var ew;
-  try {
-    var weeks = JSON.parse(_safeGet('stemXW') || '[]');
-    ew = weeks[i];
-  } catch(err) { ew = null; }
-  if (!ew) { alert('No week data found at index ' + i); return; }
-  var btn = document.getElementById('push-btn-' + i);
-  if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
-  try {
-    var results = await _writeWeekToSheet(ew.data, ew.label);
-    _safeSet('stemLastSync', new Date().toISOString());
-    if (btn) { btn.textContent = '✅ Done'; setTimeout(function(){ btn.textContent='📤 Push to Sheet'; btn.disabled=false; }, 2500); }
-    var failed = results.filter(function(r){return !r.ok;});
-    if (failed.length) {
-      alert('⚠️ Partially saved. Failed: ' + failed.map(function(r){return r.tab+' ('+r.err+')';}).join(', '));
-    } else {
-      alert('✅ Week ' + (ew.label||'') + ' pushed to Google Sheets successfully!');
-    }
-  } catch(e) {
-    if (btn) { btn.textContent = '📤 Push to Sheet'; btn.disabled = false; }
-    var msg = e.message || 'Unknown error';
-    if (msg.toLowerCase().includes('blocked') || msg.toLowerCase().includes('popup')) {
-      alert('⚠️ Browser blocked the sign-in popup.\n\nClick the popup icon in your address bar, select "Always allow", then try again.');
-    } else if (msg.toLowerCase().includes('cancel')) {
-      alert('⚠️ Sign-in cancelled. Please try again.');
-    } else {
-      alert('⚠️ Could not push to Google Sheets: ' + msg);
-    }
-  }
-}
-</script>
-
-<!-- ══ Excel export modal ══ -->
-<div id="xl-modal" style="display:none;position:fixed;inset:0;z-index:9995;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;padding:20px">
-  <div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 14px 40px rgba(0,0,0,0.45);width:560px;max-width:100%;max-height:90vh;overflow-y:auto;padding:18px 20px">
-
-    <div style="display:flex;align-items:center;gap:9px;margin-bottom:3px">
-      <span style="font-size:17px">📊</span>
-      <span style="font-size:15px;font-weight:700;color:var(--text)">Export to Excel</span>
-      <span id="xl-range-badge" style="margin-left:auto;font-size:11px;color:var(--text3)"></span>
-      <button onclick="closeExcelExport()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;padding:0 2px" title="Close">&times;</button>
-    </div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Each dataset becomes its own formatted tab in one workbook.</div>
-
-    <div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Include</div>
-    <div id="xl-ds-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 16px;margin-bottom:8px"></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      <button class="btn" onclick="xlToggleAll(true)" style="font-size:11px;height:24px;padding:0 9px">Select all</button>
-      <button class="btn" onclick="xlToggleAll(false)" style="font-size:11px;height:24px;padding:0 9px">Clear</button>
-    </div>
-
-    <div style="border-top:1px solid var(--border);padding-top:13px;display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:14px">
-      <div>
-        <div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Scope</div>
-        <select id="xl-scope" onchange="xlRefreshBadge()" style="width:100%;height:30px;font-size:12px">
-          <option value="current">Use current dashboard filters</option>
-          <option value="full">Full year to date</option>
-        </select>
-      </div>
-      <div>
-        <div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Archived recruiters</div>
-        <select id="xl-archived" style="width:100%;height:30px;font-size:12px">
-          <option value="no">Exclude</option>
-          <option value="yes">Include</option>
-        </select>
-      </div>
-    </div>
-
-    <div style="background:var(--bg2);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:7px">Opens with</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px">
-        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Frozen header</span>
-        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Autofilter</span>
-        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Sized columns</span>
-        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Currency &amp; percent formats</span>
-        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Manager colour bands</span>
-        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Bold totals row</span>
-      </div>
-    </div>
-
-    <div style="display:flex;align-items:center;gap:10px">
-      <span id="xl-status" style="font-size:11px;color:var(--text3);flex:1;min-width:0"></span>
-      <button class="btn" onclick="closeExcelExport()" style="font-size:12px;height:30px;padding:0 12px">Cancel</button>
-      <button class="btn btn-primary" id="xl-go" onclick="runExcelExport()" style="font-size:12px;height:30px;padding:0 14px;white-space:nowrap">⬇ Download .xlsx</button>
-    </div>
-  </div>
-</div>
-
-<script>
+// Excel export lives inside this try block on purpose: the dashboard's
+// let/const state (wkLabels, RECRUITERS, GP_DATA, ...) is block-scoped here
+// and is invisible to a separate <script> tag.
 // ═══════════════════════════════════════════════════════════════════
 // EXCEL EXPORT
 // Builds a multi-tab .xlsx that is already formatted when it opens:
@@ -12812,6 +12565,14 @@ async function runExcelExport() {
   }
 }
 
+// Inline onclick handlers need these on window. Plain function declarations
+// inside the try block get promoted automatically, async ones do not.
+window.openExcelExport = openExcelExport;
+window.closeExcelExport = closeExcelExport;
+window.xlToggleAll = xlToggleAll;
+window.xlRefreshBadge = xlRefreshBadge;
+window.runExcelExport = runExcelExport;
+
 // Build the checkbox list once the DOM is ready.
 (function() {
   function paint() {
@@ -12828,7 +12589,255 @@ async function runExcelExport() {
   else paint();
 })();
 
+loadFromSheets();
+
+} catch(e) { console.error('STEM Dashboard error:', e.message, e.stack); document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;color:#f55656;background:#16181d;min-height:100vh"><h2>Dashboard failed to load</h2><p style="margin-top:12px;color:#9ba3b8">Error: ' + e.message + '</p><p style="margin-top:8px;color:#5c6480;font-size:12px">' + (e.stack||'').replace(/\n/g,'<br>') + '</p></div>'; }
+
 </script>
+<script>
+// ── Standalone push-to-sheet functions ──
+// Uses var to avoid redeclaration errors with block 3 consts
+var _OAUTH_CLIENT_ID = '449401016766-a464fe1emnm95aaq6h1rlprbsqcskvig.apps.googleusercontent.com';
+var _SHEET_ID = '1pfZkfllcnqzKz8of6luC0Qns4EeLpnYdGietH8cPHiQ';
+
+function _safeGet(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+function _safeSet(k,v) { try { localStorage.setItem(k,v); } catch(e) {} }
+
+function _getOAuthToken() {
+  return new Promise(function(resolve, reject) {
+    var cached = _safeGet('stemOAuthToken');
+    var expiry = _safeGet('stemOAuthExpiry');
+    if (cached && expiry && Date.now() < parseInt(expiry)) { resolve(cached); return; }
+    var w = window.open(
+      'https://accounts.google.com/o/oauth2/auth' +
+      '?client_id=' + _OAUTH_CLIENT_ID +
+      '&redirect_uri=' + encodeURIComponent('https://kevinstemdashboards.github.io/stem-dashboard') +
+      '&response_type=token' +
+      '&scope=' + encodeURIComponent('https://www.googleapis.com/auth/spreadsheets'),
+      'oauth2', 'width=500,height=600'
+    );
+    if (!w) { reject(new Error('Popup blocked — please allow popups for this site')); return; }
+    var timer = setInterval(function() {
+      try {
+        if (w.closed) { clearInterval(timer); reject(new Error('Sign-in cancelled')); return; }
+        var hash = w.location.hash;
+        if (hash && hash.includes('access_token')) {
+          clearInterval(timer);
+          var m = hash.match(/access_token=([^&]+)/);
+          if (m) {
+            var token = m[1];
+            _safeSet('stemOAuthToken', token);
+            _safeSet('stemOAuthExpiry', String(Date.now() + 3500000));
+            w.close();
+            resolve(token);
+          } else {
+            w.close();
+            reject(new Error('Could not extract token'));
+          }
+        }
+      } catch(e) { /* cross-origin, keep waiting */ }
+    }, 300);
+  });
+}
+
+function _colToLetter(n) {
+  var s = ''; n = n + 1;
+  while (n > 0) { var r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); }
+  return s;
+}
+
+async function _writeWeekToSheet(weekData, weekLabel) {
+  var token = await _getOAuthToken();
+  var tabs = ['Subs','Interviews','Placements','Starts','Leads'];
+  var metricKeys = ['subs','ivs','placements','starts','leads'];
+  var results = [];
+  // Every roster member needs a row on every tab, or their numbers get dropped.
+  var guard = await sheetRowGuard(weekData, tabs, token);
+  if (!guard.ok) return [{tab: 'All tabs', ok: false, err: guard.err}];
+  for (var t = 0; t < tabs.length; t++) {
+    var tab = tabs[t]; var mk = metricKeys[t];
+    try {
+      var resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values/'+encodeURIComponent(tab)+'?key=AIzaSyCas-IXPeCDB4op7kp3mnGoFCuBINAEY2g');
+      if (!resp.ok) { results.push({tab:tab,ok:false,err:'read HTTP '+resp.status}); continue; }
+      var d = await resp.json();
+      var rows = d.values || [];
+      if (!rows.length) { results.push({tab:tab,ok:false,err:'empty sheet response'}); continue; }
+      // Find header row (has "Recruiter" in col A)
+      var hdrRow = -1;
+      for (var r=0; r<rows.length; r++) { if ((rows[r][0]||'').toLowerCase().includes('recruiter')) { hdrRow=r; break; } }
+      if (hdrRow < 0) { results.push({tab:tab,ok:false,err:'Header not found'}); continue; }
+      // Find last column that has non-zero data from any recruiter
+      // (zeros in future weeks don't count — they're just empty/placeholder)
+      var hdr = rows[hdrRow];
+      var lastDataCol = 1;
+      
+      for (var c2=1; c2<hdr.length; c2++) {
+        var h2 = String(hdr[c2]||'').toLowerCase().trim();
+        if (!h2) continue;
+        if (['total','avg','average','ytd','sum'].some(function(x){return h2.includes(x);})) continue;
+        // Check if any recruiter row has a non-zero, non-empty value in this column
+        var hasRealData = false;
+        for (var rx2=hdrRow+1; rx2<rows.length; rx2++) {
+          var row2 = rows[rx2];
+          if (!row2 || !(row2[0]||'').trim()) continue;
+          var recN = row2[0].trim().toLowerCase();
+          if (['total','avg','average'].some(function(x){return recN.includes(x);})) continue;
+          var v2 = String(row2[c2]||'').trim();
+          if (v2 !== '' && v2 !== '0') { hasRealData = true; break; }
+        }
+        if (hasRealData) lastDataCol = c2;
+      }
+      
+      var newCol = lastDataCol + 1;
+      if (newCol > 300) { results.push({tab:tab,ok:false,err:'Column out of range: '+newCol}); continue; }
+
+      // SAFETY: verify target column is actually empty across all recruiter rows.
+      // If it already has data, the detection was stale — abort to avoid overwriting.
+      var targetHasData = false;
+      for (var sc=hdrRow+1; sc<rows.length; sc++) {
+        var srow = rows[sc];
+        if (!srow || !(srow[0]||'').trim()) continue;
+        var srecN = srow[0].trim().toLowerCase();
+        if (['total','avg','average'].some(function(x){return srecN.includes(x);})) continue;
+        var sv = String(srow[newCol]||'').trim();
+        if (sv !== '' && sv !== '0') { targetHasData = true; break; }
+      }
+      if (targetHasData) {
+        results.push({tab:tab,ok:false,err:'Target column already has data (stale read?) — push aborted to prevent overwrite. Please retry.'});
+        continue;
+      }
+
+      var colLetter = _colToLetter(newCol);
+      // Build case-insensitive weekData lookup
+      var weekDataLower = {};
+      Object.keys(weekData).forEach(function(k) {
+        weekDataLower[k.trim().toLowerCase()] = weekData[k];
+      });
+
+      // Build list of archived recruiter names to skip
+      var archivedNames = [];
+      try {
+        var arch = JSON.parse(_safeGet('stemArchived') || '[]');
+        archivedNames = arch.map(function(a){ return archKey(a.name); });
+      } catch(e2) {}
+
+      // Build batch update
+      var data = [];
+      for (var rx=0; rx<rows.length; rx++) {
+        if (rx === hdrRow) continue;
+        var recName = (rows[rx][0]||'').trim();
+        if (!recName || ['total','avg','average'].some(function(x){return recName.toLowerCase().includes(x);})) continue;
+        // Skip archived recruiters
+        if (archivedNames.indexOf(archKey(recName)) >= 0) continue;
+        // Look up by normalized name
+        var recData = weekDataLower[recName.trim().toLowerCase()];
+        var val = recData ? (recData[mk]||0) : null;
+        if (val === null) continue;
+        data.push({range:tab+'!'+colLetter+(rx+1),values:[[val]]});
+      }
+      if (!data.length) { results.push({tab:tab,ok:true}); continue; }
+      var updateResp = await fetch(
+        'https://sheets.googleapis.com/v4/spreadsheets/'+_SHEET_ID+'/values:batchUpdate',
+        { method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+          body: JSON.stringify({valueInputOption:'RAW',data:data}) }
+      );
+      var upd = await updateResp.json();
+      if (upd.error) { results.push({tab:tab,ok:false,err:upd.error.message}); }
+      else { results.push({tab:tab,ok:true}); }
+    } catch(e) { results.push({tab:tab,ok:false,err:e.message}); }
+  }
+  return results;
+}
+
+async function pushWeekToSheet(i) {
+  var ew;
+  try {
+    var weeks = JSON.parse(_safeGet('stemXW') || '[]');
+    ew = weeks[i];
+  } catch(err) { ew = null; }
+  if (!ew) { alert('No week data found at index ' + i); return; }
+  var btn = document.getElementById('push-btn-' + i);
+  if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
+  try {
+    var results = await _writeWeekToSheet(ew.data, ew.label);
+    _safeSet('stemLastSync', new Date().toISOString());
+    if (btn) { btn.textContent = '✅ Done'; setTimeout(function(){ btn.textContent='📤 Push to Sheet'; btn.disabled=false; }, 2500); }
+    var failed = results.filter(function(r){return !r.ok;});
+    if (failed.length) {
+      alert('⚠️ Partially saved. Failed: ' + failed.map(function(r){return r.tab+' ('+r.err+')';}).join(', '));
+    } else {
+      alert('✅ Week ' + (ew.label||'') + ' pushed to Google Sheets successfully!');
+    }
+  } catch(e) {
+    if (btn) { btn.textContent = '📤 Push to Sheet'; btn.disabled = false; }
+    var msg = e.message || 'Unknown error';
+    if (msg.toLowerCase().includes('blocked') || msg.toLowerCase().includes('popup')) {
+      alert('⚠️ Browser blocked the sign-in popup.\n\nClick the popup icon in your address bar, select "Always allow", then try again.');
+    } else if (msg.toLowerCase().includes('cancel')) {
+      alert('⚠️ Sign-in cancelled. Please try again.');
+    } else {
+      alert('⚠️ Could not push to Google Sheets: ' + msg);
+    }
+  }
+}
+</script>
+
+<!-- ══ Excel export modal ══ -->
+<div id="xl-modal" style="display:none;position:fixed;inset:0;z-index:9995;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 14px 40px rgba(0,0,0,0.45);width:560px;max-width:100%;max-height:90vh;overflow-y:auto;padding:18px 20px">
+
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:3px">
+      <span style="font-size:17px">📊</span>
+      <span style="font-size:15px;font-weight:700;color:var(--text)">Export to Excel</span>
+      <span id="xl-range-badge" style="margin-left:auto;font-size:11px;color:var(--text3)"></span>
+      <button onclick="closeExcelExport()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;padding:0 2px" title="Close">&times;</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Each dataset becomes its own formatted tab in one workbook.</div>
+
+    <div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Include</div>
+    <div id="xl-ds-list" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 16px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn" onclick="xlToggleAll(true)" style="font-size:11px;height:24px;padding:0 9px">Select all</button>
+      <button class="btn" onclick="xlToggleAll(false)" style="font-size:11px;height:24px;padding:0 9px">Clear</button>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:13px;display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:14px">
+      <div>
+        <div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Scope</div>
+        <select id="xl-scope" onchange="xlRefreshBadge()" style="width:100%;height:30px;font-size:12px">
+          <option value="current">Use current dashboard filters</option>
+          <option value="full">Full year to date</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Archived recruiters</div>
+        <select id="xl-archived" style="width:100%;height:30px;font-size:12px">
+          <option value="no">Exclude</option>
+          <option value="yes">Include</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="background:var(--bg2);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:7px">Opens with</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Frozen header</span>
+        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Autofilter</span>
+        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Sized columns</span>
+        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Currency &amp; percent formats</span>
+        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Manager colour bands</span>
+        <span style="font-size:11px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:100px">Bold totals row</span>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="xl-status" style="font-size:11px;color:var(--text3);flex:1;min-width:0"></span>
+      <button class="btn" onclick="closeExcelExport()" style="font-size:12px;height:30px;padding:0 12px">Cancel</button>
+      <button class="btn btn-primary" id="xl-go" onclick="runExcelExport()" style="font-size:12px;height:30px;padding:0 14px;white-space:nowrap">⬇ Download .xlsx</button>
+    </div>
+  </div>
+</div>
+
 
 </body>
 </html>
