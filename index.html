@@ -235,6 +235,7 @@ tbody tr:nth-child(even):hover td{background:var(--bg2)}
 .org-recruiter-list{display:flex;flex-direction:column;gap:5px;margin-top:0;padding-top:0}
 .org-rec-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;min-width:160px;max-width:200px;cursor:pointer;transition:background .15s}
 .org-rec-card:hover{background:var(--bg2)}
+#nri-modal .btn:disabled{opacity:.4;cursor:not-allowed}
 /* GCC (offshore) recruiters: teal tint so they stand apart from in-region recruiters */
 .org-rec-card.org-rec-gcc{background:var(--teal-bg);border-color:var(--teal)}
 .org-rec-card.org-rec-gcc:hover{background:var(--teal-bg);filter:brightness(1.08)}
@@ -1405,6 +1406,7 @@ td.editing{padding:2px 4px!important}
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
       <label for="nri-file" style="font-size:12px;color:var(--text2)">Workbook (.xlsx)</label>
       <input type="file" id="nri-file" accept=".xlsx,.xls" onchange="nriOnFile(this)" style="font-size:12px">
+      <button class="btn" type="button" onclick="nriOnFile(document.getElementById('nri-file'))" style="height:28px;font-size:12px" title="Use this if the preview does not appear after choosing the file">Read file</button>
     </div>
     <div id="nri-body"></div>
     <div id="nri-status" style="display:none;font-size:12px;margin-top:10px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius)"></div>
@@ -7137,6 +7139,13 @@ function openNriModal() {
   nriRenderButtons();
   document.getElementById('nri-modal').style.display = 'flex';
 }
+function nriModalOpen() { const m = document.getElementById('nri-modal'); return m && m.style.display === 'flex'; }
+window.addEventListener('error', function(e) {
+  if (nriModalOpen()) nriSetStatus('Something went wrong: ' + nriEsc((e && e.message) || e) + '. Send Claude a screenshot of this.', 'err');
+});
+window.addEventListener('unhandledrejection', function(e) {
+  if (nriModalOpen()) nriSetStatus('Something went wrong: ' + nriEsc((e && e.reason && e.reason.message) || (e && e.reason) || e) + '. Send Claude a screenshot of this.', 'err');
+});
 function closeNriModal() { document.getElementById('nri-modal').style.display = 'none'; }
 function nriSetStatus(msg, kind) {
   const el = document.getElementById('nri-status');
@@ -7146,11 +7155,12 @@ function nriSetStatus(msg, kind) {
 }
 
 async function nriOnFile(input) {
-  const f = input.files && input.files[0];
-  if (!f) return;
-  nriSetStatus('Reading ' + f.name + '…');
+  const f = input && input.files && input.files[0];
+  if (!f) { nriSetStatus('Choose a workbook first.', 'err'); return; }
+  document.getElementById('nri-body').innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px 0">Reading ' + nriEsc(f.name) + '…</div>';
+  nriSetStatus('Reading ' + nriEsc(f.name) + '… (loading the spreadsheet reader the first time can take a few seconds)');
   try {
-    const XLSX = await impLoadSheetJS();
+    const XLSX = await Promise.race([impLoadSheetJS(), new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('The spreadsheet reader (cdnjs.cloudflare.com) did not load within 20 seconds. Your network may block it.')); }, 20000); })]);
     const wb = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:false});
     const grids = {};
     wb.SheetNames.forEach(function(sn) {
