@@ -235,6 +235,10 @@ tbody tr:nth-child(even):hover td{background:var(--bg2)}
 .org-recruiter-list{display:flex;flex-direction:column;gap:5px;margin-top:0;padding-top:0}
 .org-rec-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;min-width:160px;max-width:200px;cursor:pointer;transition:background .15s}
 .org-rec-card:hover{background:var(--bg2)}
+/* GCC (offshore) recruiters: teal tint so they stand apart from in-region recruiters */
+.org-rec-card.org-rec-gcc{background:var(--teal-bg);border-color:var(--teal)}
+.org-rec-card.org-rec-gcc:hover{background:var(--teal-bg);filter:brightness(1.08)}
+.org-gcc-badge{font-size:9px;font-weight:700;padding:0 5px;border-radius:4px;background:var(--teal);color:var(--bg);letter-spacing:.03em}
 .org-rec-name{font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .org-rec-sub{font-size:10px;color:var(--text3);margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .org-line-v{width:2px;height:12px;margin:0 auto;background:var(--border2)}
@@ -1329,7 +1333,7 @@ td.editing{padding:2px 4px!important}
   </div>
   <div id="roster-content" style="display:none">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
-      <button class="btn btn-primary" onclick="openAddRecModal()" style="height:32px;font-size:12px">+ Add recruiter</button>
+      <button class="btn btn-primary" onclick="openAddRecModal()" style="height:32px;font-size:12px">+ Add recruiter</button><button class="btn" onclick="openNriModal()" title="Add a batch of recruiters and their history from a workbook" style="height:32px;font-size:12px">📥 Import new recruiters</button>
       <select id="roster-mgr-filter" onchange="renderRoster()" style="height:32px;font-size:12px"><option value="">All managers</option></select><select class="grp-filter" onchange="grpSet(this.value)" title="Group filter (shared by Trends, Leaderboard, Recruiter Detail, Manager Rollup, GP, Roster)" style="height:32px;font-size:12px"><option value="all">All groups</option></select>
       <input type="text" id="roster-search" placeholder="Search…" onchange="renderRoster()" oninput="renderRoster()" style="width:150px;height:32px;font-size:12px">
       <select id="roster-sort" onchange="renderRoster()" style="height:32px;font-size:12px">
@@ -1389,6 +1393,28 @@ td.editing{padding:2px 4px!important}
 
 </main>
 
+<div id="nri-modal" style="display:none;position:fixed;inset:0;z-index:9996;background:rgba(0,0,0,0.45);align-items:center;justify-content:center">
+  <div style="background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius-lg);padding:22px;width:1100px;max-width:96vw;max-height:94vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <div style="font-size:14px;font-weight:700">Import new recruiters</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Adds people to every Sheet tab, sets hire date, vertical and group, and fills their history into empty cells</div>
+      </div>
+      <button class="btn" onclick="closeNriModal()" aria-label="Close" style="height:28px;padding:0 10px">✕</button>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <label for="nri-file" style="font-size:12px;color:var(--text2)">Workbook (.xlsx)</label>
+      <input type="file" id="nri-file" accept=".xlsx,.xls" onchange="nriOnFile(this)" style="font-size:12px">
+    </div>
+    <div id="nri-body"></div>
+    <div id="nri-status" style="display:none;font-size:12px;margin-top:10px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius)"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn" id="nri-undo-btn" onclick="nriUndo()" style="display:none;height:34px;font-size:12px;color:var(--amber)">↶ Undo last import</button>
+      <button class="btn" id="nri-check-btn" onclick="nriCheckSheet()" disabled style="height:34px;font-size:13px">1. Check against Sheet</button>
+      <button class="btn btn-primary" id="nri-go-btn" onclick="nriImport()" disabled style="height:34px;font-size:13px">2. Import</button>
+    </div>
+  </div>
+</div>
 <div id="add-rec-modal" style="display:none;position:fixed;inset:0;z-index:9996;background:rgba(0,0,0,0.45);align-items:center;justify-content:center">
   <div style="background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--radius-lg);padding:24px;width:460px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
@@ -6906,6 +6932,500 @@ function closeAddRecModal() {
   var er=document.getElementById('add-rec-err'); if(er) er.style.display='none';
 }
 
+// ═══════════ IMPORT NEW RECRUITERS (bulk) ═══════════
+// One upload adds a batch of recruiters: Sheet rows on every tab, hire date,
+// vertical and group, then their weekly history. Built for the GCC backfill
+// workbook (Roster Setup tab + one tab per KPI) and reusable for any batch in
+// that layout.
+// Safety: history is written only into cells that are empty or 0 on the
+// recruiter's own row. A cell holding a different non-zero number is a
+// conflict and is left alone unless the admin ticks "overwrite". Every cell
+// written is logged with its old value so the import can be undone.
+// Declared with var so nothing sits in a temporal dead zone at page load.
+var NRI_KPI_TABS = [
+  {file:'Subs',       key:'subs'},
+  {file:'Interviews', key:'ivs'},
+  {file:'Placements', key:'placements'},
+  {file:'Starts',     key:'starts'},
+  {file:'Leads',      key:'leads'}
+];
+var nriState = null;   // {people:[...], file:'name.xlsx', sheetChecked:bool}
+
+// ── Pure helpers (unit tested) ──
+function nriTokens(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
+}
+function nriKey(s) { return String(s || '').toLowerCase().replace(/[^a-z]/g, ''); }
+function nriLev(a, b) {
+  const m = [];
+  for (let i = 0; i <= a.length; i++) m[i] = [i];
+  for (let j = 0; j <= b.length; j++) m[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      m[i][j] = Math.min(m[i-1][j] + 1, m[i][j-1] + 1, m[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+  return m[a.length][b.length];
+}
+
+// Find an existing roster name for an incoming person.
+// names: the spellings to try (roster/ATS spelling first, then HR-list spelling)
+// roster: current roster names; archived: archived names; aliases: {raw: rosterName}
+// Returns {how, name}. how: exact | alias | swapped | partial | fuzzy | archived | none.
+// exact/alias/swapped are safe; partial/fuzzy need the admin to confirm.
+function nriMatch(names, roster, archived, aliases) {
+  names = names.filter(Boolean);
+  aliases = aliases || {};
+  const byKey = {}; roster.forEach(function(n){ byKey[nriKey(n)] = n; });
+  const archKeys = {}; (archived || []).forEach(function(n){ archKeys[nriKey(n)] = n; });
+  for (const n of names) if (byKey[nriKey(n)]) return {how:'exact', name:byKey[nriKey(n)]};
+  for (const n of names) {
+    const a = aliases[n];
+    if (a && a !== '__skip__' && roster.indexOf(a) >= 0) return {how:'alias', name:a};
+  }
+  for (const n of names) if (archKeys[nriKey(n)]) return {how:'archived', name:archKeys[nriKey(n)]};
+  const sorted = function(s){ return nriTokens(s).slice().sort().join(' '); };
+  for (const n of names) {
+    const hit = roster.find(function(r){ return sorted(r) === sorted(n); });
+    if (hit) return {how:'swapped', name:hit};
+  }
+  // Every word of the shorter name appears in the longer one, at least two words.
+  // Catches "Manish Kumar" vs "Manish Kumar Kamunipally", "Mohammed Khadar" vs
+  // "Mohammed Abdul Khadar".
+  for (const n of names) {
+    const nt = nriTokens(n);
+    const hit = roster.find(function(r) {
+      const rt = nriTokens(r);
+      const a = nt.length <= rt.length ? nt : rt, b = nt.length <= rt.length ? rt : nt;
+      return a.length >= 2 && a.every(function(t){ return b.indexOf(t) >= 0; });
+    });
+    if (hit) return {how:'partial', name:hit};
+  }
+  let best = null, bd = 99;
+  names.forEach(function(n) {
+    const k = nriKey(n);
+    if (k.length < 6) return;
+    roster.forEach(function(r) { const d = nriLev(k, nriKey(r)); if (d < bd) { bd = d; best = r; } });
+  });
+  if (best && bd <= 2) return {how:'fuzzy', name:best};
+  return {how:'none', name:''};
+}
+
+// What to do with one history cell. cur: the Sheet's current value (as read
+// with FORMULA rendering); val: the number from the workbook.
+// fill = write it, same = already equal, conflict = different non-zero number
+// or a formula, skip = no value to write.
+function nriCellAction(cur, val) {
+  if (val === null || val === undefined || val === '') return 'skip';
+  const v = Number(val);
+  if (!isFinite(v)) return 'skip';
+  if (cur === null || cur === undefined || String(cur).trim() === '') return 'fill';
+  if (typeof cur === 'string' && cur.trim().charAt(0) === '=') return 'conflict';
+  const c = Number(cur);
+  if (!isFinite(c)) return 'conflict';
+  if (c === v) return 'same';
+  if (c === 0) return 'fill';
+  return 'conflict';
+}
+
+// "'Subs'!E12" → {tab:'Subs', col:4, row:11} (0-based)
+function nriParseA1(range) {
+  const m = String(range).match(/^'((?:[^']|'')*)'!([A-Z]+)(\d+)$/);
+  if (!m) return {tab:'', col:-1, row:-1};
+  let col = 0;
+  for (let i = 0; i < m[2].length; i++) col = col * 26 + (m[2].charCodeAt(i) - 64);
+  return {tab: m[1].replace(/''/g, "'"), col: col - 1, row: parseInt(m[3], 10) - 1};
+}
+
+function nriColLetter(ci) {   // 0-based column index → A1 letters
+  let s = ''; ci = ci + 1;
+  while (ci > 0) { const m = (ci - 1) % 26; s = String.fromCharCode(65 + m) + s; ci = Math.floor((ci - 1) / 26); }
+  return s;
+}
+
+// ── Workbook parsing ──
+function nriCellStr(v) { return String(v == null ? '' : v).trim(); }
+function nriToISO(v) {
+  if (!v && v !== 0) return '';
+  if (v instanceof Date && !isNaN(v)) {
+    return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
+  }
+  if (typeof v === 'number' && isFinite(v)) {      // Excel serial date
+    const d = new Date(Math.round((v - 25569) * 86400000));
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-' + String(d.getUTCDate()).padStart(2, '0');
+  }
+  const m = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) { const y = m[3].length === 2 ? '20' + m[3] : m[3]; return y + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0'); }
+  if (/^\d{4}-\d{2}-\d{2}/.test(String(v))) return String(v).slice(0, 10);
+  return '';
+}
+
+// grids: {sheetName: 2-D array}. Returns {people:[...]} or {error}
+function nriParseWorkbook(grids) {
+  const rs = grids['Roster Setup'];
+  if (!rs) return {error:'No "Roster Setup" tab in this workbook.'};
+  let hr = -1;
+  for (let i = 0; i < Math.min(rs.length, 10); i++)
+    if (nriCellStr((rs[i] || [])[0]).toLowerCase().indexOf('roster name') === 0) { hr = i; break; }
+  if (hr < 0) return {error:'Roster Setup tab: no "Roster name" header in column A.'};
+  const hdr = (rs[hr] || []).map(function(h){ return nriCellStr(h).toLowerCase(); });
+  const col = function(test) { return hdr.findIndex(test); };
+  const c = {
+    name: 0,
+    hr:   col(function(h){ return h.indexOf('name on hr') === 0; }),
+    group: col(function(h){ return h === 'group'; }),
+    mgr:  col(function(h){ return h === 'manager'; }),
+    vert: col(function(h){ return h === 'vertical'; }),
+    hire: col(function(h){ return h.indexOf('hire date') === 0; })
+  };
+  if (c.mgr < 0 || c.hire < 0) return {error:'Roster Setup tab needs "Manager" and "Hire date" columns.'};
+  const people = [];
+  for (let i = hr + 1; i < rs.length; i++) {
+    const row = rs[i] || [];
+    const name = nriCellStr(row[0]).replace(/\s+/g, ' ');
+    if (!name) break;
+    if (/^yellow\b|^blue\b|^note/i.test(name)) break;
+    people.push({
+      name: name,
+      hrName: c.hr >= 0 ? nriCellStr(row[c.hr]) : '',
+      group: c.group >= 0 ? nriCellStr(row[c.group]) : '',
+      manager: nriCellStr(row[c.mgr]),
+      vertical: c.vert >= 0 ? nriCellStr(row[c.vert]) : '',
+      hireDate: nriToISO(row[c.hire]),
+      weeks: {}      // kpiKey → {weekNum: value}
+    });
+  }
+  if (!people.length) return {error:'Roster Setup tab has no people listed.'};
+  const byName = {}; people.forEach(function(p){ byName[nriKey(p.name)] = p; });
+  const missingTabs = [];
+  NRI_KPI_TABS.forEach(function(t) {
+    const g = grids[t.file];
+    if (!g) { missingTabs.push(t.file); return; }
+    let wr = -1, hdrRow = -1;
+    for (let i = 0; i < Math.min(g.length, 8); i++) {
+      const a = nriCellStr((g[i] || [])[0]).toLowerCase().replace(/\s/g, '');
+      if (a === 'week#') wr = i;
+      if (a === 'recruiter') hdrRow = i;
+    }
+    if (wr < 0 || hdrRow < 0) { missingTabs.push(t.file + ' (no Week # or Recruiter row)'); return; }
+    const wrow = g[wr] || [];
+    for (let i = hdrRow + 1; i < g.length; i++) {
+      const row = g[i] || [];
+      const nm = nriCellStr(row[0]);
+      if (!nm || /^total$/i.test(nm)) break;
+      const p = byName[nriKey(nm)];
+      if (!p) continue;
+      const wk = {};
+      for (let ci = 4; ci < wrow.length; ci++) {
+        const wn = parseInt(wrow[ci], 10);
+        const v = row[ci];
+        if (!wn || v === '' || v === null || v === undefined) continue;
+        const n = Number(v);
+        if (isFinite(n)) wk[wn] = n;
+      }
+      p.weeks[t.key] = wk;
+    }
+  });
+  return {people: people, missingTabs: missingTabs};
+}
+
+// ── Modal ──
+function openNriModal() {
+  if (!currentUser) return;
+  nriState = null;
+  document.getElementById('nri-file').value = '';
+  document.getElementById('nri-body').innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px 0">Choose the workbook (for example GCC_Backfill_Wk1-46_2026_v3.xlsx). Nothing is written until you confirm.</div>';
+  nriSetStatus('');
+  nriRenderButtons();
+  document.getElementById('nri-modal').style.display = 'flex';
+}
+function closeNriModal() { document.getElementById('nri-modal').style.display = 'none'; }
+function nriSetStatus(msg, kind) {
+  const el = document.getElementById('nri-status');
+  el.style.display = msg ? 'block' : 'none';
+  el.style.color = kind === 'err' ? 'var(--red)' : kind === 'ok' ? 'var(--green)' : 'var(--text2)';
+  el.innerHTML = msg;
+}
+
+async function nriOnFile(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  nriSetStatus('Reading ' + f.name + '…');
+  try {
+    const XLSX = await impLoadSheetJS();
+    const wb = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:false});
+    const grids = {};
+    wb.SheetNames.forEach(function(sn) {
+      grids[sn] = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, raw:true, defval:''});
+    });
+    const parsed = nriParseWorkbook(grids);
+    if (parsed.error) { nriSetStatus(parsed.error, 'err'); return; }
+    nriState = {file: f.name, sheetChecked: false, overwrite: false, people: nriPlanPeople(parsed.people)};
+    nriSetStatus(parsed.missingTabs.length ? 'Heads up: no history read from ' + parsed.missingTabs.join(', ') + '.' : '');
+    nriRender();
+  } catch (e) {
+    nriSetStatus('Could not read the file: ' + (e.message || e), 'err');
+  }
+}
+
+// Decide a default action per person
+function nriPlanPeople(people) {
+  const roster = RECRUITERS.map(function(r){ return r.name; });
+  const archived = archivedRecruiters.map(function(a){ return a.name; });
+  const aliases = impGetAliases();
+  const hds = getHireDates(), vts = getVerticals(), gps = getGroups();
+  return people.map(function(p) {
+    const m = nriMatch([p.name, p.hrName], roster, archived, aliases);
+    const mgr = canonMgr(p.manager);
+    const mgrOk = !!MGR_COLORS[mgr];
+    let action, note = '';
+    if (m.how === 'archived') { action = 'skip'; note = 'Matches archived recruiter ' + m.name + '. Restore them instead.'; }
+    else if (m.how === 'none') { action = mgrOk ? 'new' : 'skip'; if (!mgrOk) note = 'Manager "' + (p.manager || 'blank') + '" is not a dashboard manager.'; }
+    else action = 'existing';
+    const target = action === 'existing' ? m.name : p.name;
+    const cur = action === 'existing'
+      ? {hireDate: hds[target] || '', vertical: vts[target] || '', group: gps[target] || ''}
+      : {hireDate:'', vertical:'', group:''};
+    return Object.assign({}, p, {
+      match: m, action: action, note: note, mgr: mgr, mgrOk: mgrOk,
+      cur: cur, useFileVals: false, cells: null
+    });
+  });
+}
+
+function nriTarget(p) { return p.action === 'existing' ? p.match.name : p.name; }
+function nriDiffs(p) {
+  const d = [];
+  if (p.cur.hireDate && p.hireDate && p.cur.hireDate !== p.hireDate) d.push('hire date ' + p.cur.hireDate + ' vs file ' + p.hireDate);
+  if (p.cur.vertical && p.vertical && p.cur.vertical !== p.vertical) d.push('vertical ' + p.cur.vertical + ' vs file ' + p.vertical);
+  if (p.cur.group && p.group && p.cur.group !== p.group) d.push('group ' + p.cur.group + ' vs file ' + p.group);
+  return d;
+}
+
+function nriSetAction(i, v) { nriState.people[i].action = v; nriState.sheetChecked = false; nriRender(); }
+function nriSetUseFile(i, on) { nriState.people[i].useFileVals = !!on; }
+function nriSetOverwrite(on) { nriState.overwrite = !!on; nriRender(); }
+
+function nriEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function nriRender() {
+  const body = document.getElementById('nri-body');
+  if (!nriState) return;
+  const howLbl = {exact:'On roster', alias:'On roster (saved alias)', swapped:'On roster (name order swapped)',
+                  partial:'Possible match: confirm', fuzzy:'Possible match: confirm', archived:'Archived', none:'New'};
+  const rows = nriState.people.map(function(p, i) {
+    const confirm = p.match.how === 'partial' || p.match.how === 'fuzzy';
+    let opts = '';
+    if (p.match.name && p.match.how !== 'archived') opts += '<option value="existing"' + (p.action === 'existing' ? ' selected' : '') + '>Use existing: ' + nriEsc(p.match.name) + '</option>';
+    if (p.mgrOk && p.match.how !== 'exact' && p.match.how !== 'alias' && p.match.how !== 'swapped')
+      opts += '<option value="new"' + (p.action === 'new' ? ' selected' : '') + '>Add new as ' + nriEsc(p.name) + '</option>';
+    opts += '<option value="skip"' + (p.action === 'skip' ? ' selected' : '') + '>Skip</option>';
+    const diffs = p.action === 'existing' ? nriDiffs(p) : [];
+    const c = p.cells;
+    const hist = !nriState.sheetChecked || p.action === 'skip' ? '<span style="color:var(--text3)">—</span>'
+      : c && c.error ? '<span style="color:var(--red)">' + nriEsc(c.error) + '</span>'
+      : c ? ('<b>' + c.fill + '</b> to fill' + (c.same ? ' · ' + c.same + ' same' : '')
+            + (c.conflict ? ' · <span style="color:var(--amber);font-weight:700" title="' + nriEsc(c.conflictList.slice(0, 12).join('\n')) + '">' + c.conflict + ' conflict' + (c.conflict > 1 ? 's' : '') + '</span>' : ''))
+      : '';
+    return '<tr style="' + (p.action === 'skip' ? 'opacity:.55' : '') + '">'
+      + '<td style="padding:6px 8px;font-weight:600;white-space:nowrap">' + nriEsc(p.name)
+        + (p.hrName && nriKey(p.hrName) !== nriKey(p.name) ? '<div style="font-size:10px;color:var(--text3);font-weight:400">HR list: ' + nriEsc(p.hrName) + '</div>' : '') + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px;white-space:nowrap;color:' + (confirm ? 'var(--amber)' : p.match.how === 'none' ? 'var(--accent)' : 'var(--text2)') + ';font-weight:' + (confirm ? '700' : '400') + '">' + howLbl[p.match.how] + '</td>'
+      + '<td style="padding:6px 8px"><select onchange="nriSetAction(' + i + ', this.value)" style="height:28px;font-size:11px;max-width:230px">' + opts + '</select>'
+        + (p.note ? '<div style="font-size:10px;color:var(--red);margin-top:2px">' + nriEsc(p.note) + '</div>' : '') + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px">' + nriEsc(p.mgr || p.manager) + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px;white-space:nowrap">' + nriEsc(p.hireDate) + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px">' + nriEsc(p.group) + '</td>'
+      + '<td style="padding:6px 8px;font-size:11px;white-space:nowrap">' + hist + '</td>'
+      + '<td style="padding:6px 8px;font-size:10px;color:var(--text2)">'
+        + (diffs.length ? '<label style="display:flex;gap:5px;align-items:flex-start;cursor:pointer"><input type="checkbox" ' + (p.useFileVals ? 'checked' : '') + ' onchange="nriSetUseFile(' + i + ', this.checked)" style="margin-top:1px">Use file values<br>(' + nriEsc(diffs.join('; ')) + ')</label>' : '')
+      + '</td>'
+      + '</tr>';
+  }).join('');
+  const n = function(a){ return nriState.people.filter(function(p){ return p.action === a; }).length; };
+  const needConfirm = nriState.people.filter(function(p){ return p.action === 'existing' && (p.match.how === 'partial' || p.match.how === 'fuzzy'); }).length;
+  const conflicts = nriState.sheetChecked ? nriState.people.reduce(function(s, p){ return s + (p.action !== 'skip' && p.cells && p.cells.conflict || 0); }, 0) : 0;
+  body.innerHTML =
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + nriEsc(nriState.file) + ': <b>' + n('new') + '</b> new · <b>' + n('existing') + '</b> already on roster · ' + n('skip') + ' skipped'
+      + (needConfirm ? ' · <span style="color:var(--amber);font-weight:700">' + needConfirm + ' possible match' + (needConfirm > 1 ? 'es' : '') + ' to confirm</span>' : '') + '</div>'
+    + '<div style="max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:var(--radius)">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="text-align:left;font-size:10px;text-transform:uppercase;color:var(--text3);position:sticky;top:0;background:var(--bg)">'
+    + '<th style="padding:6px 8px">Name</th><th style="padding:6px 8px">Roster</th><th style="padding:6px 8px">Action</th><th style="padding:6px 8px">Manager</th><th style="padding:6px 8px">Hire date</th><th style="padding:6px 8px">Group</th><th style="padding:6px 8px">History</th><th style="padding:6px 8px">Differences</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + (nriState.sheetChecked && conflicts
+        ? '<label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:8px;color:var(--amber);cursor:pointer"><input type="checkbox" ' + (nriState.overwrite ? 'checked' : '') + ' onchange="nriSetOverwrite(this.checked)">Overwrite the ' + conflicts + ' conflicting cell' + (conflicts > 1 ? 's' : '') + ' with the file’s numbers (hover a conflict count to see them). Off = leave them as they are.</label>'
+        : '')
+    + '<div style="font-size:11px;color:var(--text3);margin-top:8px">History is written only into empty or 0 cells on each person’s own row. GP is not touched. Hire date, vertical and group already set on the roster are kept unless you tick "Use file values".</div>';
+  nriRenderButtons();
+}
+
+function nriRenderButtons() {
+  const chk = document.getElementById('nri-check-btn'), go = document.getElementById('nri-go-btn'), undo = document.getElementById('nri-undo-btn');
+  const ready = !!(nriState && nriState.people.some(function(p){ return p.action !== 'skip'; }));
+  chk.disabled = !ready;
+  go.disabled = !(ready && nriState.sheetChecked);
+  undo.style.display = safeGet('stemRecImportUndo') ? 'inline-flex' : 'none';
+}
+
+// Build the cell plan for every active person against freshly read tab data.
+// final=true (the real import): every active person must have a row by now.
+// Returns {plan:[{range, value, old, who}], blocking:[msg]} and sets p.cells.
+function nriBuildPlan(data, overwrite, final) {
+  const plan = [], blocking = [];
+  nriState.people.forEach(function(p) {
+    p.cells = null;
+    if (p.action === 'skip') return;
+    const target = nriTarget(p);
+    const cells = {fill:0, same:0, conflict:0, conflictList:[], error:''};
+    NRI_KPI_TABS.forEach(function(t) {
+      const tab = SHEET_TABS[t.key];
+      const rows = data[tab] || [];
+      const wk = p.weeks[t.key] || {};
+      if (!Object.keys(wk).length) return;
+      const hdr = shtFindHeader(rows);
+      let ri = -1;
+      for (let r = hdr + 1; r < rows.length; r++)
+        if (shtNorm((rows[r] || [])[0]) === shtNorm(target)) { ri = r; break; }
+      if (ri < 0) {
+        if (p.action === 'new' && !final) { cells.fill += Object.keys(wk).length; return; }   // row gets added on import
+        cells.error = 'no row on ' + tab; return;
+      }
+      Object.keys(wk).forEach(function(w) {
+        const rc = replResolveWeekCol(rows, w);
+        if (rc.col < 0) { cells.error = cells.error || ('week ' + w + ' column missing on ' + tab); return; }
+        const cur = (rows[ri] || [])[rc.col];
+        const act = nriCellAction(cur, wk[w]);
+        if (act === 'same') { cells.same++; return; }
+        if (act === 'skip') return;
+        if (act === 'conflict') {
+          cells.conflict++;
+          cells.conflictList.push(tab + ' wk ' + w + ': Sheet ' + cur + ', file ' + wk[w]);
+          if (!overwrite) return;
+        } else cells.fill++;
+        plan.push({range: shtQuote(tab) + '!' + nriColLetter(rc.col) + (ri + 1), value: wk[w],
+                   old: (cur === undefined ? '' : cur), who: target});
+      });
+    });
+    if (cells.error) blocking.push(target + ': ' + cells.error);
+    p.cells = cells;
+  });
+  return {plan: plan, blocking: blocking};
+}
+
+async function nriCheckSheet() {
+  let tokenP;
+  try { tokenP = getOAuthToken(); } catch (e) { tokenP = Promise.reject(e); }
+  nriSetStatus('Reading the Google Sheet…');
+  try {
+    const token = await tokenP;
+    const tabs = NRI_KPI_TABS.map(function(t){ return SHEET_TABS[t.key]; });
+    const data = await shtReadFormulas(tabs, token);
+    nriBuildPlan(data, nriState.overwrite);
+    nriState.sheetChecked = true;
+    nriSetStatus('Checked against the Sheet. Review, then Import.', 'ok');
+    nriRender();
+  } catch (e) {
+    nriSetStatus('Could not read the Sheet: ' + (e.message || e), 'err');
+  }
+}
+
+async function nriImport() {
+  if (!nriState || !nriState.sheetChecked) return;
+  let tokenP;
+  try { tokenP = getOAuthToken(); } catch (e) { tokenP = Promise.reject(e); }
+  const active = nriState.people.filter(function(p){ return p.action !== 'skip'; });
+  const fresh = active.filter(function(p){ return p.action === 'new'; });
+  if (!confirm('Import ' + active.length + ' recruiter' + (active.length > 1 ? 's' : '') + '?\n\n'
+               + fresh.length + ' new row' + (fresh.length !== 1 ? 's' : '') + ' will be added to every Sheet tab, then history is filled into empty cells.'
+               + (nriState.overwrite ? '\nConflicting cells WILL be overwritten.' : '\nConflicting cells are left as they are.'))) return;
+  const btn = document.getElementById('nri-go-btn');
+  btn.disabled = true;
+  try {
+    const token = await tokenP;
+    // 1. Sheet rows for new people (alphabetical, every tab incl. GP)
+    if (fresh.length) {
+      nriSetStatus('Adding ' + fresh.length + ' row' + (fresh.length > 1 ? 's' : '') + ' to every Sheet tab…');
+      const res = await ensureSheetRows(fresh.map(function(p){ return {name: p.name, manager: p.mgr}; }), SHT_ALL_TABS(), token);
+      if (!res.ok) { nriSetStatus('Adding rows failed, nothing else was written: ' + nriEsc(res.errors.join('; ')), 'err'); btn.disabled = false; return; }
+    }
+    // 2. Re-read (rows moved after inserts) and rebuild the plan with the same choices
+    nriSetStatus('Re-reading the Sheet…');
+    const tabs = NRI_KPI_TABS.map(function(t){ return SHEET_TABS[t.key]; });
+    const data = await shtReadFormulas(tabs, token);
+    const built = nriBuildPlan(data, nriState.overwrite, true);
+    if (built.blocking.length) {
+      nriSetStatus('Stopped before writing any history: ' + nriEsc(built.blocking.join('; ')) + '. Rows that were just added stay in the Sheet.', 'err');
+      nriRender(); btn.disabled = false; return;
+    }
+    // 3. Undo log, then one batch write
+    if (built.plan.length) {
+      safeSet('stemRecImportUndo', JSON.stringify({at: new Date().toISOString(), file: nriState.file,
+        cells: built.plan.map(function(c){ return {range: c.range, old: c.old, value: c.value, who: c.who}; })}));
+      nriSetStatus('Writing ' + built.plan.length + ' cells…');
+      await shtFetchJSON(SHEETS_BASE + '/' + SHEET_ID + '/values:batchUpdate', token, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({valueInputOption:'RAW', data: built.plan.map(function(c){ return {range: c.range, values: [[c.value]]}; })})
+      });
+    }
+    // 4. Roster details (local presets) and aliases
+    const hds = getHireDates(), vts = getVerticals(), gps = getGroups(), al = impGetAliases();
+    active.forEach(function(p) {
+      const t = nriTarget(p);
+      const set = function(map, val) { if (val && (!map[t] || p.useFileVals)) map[t] = val; };
+      set(hds, p.hireDate);
+      set(vts, VERTICALS.indexOf(p.vertical) >= 0 ? p.vertical : '');
+      set(gps, GROUP_OPTIONS.indexOf(p.group) >= 0 ? p.group : '');
+      // Remember other spellings so the weekly import finds them without asking
+      [p.name, p.hrName].forEach(function(n){ if (n && nriKey(n) !== nriKey(t) && !al[n]) al[n] = t; });
+    });
+    saveHireDates(hds); saveVerticals(vts); saveGroups(gps); impSaveAliases(al);
+    nriSetStatus('✅ Imported ' + active.length + ' recruiter' + (active.length > 1 ? 's' : '') + ': ' + fresh.length + ' new, '
+                 + built.plan.length + ' history cells written. Syncing…<br><span style="color:var(--text3)">Run Copy Roster Presets afterwards so hire dates, verticals and groups are baked in for every machine.</span>', 'ok');
+    nriState = null;
+    nriRenderButtons();
+    document.getElementById('nri-check-btn').disabled = true;
+    try { await loadFromSheets(); } catch (e) {}
+    try { renderRoster(); } catch (e) {}
+  } catch (e) {
+    nriSetStatus('Import stopped: ' + nriEsc(e.message || e) + '<br>Anything written before the error is in the undo log.', 'err');
+    btn.disabled = false;
+  }
+}
+
+async function nriUndo() {
+  let log;
+  try { log = JSON.parse(safeGet('stemRecImportUndo') || 'null'); } catch (e) { log = null; }
+  if (!log || !log.cells || !log.cells.length) { nriSetStatus('Nothing to undo.', 'err'); return; }
+  if (!confirm('Undo the import from ' + new Date(log.at).toLocaleString() + ' (' + log.file + ')?\n\n'
+               + 'Puts back the previous value of the ' + log.cells.length + ' history cells it wrote. '
+               + 'Rows it added stay in the Sheet (archive or delete them separately).')) return;
+  let tokenP;
+  try { tokenP = getOAuthToken(); } catch (e) { tokenP = Promise.reject(e); }
+  try {
+    const token = await tokenP;
+    // Only restore cells that still hold what the import wrote, on the same
+    // person's row. Rows can shift if recruiters were added since.
+    const parsed = log.cells.map(function(c){ return Object.assign({}, c, nriParseA1(c.range)); });
+    const tabs = Array.from(new Set(parsed.map(function(c){ return c.tab; }).filter(Boolean)));
+    const data = await shtReadFormulas(tabs, token);
+    const ok = [], skipped = [];
+    parsed.forEach(function(c) {
+      const row = (data[c.tab] || [])[c.row] || [];
+      const sameWho = !c.who || shtNorm(row[0]) === shtNorm(c.who);
+      if (c.tab && sameWho && Number(row[c.col]) === Number(c.value)) ok.push(c); else skipped.push(c);
+    });
+    if (ok.length) await shtFetchJSON(SHEETS_BASE + '/' + SHEET_ID + '/values:batchUpdate', token, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({valueInputOption:'USER_ENTERED', data: ok.map(function(c){ return {range: c.range, values: [[c.old === null || c.old === undefined ? '' : c.old]]}; })})
+    });
+    safeDel('stemRecImportUndo');
+    nriSetStatus('✅ Undone: ' + ok.length + ' cells restored.' + (skipped.length ? ' ' + skipped.length + ' left alone because they changed or moved since the import.' : '') + ' Syncing…', 'ok');
+    nriRenderButtons();
+    try { await loadFromSheets(); } catch (e) {}
+  } catch (e) {
+    nriSetStatus('Undo failed: ' + nriEsc(e.message || e), 'err');
+  }
+}
+
+
 function saveNewRecruiter() {
   const name = document.getElementById('new-rec-name').value.trim();
   const mgr = document.getElementById('new-rec-mgr').value;
@@ -10343,13 +10863,21 @@ function renderOrgChart() {
   });
 
   var totalReports = all.length;
+  var totalGcc = all.filter(function(r){ return getGroup(r.name) === 'GCC'; }).length;
+
+  function isGcc(r) { return getGroup(r.name) === 'GCC'; }
+  // In-region recruiters first, GCC after, each group keeping its existing order
+  function gccLast(list) {
+    return list.filter(function(r){ return !isGcc(r); }).concat(list.filter(isGcc));
+  }
 
   function recCard(r) {
     var tenure = getHireDate(r.name) ? calcTenure(getHireDate(r.name)) : '';
     var vertical = getVertical(r.name);
+    var gcc = isGcc(r);
     return '<div class="org-line-v"></div>'
-      +'<div class="org-rec-card" onclick="goToRecruiter(\''+r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
-        +'<div class="org-rec-name">'+r.name+'</div>'
+      +'<div class="org-rec-card'+(gcc?' org-rec-gcc':'')+'" onclick="goToRecruiter(\''+r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
+        +'<div class="org-rec-name">'+(gcc?'<span class="org-gcc-badge">GCC</span> ':'')+r.name+'</div>'
         +'<div class="org-rec-sub">'
           +(tenure ? '<span>'+tenure+'</span>' : '')
           +(vertical ? '<span style="font-size:9px;color:var(--accent)">'+vertical+'</span>' : '')
@@ -10396,14 +10924,15 @@ function renderOrgChart() {
       return s + (r.starts||[]).reduce(function(a,v){return a+(v||0);}, 0);
     }, 0);
 
+    var teamGcc = team.filter(isGcc).length;
     return '<div class="org-manager-col">'
       +'<div class="org-line-v"></div>'
       +'<div class="org-mgr-card" style="background:'+mc+'18;border-color:'+mc+';color:'+mc+'">'
         +'<div class="org-mgr-name">'+mgr+(mgrTenure?' <span style="font-size:10px;opacity:.75;font-weight:400">('+mgrTenure+')</span>':'')+'</div>'
-        +'<div class="org-mgr-sub">'+team.length+' recruiter'+(team.length!==1?'s':'')+(avgTenureStr?' &nbsp;·&nbsp; '+avgTenureStr:'')+'</div>'
+        +'<div class="org-mgr-sub">'+team.length+' recruiter'+(team.length!==1?'s':'')+(teamGcc?' ('+teamGcc+' GCC)':'')+(avgTenureStr?' &nbsp;·&nbsp; '+avgTenureStr:'')+'</div>'
         +'<div class="org-mgr-sub" style="margin-top:2px;font-weight:600">'+teamStarts+' total start'+(teamStarts!==1?'s':'')+'</div>'
       +'</div>'
-      +'<div class="org-recruiter-list">'+team.map(recCard).join('')+'</div>'
+      +'<div class="org-recruiter-list">'+gccLast(team).map(recCard).join('')+'</div>'
     +'</div>';
   }).join('');
 
@@ -10431,7 +10960,7 @@ function renderOrgChart() {
     var tenure = getHireDate(r.name) ? calcTenure(getHireDate(r.name)) : '';
     return '<div class="org-manager-col">'
       +'<div class="org-line-v"></div>'
-      +'<div class="org-rec-card" onclick="goToRecruiter(\''+r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')"\n        style="min-width:150px;border:1px solid var(--border2)">'
+      +'<div class="org-rec-card'+(getGroup(r.name)==='GCC'?' org-rec-gcc':'')+'" onclick="goToRecruiter(\''+r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')"\n        style="min-width:150px;'+(getGroup(r.name)==='GCC'?'':'border:1px solid var(--border2)')+'">'
         +'<div class="org-rec-name" style="font-size:13px;font-weight:700">'+r.name+'</div>'
         +'<div class="org-rec-sub">'
           +(tenure ? '<span>'+tenure+'</span>' : '')
@@ -10446,7 +10975,7 @@ function renderOrgChart() {
       +'<div class="org-vp">'
         +'<div class="org-vp-name">Kevin</div>'
         +'<div class="org-vp-title">VP of Talent Delivery</div>'
-        +'<div style="font-size:11px;margin-top:5px;opacity:.85">'+totalReports+' total reports</div>'
+        +'<div style="font-size:11px;margin-top:5px;opacity:.85">'+totalReports+' total reports'+(totalGcc?' ('+totalGcc+' GCC)':'')+'</div>'
       +'</div>'
       +'<div class="org-connector-down"></div>'
       +connectorLine
