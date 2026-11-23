@@ -716,6 +716,7 @@ td.editing{padding:2px 4px!important}
 <!-- MANAGER ROLLUP -->
 <div class="tab-panel" id="tab-managers">
   <div class="wctrl">
+    <select class="grp-filter" onchange="grpSet(this.value)" title="Group filter (shared by Trends, Leaderboard, Recruiter Detail, Manager Rollup, GP, Roster)" style="height:32px;font-size:12px"><option value="all">All groups</option></select>
     <select id="mgr-window" onchange="onMgrWindowChange()">
       <option value="4">Last 4 weeks</option>
       <option value="8">Last 8 weeks</option>
@@ -800,7 +801,7 @@ td.editing{padding:2px 4px!important}
 
 <!-- RECRUITER DETAIL -->
 <div class="tab-panel" id="tab-recruiter">
-  <div class="wctrl"><select class="nh-filter" onchange="nhSet(this.value)" title="New hire filter (shared by Trends, Leaderboard, Recruiter Detail)" style="height:32px;font-size:12px;margin-right:8px"><option value="all">All recruiters</option></select><select id="rec-select" style="min-width:210px"></select><button class="btn" onclick="openRecruiterProfile(document.getElementById('rec-select').value)" style="height:32px;font-size:12px;margin-left:8px" title="Deep-dive profile: funnel, pacing, cohort benchmark, 1:1 export">👤 Open profile</button></div>
+  <div class="wctrl"><select class="nh-filter" onchange="nhSet(this.value)" title="New hire filter (shared by Trends, Leaderboard, Recruiter Detail)" style="height:32px;font-size:12px;margin-right:8px"><option value="all">All recruiters</option></select><select class="grp-filter" onchange="grpSet(this.value)" title="Group filter (shared by Trends, Leaderboard, Recruiter Detail, Manager Rollup, GP, Roster)" style="height:32px;font-size:12px;margin-right:8px"><option value="all">All groups</option></select><select id="rec-select" style="min-width:210px"></select><button class="btn" onclick="openRecruiterProfile(document.getElementById('rec-select').value)" style="height:32px;font-size:12px;margin-left:8px" title="Deep-dive profile: funnel, pacing, cohort benchmark, 1:1 export">👤 Open profile</button></div>
   <div class="kpis" id="rec-kpis"></div>
   <div class="charts-row">
     <div class="card card-accent-blue"><div class="card-hdr"><span class="card-title">Weekly submittals</span></div><div class="chart-wrap"><canvas id="rSubsC" role="img" aria-label="Weekly subs"></canvas></div></div>
@@ -912,7 +913,7 @@ td.editing{padding:2px 4px!important}
       <select id="ti-wk-to" onchange="renderTrends()" style="height:32px;font-size:12px"></select>
     </div>
     <select id="ti-mgr" onchange="renderTrends()" style="height:32px;font-size:12px"><option value="">All managers</option></select>
-    <select class="nh-filter" onchange="nhSet(this.value)" title="New hire filter (shared by Trends, Leaderboard, Recruiter Detail)" style="height:32px;font-size:12px"><option value="all">All recruiters</option></select>
+    <select class="nh-filter" onchange="nhSet(this.value)" title="New hire filter (shared by Trends, Leaderboard, Recruiter Detail)" style="height:32px;font-size:12px"><option value="all">All recruiters</option></select><select class="grp-filter" onchange="grpSet(this.value)" title="Group filter (shared by Trends, Leaderboard, Recruiter Detail, Manager Rollup, GP, Roster)" style="height:32px;font-size:12px"><option value="all">All groups</option></select>
   </div>
 
   <!-- Section tabs -->
@@ -1001,6 +1002,7 @@ td.editing{padding:2px 4px!important}
         <div id="gp-mgr-checks"></div>
       </div>
     </div>
+    <select class="grp-filter" onchange="grpSet(this.value)" title="Group filter (shared by Trends, Leaderboard, Recruiter Detail, Manager Rollup, GP, Roster)" style="height:32px;font-size:12px"><option value="all">All groups</option></select>
     <select id="gp-window" onchange="onGpWindowChange()" style="height:32px;font-size:12px">
       <option value="all">Full YTD</option>
       <option value="4">Last 4 weeks</option>
@@ -1171,7 +1173,7 @@ td.editing{padding:2px 4px!important}
 <!-- LEADERBOARD -->
 <div class="tab-panel" id="tab-leaderboard">
   <div class="wctrl">
-    <select class="nh-filter" onchange="nhSet(this.value)" title="New hire filter (shared by Trends, Leaderboard, Recruiter Detail)" style="height:32px;font-size:12px"><option value="all">All recruiters</option></select>
+    <select class="nh-filter" onchange="nhSet(this.value)" title="New hire filter (shared by Trends, Leaderboard, Recruiter Detail)" style="height:32px;font-size:12px"><option value="all">All recruiters</option></select><select class="grp-filter" onchange="grpSet(this.value)" title="Group filter (shared by Trends, Leaderboard, Recruiter Detail, Manager Rollup, GP, Roster)" style="height:32px;font-size:12px"><option value="all">All groups</option></select>
     <div style="position:relative" id="lb-vert-wrap">
       <button type="button" id="lb-vert-btn" onclick="toggleLbVertMenu()" style="height:32px;padding:0 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;white-space:nowrap;min-width:140px;justify-content:space-between">
         <span id="lb-vert-label">All verticals</span><span style="font-size:10px;opacity:.6">&#9662;</span>
@@ -1328,7 +1330,7 @@ td.editing{padding:2px 4px!important}
   <div id="roster-content" style="display:none">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
       <button class="btn btn-primary" onclick="openAddRecModal()" style="height:32px;font-size:12px">+ Add recruiter</button>
-      <select id="roster-mgr-filter" onchange="renderRoster()" style="height:32px;font-size:12px"><option value="">All managers</option></select>
+      <select id="roster-mgr-filter" onchange="renderRoster()" style="height:32px;font-size:12px"><option value="">All managers</option></select><select class="grp-filter" onchange="grpSet(this.value)" title="Group filter (shared by Trends, Leaderboard, Recruiter Detail, Manager Rollup, GP, Roster)" style="height:32px;font-size:12px"><option value="all">All groups</option></select>
       <input type="text" id="roster-search" placeholder="Search…" onchange="renderRoster()" oninput="renderRoster()" style="width:150px;height:32px;font-size:12px">
       <select id="roster-sort" onchange="renderRoster()" style="height:32px;font-size:12px">
         <option value="name">Sort: Name (A→Z)</option>
@@ -1360,7 +1362,7 @@ td.editing{padding:2px 4px!important}
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Name</th><th>Manager</th><th>Title</th><th title="Date of most recent promotion. Blank means the promotion clock runs from hire date.">Last Promoted</th><th>Total Subs</th><th>Total Interviews</th><th>Total Placements</th><th>Total Starts</th><th>Total Leads</th><th>Vertical</th><th>Birthday</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
+            <th>Name</th><th>Manager</th><th>Title</th><th title="GCC = offshore. Blank = onshore.">Group</th><th title="Date of most recent promotion. Blank means the promotion clock runs from hire date.">Last Promoted</th><th>Total Subs</th><th>Total Interviews</th><th>Total Placements</th><th>Total Starts</th><th>Total Leads</th><th>Vertical</th><th>Birthday</th><th>Date Hired</th><th title="Years and months since hire date">Tenure</th><th title="Months and days until next work anniversary">Next Anniversary</th><th></th>
           </tr></thead>
           <tbody id="roster-active-body"></tbody>
         </table>
@@ -5040,6 +5042,7 @@ function exportRosterPresets() {
   const verticals = getVerticals();
   const titles = getTitles();
   const promoDates = getPromoDates();
+  const groups = getGroups();
 
   // Catch a short export before it gets baked in: titles live only in this
   // browser, so a browser missing some will export without them.
@@ -5058,16 +5061,16 @@ function exportRosterPresets() {
     Object.keys(map).sort().forEach(function(k){ if (known[k] && map[k]) out[k] = map[k]; });
     return out;
   }
-  const hd = prune(hireDates), bd = prune(birthdays), vt = prune(verticals), tt = prune(titles), pd = prune(promoDates);
+  const hd = prune(hireDates), bd = prune(birthdays), vt = prune(verticals), tt = prune(titles), pd = prune(promoDates), gr = prune(groups);
   const ms = msLoad();
   const msN = Object.keys(ms.entries).length;
 
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
-    label: 'STEM Dashboard roster presets (hire dates, birthdays, verticals, titles, last promoted)',
-    counts: { hireDates: Object.keys(hd).length, birthdays: Object.keys(bd).length, verticals: Object.keys(vt).length, titles: Object.keys(tt).length, promoDates: Object.keys(pd).length },
-    hireDates: hd, birthdays: bd, verticals: vt, titles: tt, promoDates: pd, milestones: ms
+    label: 'STEM Dashboard roster presets (hire dates, birthdays, verticals, titles, last promoted, groups)',
+    counts: { hireDates: Object.keys(hd).length, birthdays: Object.keys(bd).length, verticals: Object.keys(vt).length, titles: Object.keys(tt).length, promoDates: Object.keys(pd).length, groups: Object.keys(gr).length },
+    hireDates: hd, birthdays: bd, verticals: vt, titles: tt, promoDates: pd, groups: gr, milestones: ms
   };
 
   // Download a real file — more reliable than the clipboard, and attachable.
@@ -5086,6 +5089,7 @@ function exportRosterPresets() {
            + 'const PRESET_VERTICALS = '  + JSON.stringify(vt, null, 2) + ';\n\n'
            + 'const PRESET_TITLES = '     + JSON.stringify(tt, null, 2) + ';\n\n'
            + 'const PRESET_PROMO_DATES = ' + JSON.stringify(pd, null, 2) + ';\n\n'
+           + 'const PRESET_GROUPS = ' + JSON.stringify(gr, null, 2) + ';\n\n'
            + 'var PRESET_MILESTONES = ' + JSON.stringify(ms) + ';';
   copyToClipboard(js,
     '\u2705 Roster presets copied and downloaded!\n\n'
@@ -5094,6 +5098,7 @@ function exportRosterPresets() {
     + Object.keys(vt).length + ' verticals, '
     + Object.keys(tt).length + ' titles, '
     + Object.keys(pd).length + ' last promoted dates, '
+    + Object.keys(gr).length + ' groups, '
     + msN + ' GP milestones.\n\n'
     + 'The .json file is in your Downloads folder.');
 }
@@ -5105,13 +5110,15 @@ function exportArchivedForEmbed() {
   const verticals = getVerticals();
   const titles = getTitles();
   const promoDates = getPromoDates();
+  const groups = getGroups();
   const enriched = archivedRecruiters.map(function(a) {
     return Object.assign({}, a, {
       hireDate: hireDates[a.name] || a.hireDate || '',
       birthday: birthdays[a.name] || a.birthday || '',
       vertical: verticals[a.name] || a.vertical || '',
       title: titles[a.name] || a.title || '',
-      lastPromoted: promoDates[a.name] || a.lastPromoted || ''
+      lastPromoted: promoDates[a.name] || a.lastPromoted || '',
+      group: groups[a.name] || a.group || ''
     });
   });
   const json = JSON.stringify(enriched, null, 2);
@@ -5135,6 +5142,7 @@ function exportSettings() {
     stemBirthdays:  safeGet('stemBirthdays')  || '{}',
     stemTitles:     safeGet('stemTitles')     || '{}',
     stemPromoDates: safeGet('stemPromoDates') || '{}',
+    stemGroups:     safeGet('stemGroups')     || '{}',
     stemMilestones: safeGet('stemMilestones') || '',
     stemWeekFlags:  safeGet('stemWeekFlags')  || '{}',
     // Auth
@@ -5171,7 +5179,7 @@ function importSettings() {
         // Restore all keys
         // stemBirthdays, stemWeekFlags and stemTitles are exported, so restore them too
         // (birthdays and week flags were previously exported but silently skipped).
-        const keys = ['stemXW','stemBaseEdits','stemArchived','stemUnarchived','stemNewRecs','stemHireDates','stemBirthdays','stemWeekFlags','stemTitles','stemPromoDates','stemMilestones','stemUsers','stemInvites','stemSession','stemLastSync'];
+        const keys = ['stemXW','stemBaseEdits','stemArchived','stemUnarchived','stemNewRecs','stemHireDates','stemBirthdays','stemWeekFlags','stemTitles','stemPromoDates','stemGroups','stemMilestones','stemUsers','stemInvites','stemSession','stemLastSync'];
         keys.forEach(function(k) {
           if (p[k] !== undefined && p[k] !== '') safeSet(k, p[k]);
         });
@@ -6792,18 +6800,22 @@ let archivedRecruiters = (function() {
     let ttChanged = false;
     const pExisting = getPromoDates();
     let pdChanged = false;
+    const gExisting = getGroups();
+    let grChanged = false;
     merged.forEach(function(a) {
       if (a.hireDate && !hireDates[a.name]) { hireDates[a.name] = a.hireDate; hdChanged = true; }
       if (a.birthday && !birthdays[a.name]) { birthdays[a.name] = a.birthday; bdChanged = true; }
       if (a.vertical && !vExisting[a.name]) { vExisting[a.name] = a.vertical; vtChanged = true; }
       if (a.title && !Object.prototype.hasOwnProperty.call(tExisting, a.name)) { tExisting[a.name] = a.title; ttChanged = true; }
       if (a.lastPromoted && !Object.prototype.hasOwnProperty.call(pExisting, a.name)) { pExisting[a.name] = a.lastPromoted; pdChanged = true; }
+      if (a.group && !Object.prototype.hasOwnProperty.call(gExisting, a.name)) { gExisting[a.name] = a.group; grChanged = true; }
     });
     if (hdChanged) saveHireDates(hireDates);
     if (bdChanged) saveBirthdays(birthdays);
     if (vtChanged) saveVerticals(vExisting);
     if (ttChanged) saveTitles(tExisting);
     if (pdChanged) savePromoDates(pExisting);
+    if (grChanged) saveGroups(gExisting);
   }, 500);
   return merged;
 })();
@@ -7499,6 +7511,33 @@ function getPromoDates() { try { return JSON.parse(safeGet('stemPromoDates') || 
 function savePromoDates(d) { safeSet('stemPromoDates', JSON.stringify(d)); }
 function getPromoDate(name) { return getPromoDates()[name] || ''; }
 
+// ─── GROUP (GCC = offshore) ───
+// PRESET_GROUPS: recruiter -> group. Blank means onshore. Seeded like titles:
+// localStorage always wins, including a deliberate clear.
+// After changing groups, re-run "Copy Roster Presets" and paste the result here.
+var GROUP_OPTIONS = ['GCC'];
+const PRESET_GROUPS = {};
+
+function getGroups() { try { return JSON.parse(safeGet('stemGroups') || '{}'); } catch (e) { return {}; } }
+function saveGroups(d) { safeSet('stemGroups', JSON.stringify(d)); }
+function getGroup(name) { return getGroups()[name] || ''; }
+
+(function() {
+  var g = getGroups();
+  var changed = false;
+  Object.keys(PRESET_GROUPS).forEach(function(name) {
+    if (!Object.prototype.hasOwnProperty.call(g, name)) { g[name] = PRESET_GROUPS[name]; changed = true; }
+  });
+  if (changed) saveGroups(g);
+})();
+
+// Pure test: does a recruiter's group pass filter f? f: 'all' | 'onshore' | a GROUP_OPTIONS value
+function grpPassGroup(group, f) {
+  if (!f || f === 'all') return true;
+  if (f === 'onshore') return !group;
+  return group === f;
+}
+
 (function() {
   var p = getPromoDates();
   var changed = false;
@@ -7564,6 +7603,50 @@ function titleCellHtml(title) {
   return title
     ? '<span style="font-size:11px;color:var(--text)">' + title + '</span>'
     : '<span style="font-size:11px;color:var(--text3);font-style:italic">Click to set</span>';
+}
+
+function groupCellHtml(group) {
+  return group
+    ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--teal-bg);color:var(--teal)">' + group + '</span>'
+    : '<span style="font-size:11px;color:var(--text3);font-style:italic">Onshore</span>';
+}
+
+function editGroup(name, td) {
+  if (!currentUser) return;
+  if (td.querySelector('.vert-dropdown')) return;
+  const current = getGroup(name);
+  const menu = document.createElement('div');
+  menu.className = 'vert-dropdown';
+  menu.style.cssText = 'position:absolute;z-index:9999;background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,0.3);min-width:160px;padding:4px';
+  function addOpt(label, value) {
+    const opt = document.createElement('div');
+    opt.textContent = label;
+    const on = value === current;
+    opt.style.cssText = 'padding:7px 12px;cursor:pointer;font-size:12px;border-radius:4px;' + (on ? 'background:var(--accent-dim);color:var(--accent);font-weight:600' : 'color:var(--text)');
+    opt.onmouseenter = function(){ if (!on) opt.style.background = 'var(--bg2)'; };
+    opt.onmouseleave = function(){ opt.style.background = on ? 'var(--accent-dim)' : ''; };
+    opt.onmousedown = function(e){ e.preventDefault(); saveGroup(name, value, td); menu.remove(); };
+    menu.appendChild(opt);
+  }
+  addOpt('Onshore (no group)', '');
+  GROUP_OPTIONS.forEach(function(g){ addOpt(g, g); });
+  td.style.position = 'relative';
+  td.appendChild(menu);
+  function onOutside(e) {
+    if (!menu.contains(e.target) && e.target !== td) {
+      menu.remove();
+      document.removeEventListener('mousedown', onOutside);
+    }
+  }
+  setTimeout(function(){ document.addEventListener('mousedown', onOutside); }, 0);
+}
+
+function saveGroup(name, value, td) {
+  const g = getGroups();
+  g[name] = value || ''; // keep the key so a clear is not re-seeded from the preset
+  saveGroups(g);
+  if (td) { td.style.position = ''; td.innerHTML = groupCellHtml(value); }
+  grpSyncSelects();
 }
 
 function editTitle(name, td) {
@@ -7700,7 +7783,8 @@ function renderRoster() {
   const bdayFilter = document.getElementById('roster-bday-filter') ? document.getElementById('roster-bday-filter').value : '';
 
   // Base filter
-  let all = computedAll().filter(r => (!mgrF || r.manager === mgrF) && (!q || r.name.toLowerCase().includes(q))).sort((a,b)=>a.name.localeCompare(b.name));
+  grpSyncSelects();
+  let all = computedAll().filter(r => (!mgrF || r.manager === mgrF) && grpPass(r.name) && (!q || r.name.toLowerCase().includes(q))).sort((a,b)=>a.name.localeCompare(b.name));
 
   // Anniversary filter
   if (annivFilter) {
@@ -7779,7 +7863,7 @@ function renderRoster() {
   }
 
   if (!all.length && RECRUITERS.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="15" style="text-align:center;padding:20px;color:var(--text3)">Loading recruiters… if this persists, try clicking ⟳ Sync above.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="16" style="text-align:center;padding:20px;color:var(--text3)">Loading recruiters… if this persists, try clicking ⟳ Sync above.</td></tr>`;
     return;
   }
   tbody.innerHTML = all.map(r => {
@@ -7794,6 +7878,7 @@ function renderRoster() {
       <td style="font-weight:500;white-space:nowrap">${r.name}</td>
       <td><span class="mgr" style="background:${mc}22;color:${mc}">${r.manager}</span></td>
       <td id="title_${safeId}" data-name="${r.name.replace(/"/g,'&quot;')}" onclick="editTitle(this.dataset.name, this)" style="cursor:pointer;min-width:130px;font-size:11px;white-space:nowrap" title="Click to set title">${titleCellHtml(getTitle(r.name))}</td>
+      <td id="grp_${safeId}" data-name="${r.name.replace(/"/g,'&quot;')}" onclick="editGroup(this.dataset.name, this)" style="cursor:pointer;min-width:70px;font-size:11px;white-space:nowrap" title="Click to set group">${groupCellHtml(getGroup(r.name))}</td>
       <td id="promo_${safeId}" data-name="${r.name.replace(/"/g,'&quot;')}" onclick="editPromoDate(this.dataset.name, this)" style="cursor:pointer;min-width:110px;font-size:11px;white-space:nowrap" title="Click to set the date of their most recent promotion">${promoCellHtml(getPromoDate(r.name))}</td>
       <td>${r.totalSubs}</td>
       <td>${r.totalIvs}</td>
@@ -7809,7 +7894,7 @@ function renderRoster() {
         <button class="btn" onclick="promptArchive('${r.name.replace(/'/g,"\\'")}')" style="font-size:10px;height:24px;padding:0 8px;color:var(--amber)">📦 Archive</button>
       </td>
     </tr>`
-  }).join('') || `<tr><td colspan="15" style="text-align:center;padding:20px;color:var(--text3)">No recruiters match this filter.</td></tr>`;
+  }).join('') || `<tr><td colspan="16" style="text-align:center;padding:20px;color:var(--text3)">No recruiters match this filter.</td></tr>`;
 
   // Archived recruiters table
   const archived = archivedRecruiters.filter(r => (!mgrF || r.manager === mgrF) && (!q || r.name.toLowerCase().includes(q)));
@@ -7913,7 +7998,8 @@ function renderManagers(){
     });
   }
   var sortBy=document.getElementById('mgr-sort').value;
-  var all=getMgrRecs(computedAll());
+  grpSyncSelects();
+  var all=getMgrRecs(computedAll().filter(function(r){ return grpPass(r.name); }));
   var awl=isCustom ? wkLabels.slice(customF, customT+1) : activeWkLabels();
   var nW=awl.length;
   var gc='rgba(128,128,128,0.1)';
@@ -8860,9 +8946,11 @@ function renderGP() {
 
   const archivedNames = archivedRecruiters.map(a=>archKey(a.name));
 
+  grpSyncSelects();
   const recs = GP_DATA.filter(r =>
     gpSelectedMgrs[r.manager] !== false &&
     gpSelectedRecs[r.name] !== false &&
+    grpPass(r.name) &&
     !archivedNames.includes(archKey(r.name))
   ).sort((a,b) => a.name.localeCompare(b.name));
 
@@ -8892,7 +8980,7 @@ function renderGP() {
   const mgrsToShow = mgrsInData.filter(m => gpSelectedMgrs[m] !== false);
   const mgrCards = mgrsToShow.map(mgr => {
     const mc = MGR_COLORS[mgr]||'#888';
-    const team = GP_DATA.filter(r=>r.manager===mgr && !archivedNames.includes(archKey(r.name)));
+    const team = GP_DATA.filter(r=>r.manager===mgr && grpPass(r.name) && !archivedNames.includes(archKey(r.name)));
     if (!team.length) return '';
     const totalYTD  = team.reduce((s,r)=>s+r.ytdGP,0);
     const total2026 = team.reduce((s,r)=>s+r.gp2026,0);
@@ -9124,6 +9212,7 @@ function renderGpTrendChart() {
   const recs = GP_DATA.filter(r =>
     gpSelectedMgrs[r.manager] !== false &&
     gpSelectedRecs[r.name] !== false &&
+    grpPass(r.name) &&
     !archivedNames.includes(archKey(r.name)) &&
     r.weekly.length > 0
   );
@@ -9320,6 +9409,7 @@ function gpFilteredRecs() {
   return GP_DATA.filter(function(r) {
     return gpSelectedMgrs[r.manager] !== false &&
            gpSelectedRecs[r.name] !== false &&
+           grpPass(r.name) &&
            !archivedNames.includes(archKey(r.name));
   });
 }
@@ -10713,7 +10803,48 @@ function nhPassDate(d, f, today){
   if (f.indexOf('c:') === 0) return _nhYm(d) === f.slice(2);
   return true;
 }
-function nhPass(name, f){ return nhPassDate(_nhHire(name), f || nhFilter); }
+function nhPass(name, f){ return nhPassDate(_nhHire(name), f || nhFilter) && grpPass(name); }
+
+// ─── GROUP FILTER ───
+// Shared like the new hire filter, and ANDed into nhPass so every view that
+// honours the new hire filter honours this one too. Remembered per browser.
+var grpFilter = (function(){ try { return safeGet('stemGroupFilter') || 'all'; } catch(e){ return 'all'; } })();
+function grpPass(name, f){ return grpPassGroup(getGroup(name), f || grpFilter); }
+function grpOptionsHtml(){
+  var roster = _nhRoster();
+  var groups = getGroups();
+  var cnt = function(f){ return roster.filter(function(n){ return grpPassGroup(groups[n] || '', f); }).length; };
+  var html = '<option value="all">All groups</option>'
+    + '<option value="onshore">Onshore (' + cnt('onshore') + ')</option>';
+  GROUP_OPTIONS.forEach(function(g){ html += '<option value="' + g + '">' + g + ' (' + cnt(g) + ')</option>'; });
+  return html;
+}
+function grpSyncSelects(){
+  var html = grpOptionsHtml();
+  document.querySelectorAll('select.grp-filter').forEach(function(sel){
+    if (sel._grpHtml !== html) { sel.innerHTML = html; sel._grpHtml = html; }
+    sel.value = grpFilter;
+    if (sel.value !== grpFilter) { grpFilter = 'all'; sel.value = 'all'; }
+    var on = grpFilter !== 'all';
+    sel.style.borderColor = on ? 'var(--accent)' : '';
+    sel.style.color = on ? 'var(--accent)' : '';
+    sel.style.fontWeight = on ? '600' : '';
+  });
+}
+function grpSet(v){
+  grpFilter = v || 'all';
+  try { safeSet('stemGroupFilter', grpFilter); } catch(e){}
+  grpSyncSelects();
+  nhSyncSelects();
+  var act = document.querySelector('.tab-panel.active');
+  var id = act ? act.id : '';
+  try { if (id === 'tab-leaderboard') renderLeaderboard(); } catch(e){ console.error(e); }
+  try { if (id === 'tab-trends') renderTrends(); } catch(e){ console.error(e); }
+  try { if (id === 'tab-recruiter') renderRecruiter(); } catch(e){ console.error(e); }
+  try { if (id === 'tab-managers') renderManagers(); } catch(e){ console.error(e); }
+  try { if (id === 'tab-gp') renderGPIfActive(); } catch(e){ console.error(e); }
+  try { if (id === 'tab-roster') renderRoster(); } catch(e){ console.error(e); }
+}
 
 function _nhRoster(){
   var names = {};
@@ -10739,6 +10870,7 @@ function nhOptionsHtml(){
   return html;
 }
 function nhSyncSelects(){
+  grpSyncSelects();
   var html = nhOptionsHtml();
   document.querySelectorAll('select.nh-filter').forEach(function(sel){
     if (sel._nhHtml !== html) { sel.innerHTML = html; sel._nhHtml = html; }
