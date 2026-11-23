@@ -7435,6 +7435,13 @@ async function nriUndo() {
   }
 }
 
+// This code sits inside a top-level try block. Browsers only expose plain
+// function declarations from a block to the page, not async ones, so every
+// function the modal's onclick/onchange attributes call is attached explicitly.
+window.openNriModal = openNriModal; window.closeNriModal = closeNriModal;
+window.nriOnFile = nriOnFile; window.nriCheckSheet = nriCheckSheet;
+window.nriImport = nriImport; window.nriUndo = nriUndo;
+window.nriSetAction = nriSetAction; window.nriSetUseFile = nriSetUseFile; window.nriSetOverwrite = nriSetOverwrite;
 
 function saveNewRecruiter() {
   const name = document.getElementById('new-rec-name').value.trim();
